@@ -1,0 +1,454 @@
+"use client"
+import { Card, CardContent } from "@/components/ui/card"
+import { Calendar, DollarSign, Video, Eye, Heart, MessageCircle, Trophy, HandCoins, ArrowUpNarrowWide, Gift, TicketPercent, Palmtree } from "lucide-react"
+import { HomePageLayout } from "@/components/homepagelayout"
+
+export default function Home() {
+  /**
+   * ============================================
+   * BACKEND API DATA STRUCTURE
+   * ============================================
+   *
+   * Backend endpoint: GET /api/dashboard
+   *
+   * This endpoint should return ALL data for the home screen in a single call.
+   */
+  const mockData = {
+    // User identification
+    handle: "creatorpro", // From users.tiktok_handle
+    clientName: "Stateside Growers", // From clients.company_name
+
+    // CURRENT TIER DATA (from users + tiers tables)
+    currentTier: {
+      name: "Gold", // From tiers.tier_name where tiers.id = users.current_tier
+      color: "#F59E0B", // From tiers.tier_color (DYNAMIC - set by admin per client)
+      order: 3, // From tiers.tier_order
+    },
+
+    // NEXT TIER DATA (from tiers table)
+    nextTier: {
+      name: "Platinum", // Next tier in sequence (tier_order = current + 1)
+      threshold: 5000, // From tiers.min_sales_threshold for Platinum
+      color: "#818CF8", // From tiers.tier_color for Platinum (for future use)
+    },
+
+    // TIER PROGRESSION (checkpoint-based sales tracking)
+    tierProgress: {
+      currentSales: 4200, // SUM(metrics.tiktok_sales) since users.tier_achieved_at
+      targetSales: 5000, // Next tier's min_sales_threshold
+    },
+
+    // CHECKPOINT EXPIRATION
+    expirationDate: "March 15, 2025", // From users.next_checkpoint_at (formatted)
+
+    // ============================================
+    // CIRCULAR PROGRESS DATA (Section 1)
+    // ============================================
+    // Powers the main circular progress indicator
+    // Tracks progress toward FIRST active sales mission (Unlock Payday order=1)
+    giftCard: {
+      // Current progress on active sales mission
+      currentSales: 300, // From mission_progress.current_value for active sales mission
+
+      // Target from mission configuration
+      threshold: 500, // From missions.target_value for active sales mission (Unlock Payday order=1)
+
+      // Reward value from linked benefit
+      nextAmount: 50, // From benefits.value_data->>'amount' where benefits.id = missions.benefit_id
+    },
+
+    // Performance metrics (for bottom section)
+    performance: {
+      salesAmount: 4200, // SUM(metrics.tiktok_sales) for current checkpoint period
+      videosPosted: 45, // COUNT(videos) posted since checkpoint_start
+      totalViews: 1200000, // SUM(videos.views) for current checkpoint
+      totalLikes: 85000, // SUM(videos.likes) for current checkpoint
+      totalComments: 12300, // SUM(videos.comments) for current checkpoint
+      periodStart: "Nov 15", // From users.tier_achieved_at (formatted)
+      periodEnd: "Today", // Current date
+    },
+  }
+
+  /**
+   * ============================================
+   * BACKEND QUERY PSEUDOCODE FOR CIRCULAR PROGRESS
+   * ============================================
+   *
+   * Query to get data for circular progress (giftCard object):
+   *
+   * 1. Find user's FIRST active sales mission:
+   *
+   * SELECT
+   *   mp.current_value as currentSales,
+   *   m.target_value as threshold,
+   *   b.value_data->>'amount' as nextAmount
+   * FROM mission_progress mp
+   * JOIN missions m ON mp.mission_id = m.id
+   * JOIN benefits b ON m.benefit_id = b.id
+   * WHERE mp.user_id = $userId
+   *   AND m.mission_type = 'sales'
+   *   AND m.enabled = true
+   *   AND mp.status IN ('active', 'completed', 'claimed')
+   *   AND mp.checkpoint_start = $currentCheckpointStart
+   *   AND b.type = 'gift_card'
+   * ORDER BY m.display_order ASC
+   * LIMIT 1
+   *
+   * 2. If no active mission with gift card reward found:
+   *    - Show first active mission regardless of reward type (Q5: Option B)
+   *    - This will be handled in next iteration
+   *
+   * KEY POINTS:
+   * - Only ONE sales mission active at a time (Q6: Option C - sequential unlock)
+   * - Circle tracks current active mission (Q2: Interpretation B)
+   * - Progress does NOT reset after claim - shows current mission progress
+   * - After claiming mission order=1, mission order=2 becomes active
+   */
+
+  /**
+   * CURRENT TIER BENEFITS (from backend API)
+   * Backend endpoint: GET /api/benefits/current-tier
+   * Returns all benefits available for user's current tier
+   */
+  const currentTierBenefits = [
+    {
+      type: "experience",
+      name: "VIP Event Access",
+      value_data: null,
+      redemption_quantity: 1, // One-time
+    },
+    {
+      type: "physical_gift",
+      name: "Wireless Headphones",
+      value_data: null,
+      redemption_quantity: 1, // One-time
+    },
+    {
+      type: "gift_card",
+      name: "$50 Amazon Gift Card",
+      value_data: { amount: 50 },
+      redemption_quantity: 2, // 2 times per month
+    },
+    {
+      type: "commission_boost",
+      name: "5% Commission Boost",
+      value_data: { percent: 5, duration_days: 30 },
+      redemption_quantity: 1, // 1 time per month
+    },
+    {
+      type: "spark_ads",
+      name: "$100 Spark Ads Budget",
+      value_data: { amount: 100 },
+      redemption_quantity: 3, // 3 times per month
+    },
+    {
+      type: "discount",
+      name: "10% Follower Discount",
+      value_data: { percent: 10 },
+      redemption_quantity: 1, // 1 time per month
+    },
+  ]
+
+  // Custom Gift Drop SVG icon (from rewards page)
+  const GiftDropIcon = ({ className }: { className?: string }) => (
+    <svg
+      className={className}
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M20 7h-.7c.229-.467.349-.98.351-1.5a3.5 3.5 0 0 0-3.5-3.5c-1.717 0-3.215 1.2-4.331 2.481C10.4 2.842 8.949 2 7.5 2A3.5 3.5 0 0 0 4 5.5c.003.52.123 1.033.351 1.5H4a2 2 0 0 0-2 2v2a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V9a2 2 0 0
+0-2-2Zm-9.942 0H7.5a1.5 1.5 0 0 1 0-3c.9 0 2 .754 3.092 2.122-.219.337-.392.635-.534.878Zm6.1 0h-3.742c.933-1.368 2.371-3 3.739-3a1.5 1.5 0 0 1 0 3h.003ZM13 14h-2v8h2v-8Zm-4 0H4v6a2 2 0 0 0 2 2h3v-8Zm6 0v8h3a2 2 0 0 0 2-2v-6h-5Z"
+      />
+    </svg>
+  )
+
+  // Map backend benefit types to frontend icons
+  const getIconForBenefitType = (type: string) => {
+    const iconClass = "h-5 w-5 text-slate-700 flex-shrink-0"
+
+    switch (type) {
+      case "commission_boost":
+        return <HandCoins className={iconClass} />
+      case "spark_ads":
+        return <ArrowUpNarrowWide className={iconClass} />
+      case "gift_card":
+        return <Gift className={iconClass} />
+      case "physical_gift":
+        return <GiftDropIcon className={iconClass} />
+      case "discount":
+        return <TicketPercent className={iconClass} />
+      case "experience":
+        return <Palmtree className={iconClass} />
+      default:
+        return <Gift className={iconClass} />
+    }
+  }
+
+  // Sort benefits by priority order
+  const benefitPriority = {
+    experience: 1,
+    physical_gift: 2,
+    gift_card: 3,
+    commission_boost: 4,
+    spark_ads: 5,
+    discount: 6,
+  }
+
+  const sortedBenefits = [...currentTierBenefits].sort((a, b) => {
+    const aPriority = benefitPriority[a.type as keyof typeof benefitPriority] || 999
+    const bPriority = benefitPriority[b.type as keyof typeof benefitPriority] || 999
+    return aPriority - bPriority
+  })
+
+  // Get top 4 benefits
+  const topBenefits = sortedBenefits.slice(0, 4)
+  const hasMoreBenefits = sortedBenefits.length > 4
+
+  // Format benefit display text
+  const formatBenefitText = (type: string, name: string, value_data: any, quantity: number): string => {
+    switch (type) {
+      case "gift_card":
+        // "$50 Amazon Gift Card"
+        return `${value_data?.amount} Amazon Gift Card`
+      case "commission_boost":
+        // "+5% Pay boost for 30 Days"
+        return `+${value_data?.percent}% Pay boost for ${value_data?.duration_days || 30} Days`
+      case "discount":
+        // "+10% Follower Discount"
+        return `+${value_data?.percent}% Follower Discount`
+      case "spark_ads":
+        // "+$100 Ad Boost"
+        return `+${value_data?.amount} Ad Boost`
+      case "physical_gift":
+        // "Win a Wireless Headphones"
+        return `Win a ${name}`
+      case "experience":
+        // "Win a VIP Event Access"
+        return `Win a ${name}`
+      default:
+        return name
+    }
+  }
+
+  // TASK 1: Circle color is DYNAMIC from backend (tiers.tier_color)
+  // Uses mockData.currentTier.color which comes from database
+  const currentTierColor = mockData.currentTier.color
+
+  // Format currency
+  const formatCurrency = (num: number): string => {
+    return `${num.toLocaleString()}`
+  }
+
+  const formatNumber = (num: number): string => {
+    return num.toLocaleString()
+  }
+
+  const formatLargeNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`
+    }
+    if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`
+    }
+    return num.toLocaleString()
+  }
+
+  // TASK 2 & 3: Circular progress calculations
+  // currentSales: From mission_progress.current_value (user's progress)
+  // threshold: From missions.target_value (mission goal)
+  // nextAmount: From benefits.value_data->>'amount' (reward value)
+  const giftCardPercentage = Math.min((mockData.giftCard.currentSales / mockData.giftCard.threshold) * 100, 100)
+  const circleSize = 240
+  const strokeWidth = 24
+  const radius = (circleSize - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const circleOffset = circumference - (giftCardPercentage / 100) * circumference
+
+  // Tier progress calculations (linear bar)
+  const tierProgressPercentage = Math.min(
+    (mockData.tierProgress.currentSales / mockData.tierProgress.targetSales) * 100,
+    100,
+  )
+
+  return (
+    <HomePageLayout title={`Hi, @${mockData.handle}`}>
+      {/* Section 1: Circular Progress (NO CARD - directly on gray background) */}
+      <div className="flex flex-col items-center text-center space-y-3 py-2">
+        {/* Title */}
+        <h3 className="text-lg font-semibold text-slate-900">{mockData.clientName} Rewards</h3>
+
+        {/* Circular Progress */}
+        <div className="relative inline-flex items-center justify-center">
+          <svg width={circleSize} height={circleSize} className="transform -rotate-90">
+            {/* Background circle */}
+            <circle
+              cx={circleSize / 2}
+              cy={circleSize / 2}
+              r={radius}
+              fill="none"
+              stroke="#E5E7EB"
+              strokeWidth={strokeWidth}
+            />
+            {/* Progress circle (TASK 1: tier colored - dynamic from backend) */}
+            <circle
+              cx={circleSize / 2}
+              cy={circleSize / 2}
+              r={radius}
+              fill="none"
+              stroke={currentTierColor}
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={circleOffset}
+              strokeLinecap="round"
+              className="transition-all duration-500 ease-out"
+            />
+          </svg>
+
+          {/* Center text - TASK 2: Sales and Mission targets (dynamic from backend) */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-bold text-slate-900">{formatCurrency(mockData.giftCard.currentSales)}</span>
+            <span className="text-sm text-slate-500 font-medium">
+              of {formatCurrency(mockData.giftCard.threshold)} sales
+            </span>
+          </div>
+        </div>
+
+        {/* Subtitle - TASK 3: Gift card reward (dynamic from backend) */}
+        <p className="text-base text-slate-900 font-semibold">
+          Next:{" "}
+          <span className="text-slate-600 font-semibold">${formatCurrency(mockData.giftCard.nextAmount)} Gift Card</span>
+        </p>
+      </div>
+
+      {/* NEW SECTION: Current Rewards (with icons, no bullets) */}
+      <Card className="bg-white rounded-xl shadow-sm">
+        <CardContent className="px-6 py-1">
+          <h3 className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
+            <Trophy className="h-5 w-5" style={{ color: currentTierColor }} />
+            {mockData.currentTier.name} Level Rewards
+          </h3>
+          <ul className="space-y-3">
+            {topBenefits.map((benefit, index) => (
+              <li key={index} className="flex items-start gap-3">
+                {getIconForBenefitType(benefit.type)}
+                <span className="text-sm text-slate-700">
+                  {formatBenefitText(benefit.type, benefit.name, benefit.value_data, benefit.redemption_quantity)}
+                </span>
+              </li>
+            ))}
+            {hasMoreBenefits && (
+              <li className="flex items-start gap-3">
+                <span className="text-slate-400 text-sm">•</span>
+                <span className="text-sm text-slate-500 italic">And more!</span>
+              </li>
+            )}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Card 1: Tier Progress - Unlock Next Tier (WHITE CARD) */}
+      <Card className="bg-white rounded-xl shadow-sm">
+        <CardContent className="px-6 py-2 space-y-3">
+          {/* Title */}
+          <h3 className="text-base font-semibold text-slate-900">Unlock {mockData.nextTier.name}</h3>
+
+          {/* Sales progress text */}
+          <div className="space-y-1">
+            <p className="text-2xl font-bold text-slate-900">
+              {formatCurrency(mockData.tierProgress.currentSales)} of{" "}
+              {formatCurrency(mockData.tierProgress.targetSales)}
+            </p>
+            <p className="text-sm text-slate-600">sales</p>
+          </div>
+
+          {/* Current tier badge + progress bar */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" style={{ color: currentTierColor }} />
+              <span className="font-semibold text-slate-900">{mockData.currentTier.name}</span>
+            </div>
+
+            {/* Linear progress bar */}
+            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${tierProgressPercentage}%`,
+                  backgroundColor: currentTierColor,
+                }}
+              />
+            </div>
+
+            {/* Expiration text */}
+            <p className="text-xs text-slate-600 pt-1">
+              {mockData.currentTier.name} Expires on {mockData.expirationDate}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Card 2: Checkpoint Information (WHITE CARD) */}
+
+
+      {/* Performance Section - Border Only (No Card) */}
+      <div className="space-y-3 pt-2">
+        <div className="pb-2 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">Performance</h3>
+          <p className="text-xs text-slate-400 uppercase tracking-wide mt-1">
+            {mockData.performance.periodStart} - {mockData.performance.periodEnd}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Sales */}
+          <div className="flex items-center gap-2 bg-gradient-to-br from-emerald-50 to-emerald-100 px-3 py-2 rounded-full border border-emerald-200">
+            <DollarSign className="h-4 w-4 text-emerald-700" />
+            <span className="font-bold text-slate-900 text-sm">
+              ${formatLargeNumber(mockData.performance.salesAmount)}
+            </span>
+            <span className="text-slate-600 text-xs">Sales</span>
+          </div>
+
+          {/* Videos */}
+          <div className="flex items-center gap-2 bg-gradient-to-br from-purple-50 to-purple-100 px-3 py-2 rounded-full border border-purple-200">
+            <Video className="h-4 w-4 text-purple-700" />
+            <span className="font-bold text-slate-900 text-sm">{formatNumber(mockData.performance.videosPosted)}</span>
+            <span className="text-slate-600 text-xs">Videos</span>
+          </div>
+
+          {/* Views */}
+          <div className="flex items-center gap-2 bg-gradient-to-br from-blue-50 to-blue-100 px-3 py-2 rounded-full border border-blue-200">
+            <Eye className="h-4 w-4 text-blue-700" />
+            <span className="font-bold text-slate-900 text-sm">
+              {formatLargeNumber(mockData.performance.totalViews)}
+            </span>
+            <span className="text-slate-600 text-xs">Views</span>
+          </div>
+
+          {/* Likes */}
+          <div className="flex items-center gap-2 bg-gradient-to-br from-rose-50 to-rose-100 px-3 py-2 rounded-full border border-rose-200">
+            <Heart className="h-4 w-4 text-rose-700" />
+            <span className="font-bold text-slate-900 text-sm">
+              {formatLargeNumber(mockData.performance.totalLikes)}
+            </span>
+            <span className="text-slate-600 text-xs">Likes</span>
+          </div>
+
+          {/* Comments */}
+          <div className="flex items-center gap-2 bg-gradient-to-br from-amber-50 to-amber-100 px-3 py-2 rounded-full border border-amber-200">
+            <MessageCircle className="h-4 w-4 text-amber-700" />
+            <span className="font-bold text-slate-900 text-sm">
+              {formatLargeNumber(mockData.performance.totalComments)}
+            </span>
+            <span className="text-slate-600 text-xs">Comments</span>
+          </div>
+        </div>
+      </div>
+    </HomePageLayout>
+  )
+}

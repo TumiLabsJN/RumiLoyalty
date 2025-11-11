@@ -1,0 +1,4182 @@
+# Pseudocode & Implementation Details
+
+This document contains detailed implementation pseudocode for the Rumi Loyalty Platform specification. Each section references the corresponding high-level decision in Loyalty.md.
+
+---
+
+## Table of Contents
+
+**Section 1: General Configuration**
+- [1.1 VIP Level Names](#11-vip-level-names)
+- [1.2 Tier Colors](#12-tier-colors)
+- [1.3 Brand Color](#13-brand-color)
+- [1.4 Dynamic Tiers](#14-dynamic-tiers-3-6-configurable-tiers)
+
+**Section 2: Reward Names**
+- [2.1 Auto-Generated Naming Logic](#21-auto-generated-naming-logic)
+
+**Section 3: Reward Amounts**
+- [3.1 Smart Hybrid Storage](#31-smart-hybrid-storage)
+
+**Section 4: Earning Modes**
+- [4.2 Missions (Task Completion)](#42-missions-task-completion)
+
+**Section 5: Conditional Display**
+- [5.1 Locked Rewards Visibility](#51-locked-rewards-visibility)
+
+**Section 6: Redemption Limits**
+- [6.1 Quantity + Frequency System](#61-quantity--frequency-system)
+
+---
+
+## 1.1 VIP Level Names
+
+**Reference:** See Loyalty.md lines 1992, 1735-1758 (tiers table schema)
+
+**Decision:** Internal tier IDs (`tier_1`, `tier_2`, `tier_3`, `tier_4`) with admin-customizable display names stored in `tiers` table.
+
+### Database Schema
+
+The `tiers` table (Loyalty.md:1735-1758) stores tier configuration:
+
+```sql
+CREATE TABLE tiers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Tier identity
+  tier_order INTEGER NOT NULL,        -- Display order: 1, 2, 3, 4
+  tier_id VARCHAR(50) NOT NULL,       -- Internal ID: 'tier_1', 'tier_2', etc.
+  tier_name VARCHAR(100) NOT NULL,    -- Display name: 'Bronze', 'Silver', or custom
+  tier_color VARCHAR(7) NOT NULL,     -- Hex color: '#CD7F32'
+
+  -- Threshold & rewards
+  sales_threshold DECIMAL(10, 2) NOT NULL,
+  commission_rate DECIMAL(5, 2) NOT NULL,
+  checkpoint_exempt BOOLEAN DEFAULT false,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(client_id, tier_order),
+  UNIQUE(client_id, tier_id)
+);
+```
+
+**Key points:**
+- `users.current_tier` stores internal IDs: `'tier_1'`, `'tier_2'`, etc. (Loyalty.md:1493)
+- Display names are customizable per client
+- `tier_order` determines tier hierarchy (1 = lowest, 4 = highest)
+
+### Seed Data for MVP
+
+```sql
+-- Insert default tier configuration for MVP client
+INSERT INTO tiers (client_id, tier_order, tier_id, tier_name, tier_color, sales_threshold, commission_rate, checkpoint_exempt) VALUES
+  ((SELECT id FROM clients LIMIT 1), 1, 'tier_1', 'Bronze', '#CD7F32', 0, 10.00, true),
+  ((SELECT id FROM clients LIMIT 1), 2, 'tier_2', 'Silver', '#C0C0C0', 1000, 12.50, false),
+  ((SELECT id FROM clients LIMIT 1), 3, 'tier_3', 'Gold', '#FFD700', 2000, 15.00, false),
+  ((SELECT id FROM clients LIMIT 1), 4, 'tier_4', 'Platinum', '#E5E4E2', 3000, 17.50, false);
+```
+
+### Helper Functions
+
+```typescript
+// lib/tier-helpers.ts
+
+/**
+ * Get display name for a tier ID
+ * @param tierId - Internal tier ID ('tier_1', 'tier_2', etc.)
+ * @param tiers - Array of tier configurations from database
+ * @returns Display name ('Bronze', 'Silver', or custom name)
+ */
+export function getTierDisplayName(tierId: string, tiers: Tier[]): string {
+  const tier = tiers.find(t => t.tier_id === tierId);
+  return tier?.tier_name || tierId; // Fallback to tier_id if not found
+}
+
+/**
+ * Get numeric tier level from tier ID
+ * @param tierId - Internal tier ID ('tier_1', 'tier_2', etc.)
+ * @returns Numeric level (1, 2, 3, 4)
+ */
+export function getTierLevel(tierId: string): number {
+  return parseInt(tierId.split('_')[1]);
+}
+
+/**
+ * Get tier configuration by tier ID
+ * @param tierId - Internal tier ID
+ * @param tiers - Array of tier configurations
+ * @returns Full tier configuration object
+ */
+export function getTierConfig(tierId: string, tiers: Tier[]): Tier | undefined {
+  return tiers.find(t => t.tier_id === tierId);
+}
+
+/**
+ * Compare tier levels
+ * @returns -1 if tierA < tierB, 0 if equal, 1 if tierA > tierB
+ */
+export function compareTiers(tierA: string, tierB: string): number {
+  const levelA = getTierLevel(tierA);
+  const levelB = getTierLevel(tierB);
+  return levelA - levelB;
+}
+
+/**
+ * Get next tier ID
+ * @param currentTierId - Current tier ID
+ * @param tiers - Array of tier configurations
+ * @returns Next tier ID or null if already at highest
+ */
+export function getNextTier(currentTierId: string, tiers: Tier[]): string | null {
+  const currentTier = getTierConfig(currentTierId, tiers);
+  if (!currentTier) return null;
+
+  const nextTier = tiers.find(t => t.tier_order === currentTier.tier_order + 1);
+  return nextTier?.tier_id || null;
+}
+```
+
+### TypeScript Types
+
+```typescript
+// types/tier.ts
+
+export interface Tier {
+  id: string;
+  client_id: string;
+  tier_order: number;
+  tier_id: 'tier_1' | 'tier_2' | 'tier_3' | 'tier_4' | 'tier_5' | 'tier_6';
+  tier_name: string;
+  tier_color: string;
+  sales_threshold: number;
+  commission_rate: number;
+  checkpoint_exempt: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TierId = 'tier_1' | 'tier_2' | 'tier_3' | 'tier_4' | 'tier_5' | 'tier_6';
+```
+
+### Admin UI Implementation
+
+```typescript
+// app/admin/settings/tiers/page.tsx
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Tier } from '@/types/tier';
+import { toast } from '@/components/ui/toast';
+
+export default function TierSettingsPage() {
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch tier configuration on mount
+  useEffect(() => {
+    async function loadTiers() {
+      const { data, error } = await supabase
+        .from('tiers')
+        .select('*')
+        .order('tier_order', { ascending: true });
+
+      if (error) {
+        toast.error('Failed to load tier configuration');
+        return;
+      }
+
+      setTiers(data || []);
+    }
+    loadTiers();
+  }, []);
+
+  // Update tier name
+  async function updateTierName(tierId: string, newName: string) {
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('tiers')
+        .update({
+          tier_name: newName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('tier_id', tierId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTiers(prev => prev.map(t =>
+        t.tier_id === tierId ? { ...t, tier_name: newName } : t
+      ));
+
+      toast.success('Tier name updated');
+    } catch (err) {
+      toast.error('Update failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="admin-panel">
+      <h1 className="text-2xl font-bold mb-6">Tier Configuration</h1>
+
+      <div className="space-y-4">
+        {tiers.map(tier => (
+          <div key={tier.id} className="flex items-center gap-4">
+            <label className="w-32 text-sm font-medium">
+              Tier {tier.tier_order} ({tier.tier_id})
+            </label>
+            <input
+              type="text"
+              value={tier.tier_name}
+              onChange={(e) => updateTierName(tier.tier_id, e.target.value)}
+              placeholder="e.g., Bronze, Silver, Rookie, Pro"
+              disabled={loading}
+              className="flex-1 px-3 py-2 border rounded-md"
+            />
+            <div
+              className="w-12 h-12 rounded border"
+              style={{ backgroundColor: tier.tier_color }}
+              title={tier.tier_color}
+            />
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-6 text-sm text-gray-600">
+        Customize tier names for white-label branding. Internal IDs (tier_1, tier_2, etc.) remain unchanged.
+      </p>
+    </div>
+  );
+}
+```
+
+### Creator UI Usage
+
+```typescript
+// components/tier-badge.tsx
+
+import { getTierDisplayName, getTierConfig } from '@/lib/tier-helpers';
+import { useTiers } from '@/hooks/use-tiers';
+import { TierId } from '@/types/tier';
+
+interface TierBadgeProps {
+  tierId: TierId;
+}
+
+export function TierBadge({ tierId }: TierBadgeProps) {
+  const { tiers } = useTiers(); // Hook that fetches tier config
+
+  const displayName = getTierDisplayName(tierId, tiers);
+  const tierConfig = getTierConfig(tierId, tiers);
+
+  return (
+    <div
+      className="tier-badge px-4 py-2 rounded-full font-semibold text-white"
+      style={{
+        backgroundColor: tierConfig?.tier_color || '#6366f1'
+      }}
+    >
+      {displayName}
+    </div>
+  );
+}
+```
+
+### Custom Hook for Tier Data
+
+```typescript
+// hooks/use-tiers.ts
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Tier } from '@/types/tier';
+
+export function useTiers() {
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchTiers() {
+      const { data, error } = await supabase
+        .from('tiers')
+        .select('*')
+        .order('tier_order', { ascending: true });
+
+      if (!error && data) {
+        setTiers(data);
+      }
+      setLoading(false);
+    }
+
+    fetchTiers();
+  }, []);
+
+  return { tiers, loading };
+}
+```
+
+### Error Handling
+
+```typescript
+// Defensive coding for tier lookups
+
+function getTierDisplayName(tierId: string, tiers: Tier[]): string {
+  // Validate tier ID format
+  if (!/^tier_[1-4]$/.test(tierId)) {
+    console.error(`Invalid tier ID format: ${tierId}`);
+    return 'Unknown Tier';
+  }
+
+  const tier = tiers.find(t => t.tier_id === tierId);
+
+  if (!tier) {
+    console.error(`Tier config not found for: ${tierId}`);
+    return tierId; // Fallback to tier_id
+  }
+
+  return tier.tier_name;
+}
+
+function getTierConfig(tierId: string, tiers: Tier[]): Tier | undefined {
+  if (!/^tier_[1-4]$/.test(tierId)) {
+    console.error(`Invalid tier ID format: ${tierId}`);
+    return undefined;
+  }
+
+  return tiers.find(t => t.tier_id === tierId);
+}
+```
+
+### Testing Checklist
+
+- [ ] Admin can update tier names via admin UI
+- [ ] Updated names appear immediately in creator UI (after refresh)
+- [ ] TypeScript enforces tier_id format (`tier_1` | `tier_2` | `tier_3` | `tier_4`)
+- [ ] Helper functions handle missing tier configs gracefully
+- [ ] Tier badge displays correct name and color
+- [ ] Database constraints prevent duplicate tier_ids per client
+- [ ] White-label clients can use completely custom names (e.g., "Rookie", "Pro", "Elite", "Legend")
+- [ ] Invalid tier IDs return fallback values instead of crashing
+- [ ] Tier order (1, 2, 3, 4) determines tier hierarchy correctly
+- [ ] `getNextTier()` returns correct next tier or null at max tier
+
+---
+
+## 1.2 Tier Colors
+
+**Reference:** See Loyalty.md lines 1993, 1744 (tiers table tier_color field)
+
+**Decision:** Store tier colors in `tiers.tier_color` field (VARCHAR(7) for hex colors). Inject as CSS variables for dynamic theming.
+
+### Database Schema
+
+The `tiers` table already includes tier colors (Loyalty.md:1744):
+
+```sql
+CREATE TABLE tiers (
+  -- ... other fields ...
+  tier_color VARCHAR(7) NOT NULL, -- Hex color: '#CD7F32'
+  -- ... other fields ...
+);
+```
+
+**Key points:**
+- Hex color format enforced (e.g., `#CD7F32`, `#C0C0C0`)
+- Each tier has independent color customization
+- Colors stored per tier (normalized approach vs JSONB)
+
+### Seed Data Default Colors
+
+```sql
+-- Default tier colors in seed data (from Section 1.1)
+INSERT INTO tiers (..., tier_color, ...) VALUES
+  (..., '#CD7F32', ...),  -- tier_1: Bronze
+  (..., '#C0C0C0', ...),  -- tier_2: Silver
+  (..., '#FFD700', ...),  -- tier_3: Gold
+  (..., '#E5E4E2', ...);  -- tier_4: Platinum
+```
+
+### CSS Variable Injection
+
+```typescript
+// app/layout.tsx or components/theme-provider.tsx
+
+import { useEffect } from 'react';
+import { useTiers } from '@/hooks/use-tiers';
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { tiers } = useTiers();
+
+  useEffect(() => {
+    // Inject tier colors as CSS variables
+    tiers.forEach(tier => {
+      document.documentElement.style.setProperty(
+        `--${tier.tier_id}-color`,
+        tier.tier_color
+      );
+    });
+  }, [tiers]);
+
+  return <>{children}</>;
+}
+```
+
+**Generated CSS variables:**
+```css
+:root {
+  --tier_1-color: #CD7F32;
+  --tier_2-color: #C0C0C0;
+  --tier_3-color: #FFD700;
+  --tier_4-color: #E5E4E2;
+}
+```
+
+### Using Tier Colors in Components
+
+**Option 1: Inline styles with CSS variables**
+```tsx
+// components/tier-badge.tsx
+
+export function TierBadge({ tierId }: { tierId: TierId }) {
+  return (
+    <div
+      className="tier-badge"
+      style={{
+        backgroundColor: `var(--${tierId}-color)`
+      }}
+    >
+      {/* ... */}
+    </div>
+  );
+}
+```
+
+**Option 2: Direct database value**
+```tsx
+// components/tier-badge.tsx
+
+import { getTierConfig } from '@/lib/tier-helpers';
+import { useTiers } from '@/hooks/use-tiers';
+
+export function TierBadge({ tierId }: { tierId: TierId }) {
+  const { tiers } = useTiers();
+  const tierConfig = getTierConfig(tierId, tiers);
+
+  return (
+    <div
+      className="tier-badge"
+      style={{
+        backgroundColor: tierConfig?.tier_color
+      }}
+    >
+      {/* ... */}
+    </div>
+  );
+}
+```
+
+**Option 3: Tailwind dynamic classes (using CSS variables)**
+```tsx
+// tailwind.config.ts - Extend theme with tier colors
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        'tier-1': 'var(--tier_1-color)',
+        'tier-2': 'var(--tier_2-color)',
+        'tier-3': 'var(--tier_3-color)',
+        'tier-4': 'var(--tier_4-color)',
+      }
+    }
+  }
+}
+
+// Component usage
+<div className={`bg-tier-${tierLevel}`}>
+  {/* Dynamic Tailwind class */}
+</div>
+```
+
+### Admin UI Implementation
+
+```typescript
+// app/admin/settings/tiers/page.tsx
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Tier } from '@/types/tier';
+
+export default function TierSettingsPage() {
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Update tier color
+  async function updateTierColor(tierId: string, newColor: string) {
+    // Validate hex color format
+    if (!/^#[0-9A-F]{6}$/i.test(newColor)) {
+      toast.error('Invalid hex color format. Use #RRGGBB');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('tiers')
+        .update({
+          tier_color: newColor,
+          updated_at: new Date().toISOString()
+        })
+        .eq('tier_id', tierId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTiers(prev => prev.map(t =>
+        t.tier_id === tierId ? { ...t, tier_color: newColor } : t
+      ));
+
+      // Update CSS variable immediately
+      document.documentElement.style.setProperty(
+        `--${tierId}-color`,
+        newColor
+      );
+
+      toast.success('Tier color updated');
+    } catch (err) {
+      toast.error('Update failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="admin-panel">
+      <h1 className="text-2xl font-bold mb-6">Tier Configuration</h1>
+
+      <div className="space-y-4">
+        {tiers.map(tier => (
+          <div key={tier.id} className="flex items-center gap-4">
+            <label className="w-32 text-sm font-medium">
+              {tier.tier_name} ({tier.tier_id})
+            </label>
+
+            {/* Color preview */}
+            <div
+              className="w-12 h-12 rounded border-2 border-gray-300"
+              style={{ backgroundColor: tier.tier_color }}
+              title={tier.tier_color}
+            />
+
+            {/* Color picker input */}
+            <input
+              type="color"
+              value={tier.tier_color}
+              onChange={(e) => updateTierColor(tier.tier_id, e.target.value)}
+              disabled={loading}
+              className="w-20 h-12 cursor-pointer"
+            />
+
+            {/* Hex input (manual entry) */}
+            <input
+              type="text"
+              value={tier.tier_color}
+              onChange={(e) => updateTierColor(tier.tier_id, e.target.value)}
+              placeholder="#RRGGBB"
+              maxLength={7}
+              disabled={loading}
+              className="w-24 px-2 py-1 border rounded font-mono text-sm"
+            />
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-6 text-sm text-gray-600">
+        Colors update immediately across the platform. Use hex format (#RRGGBB).
+      </p>
+    </div>
+  );
+}
+```
+
+### Validation Helper
+
+```typescript
+// lib/tier-helpers.ts
+
+/**
+ * Validate hex color format
+ * @param color - Color string to validate
+ * @returns true if valid hex color
+ */
+export function isValidHexColor(color: string): boolean {
+  return /^#[0-9A-F]{6}$/i.test(color);
+}
+
+/**
+ * Get contrasting text color for background
+ * @param hexColor - Background color in hex format
+ * @returns 'white' or 'black' for optimal contrast
+ */
+export function getContrastColor(hexColor: string): 'white' | 'black' {
+  // Remove # if present
+  const hex = hexColor.replace('#', '');
+
+  // Convert to RGB
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+
+  // Calculate luminance (perceived brightness)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  // Return contrasting color
+  return luminance > 0.5 ? 'black' : 'white';
+}
+```
+
+### Enhanced Tier Badge with Auto-Contrast
+
+```tsx
+// components/tier-badge.tsx
+
+import { getTierConfig } from '@/lib/tier-helpers';
+import { getContrastColor } from '@/lib/tier-helpers';
+import { useTiers } from '@/hooks/use-tiers';
+import { TierId } from '@/types/tier';
+
+export function TierBadge({ tierId }: { tierId: TierId }) {
+  const { tiers } = useTiers();
+  const tierConfig = getTierConfig(tierId, tiers);
+
+  const bgColor = tierConfig?.tier_color || '#6366f1';
+  const textColor = getContrastColor(bgColor);
+
+  return (
+    <div
+      className="tier-badge px-4 py-2 rounded-full font-semibold"
+      style={{
+        backgroundColor: bgColor,
+        color: textColor
+      }}
+    >
+      {tierConfig?.tier_name || 'Unknown'}
+    </div>
+  );
+}
+```
+
+### Zod Validation for API Routes
+
+```typescript
+// lib/schemas.ts
+
+import { z } from 'zod';
+
+export const UpdateTierColorSchema = z.object({
+  tier_id: z.enum(['tier_1', 'tier_2', 'tier_3', 'tier_4']),
+  tier_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Must be valid hex color (#RRGGBB)')
+});
+
+// Usage in API route
+// /api/admin/tiers/[id]/color
+export async function PUT(request: Request) {
+  const body = await request.json();
+  const validated = UpdateTierColorSchema.parse(body);
+
+  // Update database...
+}
+```
+
+### Testing Checklist
+
+- [ ] Admin can update tier colors via color picker
+- [ ] Admin can update tier colors via hex input (manual)
+- [ ] Invalid hex colors show validation error
+- [ ] Color updates reflect immediately in creator UI (after refresh)
+- [ ] CSS variables are injected on page load
+- [ ] Tier badges use correct colors
+- [ ] Progress bars use correct tier colors
+- [ ] Contrast helper returns readable text color (white on dark, black on light)
+- [ ] Multiple tiers can have same color (no uniqueness constraint)
+- [ ] Color preview in admin UI matches actual saved color
+- [ ] Color changes persist after page refresh
+
+---
+
+## 1.3 Brand Color
+
+**Reference:** See Loyalty.md lines 1993, 1460 (clients.primary_color field)
+
+**Decision:** Store primary brand color in `clients.primary_color` field. This color is used for all screen headers globally.
+
+### Database Schema
+
+The `clients` table already includes primary_color (Loyalty.md:1460):
+
+```sql
+CREATE TABLE clients (
+  -- ... other fields ...
+  primary_color VARCHAR(7) DEFAULT '#6366f1', -- Global header color for all screens
+  -- ... other fields ...
+);
+```
+
+**Key points:**
+- Hex color format enforced (e.g., `#6366f1`)
+- Single global color (not per-tier like tier_color)
+- Affects all screen headers platform-wide
+- Default value: `#6366f1` (Indigo)
+
+### CSS Variable Injection
+
+```typescript
+// app/layout.tsx or components/theme-provider.tsx
+
+import { useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    async function loadBrandColor() {
+      const { data } = await supabase
+        .from('clients')
+        .select('primary_color')
+        .single();
+
+      if (data?.primary_color) {
+        // Inject as CSS variable
+        document.documentElement.style.setProperty(
+          '--header-color',
+          data.primary_color
+        );
+      }
+    }
+
+    loadBrandColor();
+  }, []);
+
+  return <>{children}</>;
+}
+```
+
+**Generated CSS variable:**
+```css
+:root {
+  --header-color: #6366f1; /* Or admin's custom color */
+}
+```
+
+### Using Brand Color in Components
+
+**Headers with CSS variable:**
+```tsx
+// components/header.tsx
+
+export function Header() {
+  return (
+    <header
+      className="sticky top-0 h-16 px-4 flex items-center"
+      style={{
+        backgroundColor: 'var(--header-color)'
+      }}
+    >
+      <h1 className="text-white font-bold">Loyalty Program</h1>
+    </header>
+  );
+}
+```
+
+**Tailwind integration:**
+```tsx
+// tailwind.config.ts - Extend theme with brand color
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        'brand': 'var(--header-color)',
+      }
+    }
+  }
+}
+
+// Component usage
+<header className="bg-brand text-white">
+  {/* Header content */}
+</header>
+```
+
+### Admin UI Implementation
+
+```typescript
+// app/admin/settings/branding/page.tsx
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/components/ui/toast';
+
+export default function BrandingSettingsPage() {
+  const [primaryColor, setPrimaryColor] = useState('#6366f1');
+  const [loading, setLoading] = useState(false);
+
+  // Load current brand color
+  useEffect(() => {
+    async function loadBrandColor() {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('primary_color')
+        .single();
+
+      if (!error && data) {
+        setPrimaryColor(data.primary_color);
+      }
+    }
+    loadBrandColor();
+  }, []);
+
+  // Update brand color
+  async function updateBrandColor(newColor: string) {
+    // Validate hex color format
+    if (!/^#[0-9A-F]{6}$/i.test(newColor)) {
+      toast.error('Invalid hex color format. Use #RRGGBB');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          primary_color: newColor,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      // Update CSS variable immediately
+      document.documentElement.style.setProperty(
+        '--header-color',
+        newColor
+      );
+
+      setPrimaryColor(newColor);
+      toast.success('Brand color updated');
+    } catch (err) {
+      toast.error('Update failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="admin-panel">
+      <h1 className="text-2xl font-bold mb-6">Branding Settings</h1>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <label className="w-32 text-sm font-medium">
+            Primary Color
+          </label>
+
+          {/* Color preview */}
+          <div
+            className="w-16 h-16 rounded border-2 border-gray-300"
+            style={{ backgroundColor: primaryColor }}
+            title={primaryColor}
+          />
+
+          {/* Color picker input */}
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => updateBrandColor(e.target.value)}
+            disabled={loading}
+            className="w-20 h-12 cursor-pointer"
+          />
+
+          {/* Hex input (manual entry) */}
+          <input
+            type="text"
+            value={primaryColor}
+            onChange={(e) => updateBrandColor(e.target.value)}
+            placeholder="#RRGGBB"
+            maxLength={7}
+            disabled={loading}
+            className="w-24 px-2 py-1 border rounded font-mono text-sm"
+          />
+        </div>
+
+        <p className="text-sm text-gray-600">
+          This color is applied to all screen headers globally.
+        </p>
+      </div>
+
+      {/* Live preview */}
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold mb-4">Preview</h2>
+        <div
+          className="h-16 flex items-center px-4 rounded"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <span className="text-white font-semibold">Header Preview</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Zod Validation
+
+Already exists in Loyalty.md:241:
+
+```typescript
+// lib/schemas.ts
+
+export const UpdateBrandingSchema = z.object({
+  logo_url: z.string().url().optional(),
+  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i),
+});
+
+// Usage in API route
+// /api/admin/branding
+export async function PUT(request: Request) {
+  const body = await request.json();
+  const validated = UpdateBrandingSchema.parse(body);
+
+  // Update database...
+}
+```
+
+### Server-Side Rendering Considerations
+
+```typescript
+// app/layout.tsx - Server Component
+
+import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const supabase = createServerComponentClient({ cookies });
+
+  // Fetch brand color on server
+  const { data: client } = await supabase
+    .from('clients')
+    .select('primary_color')
+    .single();
+
+  return (
+    <html lang="en">
+      <head>
+        {/* Inject CSS variable inline to prevent FOUC (Flash of Unstyled Content) */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              :root {
+                --header-color: ${client?.primary_color || '#6366f1'};
+              }
+            `
+          }}
+        />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+### Testing Checklist
+
+- [ ] Admin can update brand color via color picker
+- [ ] Admin can update brand color via hex input (manual)
+- [ ] Invalid hex colors show validation error
+- [ ] Color updates reflect immediately in all headers (after refresh)
+- [ ] CSS variable `--header-color` is injected on page load
+- [ ] All screen headers use the brand color
+- [ ] Preview in admin UI matches actual saved color
+- [ ] Color changes persist after page refresh
+- [ ] Server-side rendering includes brand color (no FOUC)
+- [ ] Default color (`#6366f1`) is used if no color is set
+
+---
+
+## 1.4 Dynamic Tiers (3-6 Configurable Tiers)
+
+**Reference:** See Loyalty.md lines 2001, 1735-1759 (tiers table schema)
+
+**Decision:** Support 3-6 dynamic tiers per client using the `tiers` table. Tier structure is set once at client onboarding and rarely changed (no deletion/reordering supported).
+
+### Database Schema
+
+The `tiers` table already supports dynamic tiers (Loyalty.md:1735-1759):
+
+```sql
+CREATE TABLE tiers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Tier identity
+  tier_order INTEGER NOT NULL,        -- Display order: 1, 2, 3, 4 (up to 6)
+  tier_id VARCHAR(50) NOT NULL,       -- Internal ID: 'tier_1', 'tier_2', etc.
+  tier_name VARCHAR(100) NOT NULL,    -- Display name: 'Bronze', 'Silver', etc.
+  tier_color VARCHAR(7) NOT NULL,     -- Hex color for UI
+
+  -- Threshold & rewards
+  sales_threshold DECIMAL(10, 2) NOT NULL,  -- Minimum sales to reach tier
+  commission_rate DECIMAL(5, 2) NOT NULL,   -- Commission percentage for tier
+
+  -- Checkpoint behavior
+  checkpoint_exempt BOOLEAN DEFAULT false,  -- tier_1 = true (no checkpoints)
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(client_id, tier_order),
+  UNIQUE(client_id, tier_id)
+);
+
+CREATE INDEX idx_tiers_client ON tiers(client_id);
+```
+
+**Key points:**
+- Variable tier count: 3-6 tiers per client
+- `tier_order` determines hierarchy (1 = lowest, 6 = highest)
+- First tier (`tier_order = 1`) always has `sales_threshold = 0` and `checkpoint_exempt = true`
+- Tier structure is stable (no deletion/reordering after setup)
+
+### Seed Data for 4-Tier Setup (MVP Default)
+
+```sql
+-- Insert default 4-tier configuration for MVP client
+INSERT INTO tiers (client_id, tier_order, tier_id, tier_name, tier_color, sales_threshold, commission_rate, checkpoint_exempt) VALUES
+  ((SELECT id FROM clients LIMIT 1), 1, 'tier_1', 'Bronze', '#CD7F32', 0, 10.00, true),
+  ((SELECT id FROM clients LIMIT 1), 2, 'tier_2', 'Silver', '#C0C0C0', 1000, 12.50, false),
+  ((SELECT id FROM clients LIMIT 1), 3, 'tier_3', 'Gold', '#FFD700', 2000, 15.00, false),
+  ((SELECT id FROM clients LIMIT 1), 4, 'tier_4', 'Platinum', '#E5E4E2', 3000, 17.50, false);
+```
+
+### Dynamic Tier Calculation Algorithm
+
+**Context:** Used in Flow 6 (Daily Tier Calculation) to determine which tier a creator belongs to based on their sales.
+
+```typescript
+// lib/tier-calculation.ts
+
+import { supabase } from '@/lib/supabase';
+
+/**
+ * Calculate tier based on sales amount
+ * @param sales - Total sales amount
+ * @param clientId - Client ID
+ * @returns Tier ID (tier_1, tier_2, etc.)
+ */
+export async function calculateTierFromSales(
+  sales: number,
+  clientId: string
+): Promise<string> {
+  // Fetch all tiers for client, ordered by threshold (descending)
+  const { data: tiers, error } = await supabase
+    .from('tiers')
+    .select('tier_id, sales_threshold')
+    .eq('client_id', clientId)
+    .order('tier_order', { ascending: false }); // Highest tier first
+
+  if (error || !tiers || tiers.length === 0) {
+    throw new Error('Failed to fetch tier configuration');
+  }
+
+  // Loop through tiers (highest to lowest) to find first match
+  for (const tier of tiers) {
+    if (sales >= tier.sales_threshold) {
+      return tier.tier_id;
+    }
+  }
+
+  // Fallback: Return lowest tier (should never happen if tier_1 threshold = 0)
+  return tiers[tiers.length - 1].tier_id;
+}
+```
+
+**Example execution:**
+```typescript
+// Sales: $2,500
+// Tiers: [Platinum: $3000, Gold: $2000, Silver: $1000, Bronze: $0]
+// Loop:
+//   - $2,500 >= $3,000? No
+//   - $2,500 >= $2,000? Yes → Return 'tier_3' (Gold)
+```
+
+### Admin UI - Initial Tier Setup (One-Time)
+
+**Flow:** Admin configures tier structure ONCE when setting up a new client.
+
+```typescript
+// app/admin/clients/[id]/tiers/setup/page.tsx
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/components/ui/toast';
+
+export default function TierSetupPage({ params }: { params: { id: string } }) {
+  const [tierCount, setTierCount] = useState(4);
+  const [tiers, setTiers] = useState([
+    { tier_order: 1, tier_name: 'Bronze', tier_color: '#CD7F32', sales_threshold: 0, commission_rate: 10, checkpoint_exempt: true },
+    { tier_order: 2, tier_name: 'Silver', tier_color: '#C0C0C0', sales_threshold: 1000, commission_rate: 12.5, checkpoint_exempt: false },
+    { tier_order: 3, tier_name: 'Gold', tier_color: '#FFD700', sales_threshold: 2000, commission_rate: 15, checkpoint_exempt: false },
+    { tier_order: 4, tier_name: 'Platinum', tier_color: '#E5E4E2', sales_threshold: 3000, commission_rate: 17.5, checkpoint_exempt: false },
+  ]);
+  const [loading, setLoading] = useState(false);
+
+  // Update tier count (adds/removes tiers from array)
+  function handleTierCountChange(newCount: number) {
+    if (newCount < 3 || newCount > 6) return;
+
+    setTierCount(newCount);
+
+    // Add or remove tiers to match new count
+    if (newCount > tiers.length) {
+      // Add new tiers
+      const newTiers = [...tiers];
+      for (let i = tiers.length + 1; i <= newCount; i++) {
+        newTiers.push({
+          tier_order: i,
+          tier_name: `Tier ${i}`,
+          tier_color: '#6366f1',
+          sales_threshold: i * 1000,
+          commission_rate: 10 + (i - 1) * 2.5,
+          checkpoint_exempt: false,
+        });
+      }
+      setTiers(newTiers);
+    } else {
+      // Remove excess tiers
+      setTiers(tiers.slice(0, newCount));
+    }
+  }
+
+  // Save tier configuration
+  async function saveTierStructure() {
+    try {
+      setLoading(true);
+
+      // Validate
+      const validationError = validateTiers(tiers);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+
+      // Insert all tiers
+      const tiersToInsert = tiers.map((tier, index) => ({
+        client_id: params.id,
+        tier_order: tier.tier_order,
+        tier_id: `tier_${tier.tier_order}`,
+        tier_name: tier.tier_name,
+        tier_color: tier.tier_color,
+        sales_threshold: tier.sales_threshold,
+        commission_rate: tier.commission_rate,
+        checkpoint_exempt: tier.checkpoint_exempt,
+      }));
+
+      const { error } = await supabase
+        .from('tiers')
+        .insert(tiersToInsert);
+
+      if (error) throw error;
+
+      toast.success('Tier structure saved successfully!');
+      // Redirect to client dashboard
+    } catch (err) {
+      toast.error('Failed to save tiers: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="admin-panel max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Initial Tier Setup</h1>
+
+      {/* Tier count selector */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium mb-2">
+          How many tiers? (3-6)
+        </label>
+        <select
+          value={tierCount}
+          onChange={(e) => handleTierCountChange(parseInt(e.target.value))}
+          className="px-3 py-2 border rounded"
+        >
+          <option value={3}>3 Tiers</option>
+          <option value={4}>4 Tiers (Recommended)</option>
+          <option value={5}>5 Tiers</option>
+          <option value={6}>6 Tiers</option>
+        </select>
+      </div>
+
+      {/* Tier configuration */}
+      <div className="space-y-4">
+        {tiers.map((tier, index) => (
+          <div key={index} className="border p-4 rounded bg-gray-50">
+            <h3 className="font-semibold mb-3">
+              Tier {tier.tier_order}
+              {tier.tier_order === 1 && ' (Entry - No Checkpoints)'}
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Name */}
+              <div>
+                <label className="block text-sm mb-1">Tier Name</label>
+                <input
+                  type="text"
+                  value={tier.tier_name}
+                  onChange={(e) => {
+                    const newTiers = [...tiers];
+                    newTiers[index].tier_name = e.target.value;
+                    setTiers(newTiers);
+                  }}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              {/* Color */}
+              <div>
+                <label className="block text-sm mb-1">Color</label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={tier.tier_color}
+                    onChange={(e) => {
+                      const newTiers = [...tiers];
+                      newTiers[index].tier_color = e.target.value;
+                      setTiers(newTiers);
+                    }}
+                    className="w-16 h-10 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={tier.tier_color}
+                    onChange={(e) => {
+                      const newTiers = [...tiers];
+                      newTiers[index].tier_color = e.target.value;
+                      setTiers(newTiers);
+                    }}
+                    className="flex-1 px-3 py-2 border rounded font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Threshold */}
+              <div>
+                <label className="block text-sm mb-1">Sales Threshold ($)</label>
+                <input
+                  type="number"
+                  value={tier.sales_threshold}
+                  onChange={(e) => {
+                    const newTiers = [...tiers];
+                    newTiers[index].sales_threshold = parseFloat(e.target.value);
+                    setTiers(newTiers);
+                  }}
+                  disabled={tier.tier_order === 1} // tier_1 always $0
+                  className="w-full px-3 py-2 border rounded"
+                />
+                {tier.tier_order === 1 && (
+                  <p className="text-xs text-gray-500 mt-1">Entry tier is always $0</p>
+                )}
+              </div>
+
+              {/* Commission */}
+              <div>
+                <label className="block text-sm mb-1">Commission Rate (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={tier.commission_rate}
+                  onChange={(e) => {
+                    const newTiers = [...tiers];
+                    newTiers[index].commission_rate = parseFloat(e.target.value);
+                    setTiers(newTiers);
+                  }}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Warning */}
+      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded">
+        <p className="text-sm text-yellow-800">
+          ⚠️ <strong>Warning:</strong> Tier structure cannot be changed after saving (no deletion/reordering).
+          You can edit tier names, colors, thresholds, and commissions later, but tier count is permanent.
+          Contact support for major structural changes.
+        </p>
+      </div>
+
+      {/* Save button */}
+      <div className="mt-6">
+        <button
+          onClick={saveTierStructure}
+          disabled={loading}
+          className="px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? 'Saving...' : 'Save Tier Structure'}
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+### Validation Rules
+
+```typescript
+// lib/tier-validation.ts
+
+interface TierInput {
+  tier_order: number;
+  tier_name: string;
+  tier_color: string;
+  sales_threshold: number;
+  commission_rate: number;
+  checkpoint_exempt: boolean;
+}
+
+/**
+ * Validate tier configuration before saving
+ */
+export function validateTiers(tiers: TierInput[]): string | null {
+  // Rule 1: Minimum 3 tiers, maximum 6 tiers
+  if (tiers.length < 3) {
+    return 'Minimum 3 tiers required';
+  }
+  if (tiers.length > 6) {
+    return 'Maximum 6 tiers allowed';
+  }
+
+  // Rule 2: tier_order must be sequential (1, 2, 3, 4...)
+  const orders = tiers.map(t => t.tier_order).sort();
+  for (let i = 0; i < orders.length; i++) {
+    if (orders[i] !== i + 1) {
+      return 'Tier order must be sequential (1, 2, 3, ...)';
+    }
+  }
+
+  // Rule 3: First tier (tier_order = 1) must have threshold = 0
+  const firstTier = tiers.find(t => t.tier_order === 1);
+  if (!firstTier || firstTier.sales_threshold !== 0) {
+    return 'First tier must have $0 threshold';
+  }
+
+  // Rule 4: First tier must be checkpoint_exempt = true
+  if (!firstTier.checkpoint_exempt) {
+    return 'First tier must be checkpoint exempt';
+  }
+
+  // Rule 5: Thresholds must be in ascending order
+  for (let i = 1; i < tiers.length; i++) {
+    if (tiers[i].sales_threshold <= tiers[i - 1].sales_threshold) {
+      return `Tier ${i + 1} threshold ($${tiers[i].sales_threshold}) must be greater than Tier ${i} threshold ($${tiers[i - 1].sales_threshold})`;
+    }
+  }
+
+  // Rule 6: Tier names must be unique
+  const names = tiers.map(t => t.tier_name.toLowerCase());
+  if (new Set(names).size !== names.length) {
+    return 'Tier names must be unique';
+  }
+
+  // Rule 7: Valid hex colors
+  for (const tier of tiers) {
+    if (!/^#[0-9A-F]{6}$/i.test(tier.tier_color)) {
+      return `Invalid color for ${tier.tier_name}: ${tier.tier_color}`;
+    }
+  }
+
+  // Rule 8: Commission rates required and between 0-100
+  for (const tier of tiers) {
+    if (tier.commission_rate === undefined || tier.commission_rate === null) {
+      return `Commission rate is required for ${tier.tier_name}`;
+    }
+    if (tier.commission_rate < 0 || tier.commission_rate > 100) {
+      return `Commission rate for ${tier.tier_name} must be between 0-100%`;
+    }
+  }
+
+  return null; // All valid
+}
+```
+
+### Admin UI - Edit Mode (After Setup)
+
+**Flow:** Admin can edit tier details (names, colors, thresholds, commissions) but NOT tier count or order.
+
+```typescript
+// app/admin/clients/[id]/tiers/edit/page.tsx
+
+export default function TierEditPage({ params }: { params: { id: string } }) {
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load existing tiers
+  useEffect(() => {
+    async function loadTiers() {
+      const { data } = await supabase
+        .from('tiers')
+        .select('*')
+        .eq('client_id', params.id)
+        .order('tier_order', { ascending: true });
+
+      setTiers(data || []);
+    }
+    loadTiers();
+  }, []);
+
+  // Update single tier
+  async function updateTier(tierId: string, updates: Partial<Tier>) {
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('tiers')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', tierId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTiers(prev => prev.map(t =>
+        t.id === tierId ? { ...t, ...updates } : t
+      ));
+
+      toast.success('Tier updated');
+    } catch (err) {
+      toast.error('Update failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="admin-panel max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Edit Tier Configuration</h1>
+
+      <div className="space-y-4">
+        {tiers.map((tier) => (
+          <div key={tier.id} className="border p-4 rounded">
+            <h3 className="font-semibold mb-3">
+              {tier.tier_name} ({tier.tier_id})
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Editable fields */}
+              <div>
+                <label className="block text-sm mb-1">Name ✅</label>
+                <input
+                  type="text"
+                  value={tier.tier_name}
+                  onChange={(e) => updateTier(tier.id, { tier_name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Color ✅</label>
+                <input
+                  type="color"
+                  value={tier.tier_color}
+                  onChange={(e) => updateTier(tier.id, { tier_color: e.target.value })}
+                  className="w-full h-10 cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">
+                  Threshold ✅ {tier.tier_order === 1 && '(Fixed at $0)'}
+                </label>
+                <input
+                  type="number"
+                  value={tier.sales_threshold}
+                  onChange={(e) => updateTier(tier.id, { sales_threshold: parseFloat(e.target.value) })}
+                  disabled={tier.tier_order === 1}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Commission ✅</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={tier.commission_rate}
+                  onChange={(e) => updateTier(tier.id, { commission_rate: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 p-4 bg-gray-50 border rounded">
+        <p className="text-sm text-gray-600">
+          <strong>Cannot change:</strong> Number of tiers ❌ | Tier order ❌ | Delete tiers ❌
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+
+### API Endpoints
+
+```typescript
+// /api/admin/tiers/initialize
+// POST - One-time tier structure creation
+
+export async function POST(request: Request) {
+  const { clientId, tiers } = await request.json();
+
+  // Validate admin access
+  const admin = await requireAdmin();
+
+  // Check if tiers already exist for this client
+  const { data: existingTiers } = await supabase
+    .from('tiers')
+    .select('id')
+    .eq('client_id', clientId)
+    .limit(1);
+
+  if (existingTiers && existingTiers.length > 0) {
+    return NextResponse.json(
+      { error: 'Tiers already initialized for this client' },
+      { status: 400 }
+    );
+  }
+
+  // Validate tier structure
+  const validationError = validateTiers(tiers);
+  if (validationError) {
+    return NextResponse.json(
+      { error: validationError },
+      { status: 400 }
+    );
+  }
+
+  // Insert tiers
+  const { error } = await supabase
+    .from('tiers')
+    .insert(tiers.map((t, i) => ({
+      client_id: clientId,
+      tier_order: i + 1,
+      tier_id: `tier_${i + 1}`,
+      ...t
+    })));
+
+  if (error) {
+    return NextResponse.json(
+      { error: 'Failed to create tiers' },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+```typescript
+// /api/admin/tiers/[id]
+// PUT - Update tier details (name, color, threshold, commission)
+
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const updates = await request.json();
+
+  // Validate admin access
+  await requireAdmin();
+
+  // Validate updates
+  if (updates.tier_order !== undefined || updates.tier_id !== undefined) {
+    return NextResponse.json(
+      { error: 'Cannot change tier order or tier_id' },
+      { status: 400 }
+    );
+  }
+
+  // Update tier
+  const { error } = await supabase
+    .from('tiers')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', params.id);
+
+  if (error) {
+    return NextResponse.json(
+      { error: 'Failed to update tier' },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+### Usage in Tier Calculation (Flow 6)
+
+```typescript
+// app/api/cron/checkpoint-eval/route.ts
+
+async function evaluateCheckpoint(user: User, clientId: string) {
+  // Calculate sales in checkpoint period (includes manual adjustments)
+  const sales = await calculateCheckpointSales(user);
+  // Returns: SUM(metrics.tiktok_sales) + user.manual_adjustments_total
+
+  // Get tier based on sales (dynamic calculation)
+  const newTierId = await calculateTierFromSales(sales, clientId);
+
+  // Update user tier
+  await supabase
+    .from('users')
+    .update({
+      current_tier: newTierId,
+      tier_achieved_at: new Date().toISOString(),
+      next_checkpoint_at: calculateNextCheckpoint(),
+    })
+    .eq('id', user.id);
+
+  // Log to audit table
+  await logTierChange(user, sales, newTierId);
+}
+```
+
+### Testing Checklist
+
+- [ ] Admin can initialize tier structure (3-6 tiers)
+- [ ] Validation prevents < 3 or > 6 tiers
+- [ ] First tier always has $0 threshold and checkpoint_exempt = true
+- [ ] Thresholds must be in ascending order
+- [ ] Cannot initialize tiers twice for same client
+- [ ] Admin can edit tier names after setup
+- [ ] Admin can edit tier colors after setup
+- [ ] Admin can edit tier thresholds after setup (except tier_1)
+- [ ] Admin can edit commission rates after setup
+- [ ] Cannot change tier count after initialization
+- [ ] Cannot delete tiers after initialization
+- [ ] Cannot reorder tiers after initialization
+- [ ] Tier calculation loops through dynamic tier list
+- [ ] Works correctly with 3-tier setup
+- [ ] Works correctly with 6-tier setup
+- [ ] Database indexes optimize tier queries
+- [ ] Tier changes in admin UI update creator UI (after refresh)
+- [ ] Unique constraints prevent duplicate tier_order per client
+- [ ] Unique constraints prevent duplicate tier_id per client
+
+---
+
+## 2.1 Auto-Generated Naming Logic
+
+**Reference:** See Loyalty.md Section 2 (Reward Names) and lines 1600-1606 (benefits table schema)
+
+**Decision:** `benefits.name` field is auto-generated by backend from `type` + `value_data`/`description`. Admin cannot directly edit name field.
+
+### Display Name Mapping (Hardcoded)
+
+```typescript
+// lib/benefits.ts
+
+export const BENEFIT_DISPLAY_NAMES: Record<string, string> = {
+  'commission_boost': 'Pay Boost',
+  'spark_ads': 'Reach Boost',
+  'gift_card': 'Gift Card',
+  'discount': 'Deal Boost',
+  'physical_gift': 'Gift Drop',
+  'experience': 'Mystery Trip'
+};
+
+export const CATEGORY_1_TYPES = ['commission_boost', 'spark_ads', 'gift_card', 'discount'];
+export const CATEGORY_2_TYPES = ['physical_gift', 'experience'];
+```
+
+### Name Generation Function
+
+```typescript
+// lib/benefits.ts
+
+/**
+ * Generate benefit name from type and data
+ * @param benefit - Benefit object with type, value_data, description
+ * @returns Auto-generated name string
+ */
+export function generateBenefitName(benefit: {
+  type: string;
+  value_data?: any;
+  description?: string;
+}): string {
+  const baseName = BENEFIT_DISPLAY_NAMES[benefit.type];
+
+  if (!baseName) {
+    throw new Error(`Invalid benefit type: ${benefit.type}`);
+  }
+
+  // Category 1: Generate from structured data
+  if (benefit.type === 'commission_boost') {
+    const { percent, duration_days } = benefit.value_data;
+    const durationText = duration_days ? ` for ${duration_days} days` : '';
+    return `${baseName}: +${percent}%${durationText}`;
+  }
+
+  if (benefit.type === 'spark_ads') {
+    const { amount } = benefit.value_data;
+    return `${baseName}: $${amount}`;
+  }
+
+  if (benefit.type === 'gift_card') {
+    const { amount } = benefit.value_data;
+    return `${baseName}: $${amount}`;
+  }
+
+  if (benefit.type === 'discount') {
+    const { percent, duration_days } = benefit.value_data;
+    return `${baseName}: ${percent}% for ${duration_days} Days`;
+  }
+
+  // Category 2: Generate from freeform description
+  if (CATEGORY_2_TYPES.includes(benefit.type)) {
+    if (!benefit.description) {
+      throw new Error(`Category 2 benefit '${benefit.type}' requires description field`);
+    }
+    return `${baseName}: ${benefit.description}`;
+  }
+
+  return baseName;
+}
+```
+
+**Example outputs:**
+```typescript
+// Category 1 examples
+generateBenefitName({ type: 'commission_boost', value_data: { percent: 5, duration_days: 30 } })
+// Returns: "Pay Boost: +5% for 30 days"
+
+generateBenefitName({ type: 'commission_boost', value_data: { percent: 7 } })
+// Returns: "Pay Boost: +7%"
+
+generateBenefitName({ type: 'gift_card', value_data: { amount: 50 } })
+// Returns: "Gift Card: $50"
+
+generateBenefitName({ type: 'spark_ads', value_data: { amount: 100 } })
+// Returns: "Reach Boost: $100"
+
+generateBenefitName({ type: 'discount', value_data: { percent: 10, duration_days: 7 } })
+// Returns: "Deal Boost: 10% for 7 Days"
+
+// Category 2 examples
+generateBenefitName({ type: 'physical_gift', description: 'iPhone 16 Pro' })
+// Returns: "Gift Drop: iPhone 16 Pro"
+
+generateBenefitName({ type: 'experience', description: 'Weekend Getaway' })
+// Returns: "Mystery Trip: Weekend Getaway"
+```
+
+### Type-Specific JSON Structures
+
+```typescript
+// types/benefit.ts
+
+export type CommissionBoostData = {
+  percent: number;        // 0-100
+  duration_days?: number; // Optional, positive integer
+};
+
+export type SparkAdsData = {
+  amount: number;         // Positive number (dollars)
+};
+
+export type GiftCardData = {
+  amount: number;         // Positive number (dollars)
+};
+
+export type DiscountData = {
+  percent: number;        // 0-100
+};
+```
+
+### Validation Schemas (Zod)
+
+```typescript
+// lib/schemas.ts
+
+import { z } from 'zod';
+
+// Category 1 schemas (structured)
+const CommissionBoostSchema = z.object({
+  percent: z.number().min(0).max(100),
+  duration_days: z.number().int().positive().optional()
+});
+
+const SparkAdsSchema = z.object({
+  amount: z.number().positive()
+});
+
+const GiftCardSchema = z.object({
+  amount: z.number().positive()
+});
+
+const DiscountSchema = z.object({
+  percent: z.number().min(0).max(100)
+});
+
+// Category 2 validation (freeform)
+const DescriptionSchema = z.string().min(1).max(1000);
+
+// Main benefit schema (expanded from Loyalty.md:230-237)
+export const CreateBenefitSchema = z.object({
+  type: z.enum(['commission_boost', 'spark_ads', 'gift_card', 'discount', 'physical_gift', 'experience']),
+  value_data: z.any().optional(),
+  description: z.string().max(1000).optional(),
+  tier_eligibility: z.enum(['tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6']),
+  enabled: z.boolean(),
+  redemption_frequency: z.enum(['one-time', 'monthly', 'weekly', 'unlimited']),
+  redemption_quantity: z.number().int().min(1).max(10).nullable(), // 1-10 for limited frequencies, NULL for unlimited
+}).superRefine((data, ctx) => {
+  const category1 = ['commission_boost', 'spark_ads', 'gift_card', 'discount'];
+  const category2 = ['physical_gift', 'experience'];
+
+  // Category 1: Requires value_data (structured)
+  if (category1.includes(data.type)) {
+    if (!data.value_data) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Category 1 benefits require value_data',
+        path: ['value_data']
+      });
+      return;
+    }
+
+    // Validate specific structure per type
+    let schema: z.ZodSchema;
+    switch (data.type) {
+      case 'commission_boost':
+        schema = CommissionBoostSchema;
+        break;
+      case 'spark_ads':
+        schema = SparkAdsSchema;
+        break;
+      case 'gift_card':
+        schema = GiftCardSchema;
+        break;
+      case 'discount':
+        schema = DiscountSchema;
+        break;
+      default:
+        return;
+    }
+
+    const result = schema.safeParse(data.value_data);
+    if (!result.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.error.message,
+        path: ['value_data']
+      });
+    }
+  }
+
+  // Category 2: Requires description (freeform)
+  if (category2.includes(data.type)) {
+    if (!data.description || data.description.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Category 2 benefits require description',
+        path: ['description']
+      });
+    }
+
+    if (data.description && data.description.length > 1000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Description must be 1000 characters or less',
+        path: ['description']
+      });
+    }
+  }
+});
+```
+
+### API Routes Implementation
+
+```typescript
+// app/api/admin/benefits/route.ts
+
+import { NextResponse } from 'next/server';
+import { CreateBenefitSchema } from '@/lib/schemas';
+import { generateBenefitName } from '@/lib/benefits';
+import { supabase } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/auth';
+
+// POST - Create new benefit
+export async function POST(request: Request) {
+  // Validate admin access
+  await requireAdmin();
+
+  // Parse and validate input
+  const body = await request.json();
+  const validation = CreateBenefitSchema.parse(body);
+
+  // Auto-generate name
+  const name = generateBenefitName(validation);
+
+  // Insert to database
+  const { data, error } = await supabase
+    .from('benefits')
+    .insert({
+      ...validation,
+      name, // Auto-generated
+      client_id: await getClientId()
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to create benefit' }, { status: 500 });
+  }
+
+  return NextResponse.json(data);
+}
+```
+
+```typescript
+// app/api/admin/benefits/[id]/route.ts
+
+// PUT - Update benefit
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  await requireAdmin();
+
+  const body = await request.json();
+  const validation = CreateBenefitSchema.parse(body);
+
+  // Fetch existing benefit
+  const { data: existing } = await supabase
+    .from('benefits')
+    .select('*')
+    .eq('id', params.id)
+    .single();
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Benefit not found' }, { status: 404 });
+  }
+
+  // Merge updates with existing data
+  const merged = { ...existing, ...validation };
+
+  // Regenerate name if type/value_data/description changed
+  const name = generateBenefitName(merged);
+
+  // Update database
+  const { data, error } = await supabase
+    .from('benefits')
+    .update({
+      ...validation,
+      name, // Auto-generated
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', params.id)
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to update benefit' }, { status: 500 });
+  }
+
+  return NextResponse.json(data);
+}
+```
+
+### Admin UI - Create Benefit Form
+
+```typescript
+// components/admin/CreateBenefitForm.tsx
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { generateBenefitName, CATEGORY_1_TYPES, CATEGORY_2_TYPES } from '@/lib/benefits';
+import { toast } from '@/components/ui/toast';
+
+export function CreateBenefitForm() {
+  const [benefitType, setBenefitType] = useState('');
+  const [valueData, setValueData] = useState<any>({});
+  const [description, setDescription] = useState('');
+  const [tierEligibility, setTierEligibility] = useState('tier_1');
+  const [enabled, setEnabled] = useState(true);
+  const [redemptionFrequency, setRedemptionFrequency] = useState('monthly');
+  const [redemptionQuantity, setRedemptionQuantity] = useState(1);
+
+  const isCategory1 = CATEGORY_1_TYPES.includes(benefitType);
+  const isCategory2 = CATEGORY_2_TYPES.includes(benefitType);
+
+  // Generate live preview
+  const previewName = benefitType
+    ? generateBenefitName({ type: benefitType, value_data: valueData, description })
+    : '';
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    try {
+      const response = await fetch('/api/admin/benefits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: benefitType,
+          value_data: isCategory1 ? valueData : undefined,
+          description: isCategory2 ? description : undefined,
+          tier_eligibility: tierEligibility,
+          enabled,
+          redemption_frequency: redemptionFrequency,
+          redemption_quantity: redemptionQuantity,
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create benefit');
+
+      toast.success('Benefit created successfully!');
+      // Reset form...
+    } catch (err) {
+      toast.error('Error: ' + err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+      <h2 className="text-2xl font-bold">Create Benefit</h2>
+
+      {/* Type selector */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Benefit Type</label>
+        <select
+          value={benefitType}
+          onChange={(e) => setBenefitType(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+          required
+        >
+          <option value="">Select type...</option>
+          <option value="commission_boost">Pay Boost (commission_boost)</option>
+          <option value="spark_ads">Reach Boost (spark_ads)</option>
+          <option value="gift_card">Gift Card (gift_card)</option>
+          <option value="discount">Deal Boost (discount)</option>
+          <option value="physical_gift">Gift Drop (physical_gift)</option>
+          <option value="experience">Mystery Trip (experience)</option>
+        </select>
+      </div>
+
+      {/* Category 1: Structured fields */}
+      {benefitType === 'commission_boost' && (
+        <>
+          <div>
+            <label className="block text-sm font-medium mb-2">Commission Percentage (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={valueData.percent || ''}
+              onChange={(e) => setValueData({ ...valueData, percent: parseFloat(e.target.value) })}
+              className="w-full px-3 py-2 border rounded"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">0-100%</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Duration (days, optional)</label>
+            <input
+              type="number"
+              min="1"
+              value={valueData.duration_days || ''}
+              onChange={(e) => setValueData({ ...valueData, duration_days: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border rounded"
+              placeholder="Leave empty for indefinite"
+            />
+          </div>
+        </>
+      )}
+
+      {(benefitType === 'spark_ads' || benefitType === 'gift_card') && (
+        <div>
+          <label className="block text-sm font-medium mb-2">Amount ($)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={valueData.amount || ''}
+            onChange={(e) => setValueData({ ...valueData, amount: parseFloat(e.target.value) })}
+            className="w-full px-3 py-2 border rounded"
+            required
+          />
+        </div>
+      )}
+
+      {benefitType === 'discount' && (
+        <div>
+          <label className="block text-sm font-medium mb-2">Discount Percentage (%)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={valueData.percent || ''}
+            onChange={(e) => setValueData({ ...valueData, percent: parseFloat(e.target.value) })}
+            className="w-full px-3 py-2 border rounded"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">0-100%</p>
+        </div>
+      )}
+
+      {/* Category 2: Freeform textarea */}
+      {isCategory2 && (
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            {benefitType === 'physical_gift' ? 'Gift Description' : 'Experience Description'}
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={1000}
+            rows={4}
+            className="w-full px-3 py-2 border rounded"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">{description.length} / 1000 characters</p>
+        </div>
+      )}
+
+      {/* Live preview */}
+      {previewName && (
+        <div className="p-4 bg-gray-50 border rounded">
+          <p className="text-sm text-gray-600 mb-1">Generated Name (read-only):</p>
+          <p className="font-semibold text-lg">{previewName}</p>
+        </div>
+      )}
+
+      {/* Other fields */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Tier Eligibility</label>
+        <select
+          value={tierEligibility}
+          onChange={(e) => setTierEligibility(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+        >
+          <option value="tier_1">Bronze (tier_1)</option>
+          <option value="tier_2">Silver (tier_2)</option>
+          <option value="tier_3">Gold (tier_3)</option>
+          <option value="tier_4">Platinum (tier_4)</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Redemption Frequency</label>
+        <select
+          value={redemptionFrequency}
+          onChange={(e) => setRedemptionFrequency(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+        >
+          <option value="one-time">One-time</option>
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="unlimited">Unlimited</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Redemption Quantity</label>
+        <input
+          type="number"
+          value={redemptionQuantity}
+          onChange={(e) => setRedemptionQuantity(parseInt(e.target.value))}
+          min={1}
+          max={10}
+          className="w-full px-3 py-2 border rounded"
+          disabled={redemptionFrequency === 'unlimited'}
+        />
+        <p className="text-xs text-gray-500 mt-1">How many times claimable per period (1-10)</p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="enabled"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="w-4 h-4"
+        />
+        <label htmlFor="enabled" className="text-sm font-medium">Enabled (visible to creators)</label>
+      </div>
+
+      <button
+        type="submit"
+        className="px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+      >
+        Create Benefit
+      </button>
+    </form>
+  );
+}
+```
+
+### Frontend Display (Creator View)
+
+```typescript
+// components/BenefitCard.tsx
+
+import { Benefit } from '@/types/benefit';
+
+interface BenefitCardProps {
+  benefit: Benefit;
+}
+
+export function BenefitCard({ benefit }: BenefitCardProps) {
+  return (
+    <div className="benefit-card border rounded-lg p-4">
+      {/* Auto-generated name displayed */}
+      <h3 className="text-lg font-semibold mb-2">{benefit.name}</h3>
+
+      {/* Description (if exists) */}
+      {benefit.description && (
+        <p className="text-sm text-gray-600 mb-4">{benefit.description}</p>
+      )}
+
+      <button
+        onClick={() => claimBenefit(benefit.id)}
+        className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+      >
+        Claim Reward
+      </button>
+    </div>
+  );
+}
+```
+
+### Examples Table
+
+| Type | Value Data | Description | Generated Name |
+|------|------------|-------------|----------------|
+| commission_boost | `{percent: 5, duration_days: 30}` | - | "Pay Boost: +5% for 30 days" |
+| commission_boost | `{percent: 7}` | - | "Pay Boost: +7%" |
+| spark_ads | `{amount: 50}` | - | "Reach Boost: $50" |
+| spark_ads | `{amount: 100}` | - | "Reach Boost: $100" |
+| gift_card | `{amount: 50}` | - | "Gift Card: $50" |
+| gift_card | `{amount: 100}` | - | "Gift Card: $100" |
+| discount | `{percent: 10, duration_days: 7}` | - | "Deal Boost: 10% for 7 Days" |
+| physical_gift | - | "iPhone 16 Pro" | "Gift Drop: iPhone 16 Pro" |
+| physical_gift | - | "Brand Merch" | "Gift Drop: Brand Merch" |
+| experience | - | "Weekend Getaway" | "Mystery Trip: Weekend Getaway" |
+| experience | - | "Concert Tickets" | "Mystery Trip: Concert Tickets" |
+
+### Edge Cases
+
+**Q1: What if admin wants to change benefit type after creation?**
+- **Answer:** Allow type changes, regenerate name automatically
+- **Risk:** Existing redemptions reference old name (stored in redemptions table)
+- **Solution:** Store `benefit_id` in redemptions (not name), so historical data is preserved
+
+**Q2: What if value/description is too long?**
+- **Answer:** Validation limits:
+  - `value_data.percent`: 0-100
+  - `value_data.amount`: Positive number (no upper limit)
+  - `value_data.duration_days`: Positive integer (no upper limit)
+  - `description`: max 1000 characters (validated by Zod)
+
+**Q3: Can admin override auto-generated name?**
+- **Answer:** No in MVP (enforces consistency)
+- **Phase 2:** Add "custom name override" toggle if needed
+
+### Testing Checklist
+
+- [ ] Auto-generated names match format per benefit type
+- [ ] Category 1 benefits require value_data (validation error if missing)
+- [ ] Category 2 benefits require description (validation error if missing)
+- [ ] Admin UI shows live preview of generated name
+- [ ] Name field is NOT editable in admin UI
+- [ ] API auto-generates name on create
+- [ ] API regenerates name on update (if type/value/description changed)
+- [ ] Creator UI displays auto-generated benefit names
+- [ ] Invalid benefit types throw error
+- [ ] Missing required fields (percent, amount) throw validation error
+- [ ] Description length enforced (1000 chars max)
+- [ ] Generated names are consistent across platform
+- [ ] Benefit type changes regenerate name correctly
+- [ ] Database stores auto-generated name in benefits.name field
+
+---
+
+## 3.1 Smart Hybrid Storage
+
+**Reference:** See Loyalty.md Section 3 (Reward Amounts) and lines 1572-1579 (benefits table value_data field)
+
+**Decision:** Category 1 rewards use structured JSONB (`value_data`), Category 2 rewards use freeform TEXT (`description`).
+
+**For validation schemas, see Pseudocode.md Section 2.1** (lines 1825-1924) which includes type-specific Zod validation for all benefit types.
+
+---
+
+### Character Limit Guidelines
+
+| Context | Limit | Rationale |
+|---------|-------|-----------|
+| **Database storage** | 1000 chars | Allow flexibility for detailed descriptions |
+| **Admin input** | 1000 chars (with counter) | Match DB limit, show progress |
+| **Creator card view** | ~150 chars (truncated) | One-line preview |
+| **Creator detail view** | 500 chars | Full description modal |
+
+### Truncation Helper Function
+
+```typescript
+// lib/text-helpers.ts
+
+/**
+ * Truncate long descriptions for card view
+ * @param text - Text to truncate
+ * @param maxLength - Maximum characters (default: 150)
+ * @returns Truncated text with ellipsis
+ */
+export function truncateDescription(text: string, maxLength: number = 150): string {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trim() + '...';
+}
+
+/**
+ * Get full-length description for detail view
+ * @param text - Text to display
+ * @param maxLength - Maximum characters for detail view (default: 500)
+ * @returns Text truncated to detail view limit
+ */
+export function getDetailDescription(text: string, maxLength: number = 500): string {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trim() + '... (read more)';
+}
+```
+
+**Usage in creator UI:**
+```typescript
+// components/BenefitCard.tsx
+import { truncateDescription } from '@/lib/text-helpers';
+
+export function BenefitCard({ benefit }: { benefit: Benefit }) {
+  return (
+    <div className="benefit-card border rounded-lg p-4">
+      <h3 className="text-lg font-semibold mb-2">{benefit.name}</h3>
+
+      {/* Truncated description in card view */}
+      {benefit.description && (
+        <p className="text-sm text-gray-600 mb-4">
+          {truncateDescription(benefit.description, 150)}
+        </p>
+      )}
+
+      <button
+        onClick={() => showFullDescription(benefit)}
+        className="text-blue-600 text-sm hover:underline"
+      >
+        Learn More
+      </button>
+    </div>
+  );
+}
+```
+
+### Admin UI Forms - Category 1 (Structured)
+
+**Commission Boost Form:**
+```typescript
+// components/admin/forms/CommissionBoostForm.tsx
+
+export function CommissionBoostForm({ valueData, onChange }: FormProps) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Commission Percentage
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={valueData?.percent || ''}
+            onChange={(e) => onChange({ ...valueData, percent: parseFloat(e.target.value) })}
+            className="w-32 px-3 py-2 border rounded"
+            required
+          />
+          <span className="text-gray-600">%</span>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">0-100%</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Duration (optional)
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            value={valueData?.duration_days || ''}
+            onChange={(e) => onChange({ ...valueData, duration_days: parseInt(e.target.value) })}
+            className="w-32 px-3 py-2 border rounded"
+            placeholder="Leave empty"
+          />
+          <span className="text-gray-600">days</span>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">Leave empty for indefinite boost</p>
+      </div>
+    </div>
+  );
+}
+```
+
+**Gift Card / Spark Ads Form:**
+```typescript
+// components/admin/forms/AmountForm.tsx
+
+export function AmountForm({
+  valueData,
+  onChange,
+  label = "Amount"
+}: FormProps & { label?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-2">{label}</label>
+      <div className="flex items-center gap-2">
+        <span className="text-gray-600">$</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={valueData?.amount || ''}
+          onChange={(e) => onChange({ ...valueData, amount: parseFloat(e.target.value) })}
+          className="w-40 px-3 py-2 border rounded"
+          required
+        />
+      </div>
+      <p className="text-xs text-gray-500 mt-1">Dollar amount</p>
+    </div>
+  );
+}
+```
+
+**Discount Form:**
+```typescript
+// components/admin/forms/DiscountForm.tsx
+
+export function DiscountForm({ valueData, onChange }: FormProps) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-2">
+        Discount Percentage
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="0.1"
+          value={valueData?.percent || ''}
+          onChange={(e) => onChange({ ...valueData, percent: parseFloat(e.target.value) })}
+          className="w-32 px-3 py-2 border rounded"
+          required
+        />
+        <span className="text-gray-600">%</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1">0-100%</p>
+    </div>
+  );
+}
+```
+
+### Admin UI Forms - Category 2 (Freeform)
+
+```typescript
+// components/admin/forms/DescriptionForm.tsx
+
+export function DescriptionForm({
+  description,
+  onChange,
+  label = "Description"
+}: {
+  description: string;
+  onChange: (value: string) => void;
+  label?: string;
+}) {
+  const charCount = description?.length || 0;
+  const maxChars = 1000;
+
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-2">{label}</label>
+      <textarea
+        value={description || ''}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={maxChars}
+        rows={4}
+        className="w-full px-3 py-2 border rounded resize-none"
+        placeholder="Enter detailed description..."
+        required
+      />
+      <div className="flex items-center justify-between mt-1">
+        <p className="text-xs text-gray-500">
+          Describe the gift or experience in detail
+        </p>
+        <p className={`text-xs ${charCount > maxChars * 0.9 ? 'text-orange-600' : 'text-gray-500'}`}>
+          {charCount} / {maxChars} characters
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+
+### Master Create Benefit Form (Conditional Rendering)
+
+```typescript
+// components/admin/CreateBenefitForm.tsx
+
+import { useState } from 'react';
+import { generateBenefitName, CATEGORY_1_TYPES, CATEGORY_2_TYPES } from '@/lib/benefits';
+import { CommissionBoostForm } from './forms/CommissionBoostForm';
+import { AmountForm } from './forms/AmountForm';
+import { DiscountForm } from './forms/DiscountForm';
+import { DescriptionForm } from './forms/DescriptionForm';
+
+export function CreateBenefitForm() {
+  const [benefitType, setBenefitType] = useState('');
+  const [valueData, setValueData] = useState<any>({});
+  const [description, setDescription] = useState('');
+
+  const isCategory1 = CATEGORY_1_TYPES.includes(benefitType);
+  const isCategory2 = CATEGORY_2_TYPES.includes(benefitType);
+
+  // Generate live preview
+  const previewName = benefitType
+    ? generateBenefitName({ type: benefitType, value_data: valueData, description })
+    : '';
+
+  return (
+    <form className="space-y-6 max-w-2xl">
+      <h2 className="text-2xl font-bold">Create Benefit</h2>
+
+      {/* Type selector */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Benefit Type</label>
+        <select
+          value={benefitType}
+          onChange={(e) => {
+            setBenefitType(e.target.value);
+            setValueData({});
+            setDescription('');
+          }}
+          className="w-full px-3 py-2 border rounded"
+          required
+        >
+          <option value="">Select type...</option>
+          <option value="commission_boost">Pay Boost (commission_boost)</option>
+          <option value="spark_ads">Reach Boost (spark_ads)</option>
+          <option value="gift_card">Gift Card (gift_card)</option>
+          <option value="discount">Deal Boost (discount)</option>
+          <option value="physical_gift">Gift Drop (physical_gift)</option>
+          <option value="experience">Mystery Trip (experience)</option>
+        </select>
+      </div>
+
+      {/* Category 1: Structured fields (conditional) */}
+      {benefitType === 'commission_boost' && (
+        <CommissionBoostForm valueData={valueData} onChange={setValueData} />
+      )}
+
+      {benefitType === 'spark_ads' && (
+        <AmountForm
+          valueData={valueData}
+          onChange={setValueData}
+          label="Spark Ads Budget"
+        />
+      )}
+
+      {benefitType === 'gift_card' && (
+        <AmountForm
+          valueData={valueData}
+          onChange={setValueData}
+          label="Gift Card Amount"
+        />
+      )}
+
+      {benefitType === 'discount' && (
+        <DiscountForm valueData={valueData} onChange={setValueData} />
+      )}
+
+      {/* Category 2: Freeform textarea (conditional) */}
+      {benefitType === 'physical_gift' && (
+        <DescriptionForm
+          description={description}
+          onChange={setDescription}
+          label="Gift Description"
+        />
+      )}
+
+      {benefitType === 'experience' && (
+        <DescriptionForm
+          description={description}
+          onChange={setDescription}
+          label="Experience Description"
+        />
+      )}
+
+      {/* Live preview */}
+      {previewName && (
+        <div className="p-4 bg-gray-50 border rounded">
+          <p className="text-sm text-gray-600 mb-1">Generated Name (read-only):</p>
+          <p className="font-semibold text-lg">{previewName}</p>
+        </div>
+      )}
+
+      {/* Other fields omitted for brevity */}
+
+      <button
+        type="submit"
+        className="px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+      >
+        Create Benefit
+      </button>
+    </form>
+  );
+}
+```
+
+### Queryability Examples (JSONB Operators)
+
+**Find all gift cards over $50:**
+```sql
+SELECT * FROM benefits
+WHERE type = 'gift_card'
+AND (value_data->>'amount')::numeric > 50;
+```
+
+**Find commission boosts >5% with duration:**
+```sql
+SELECT * FROM benefits
+WHERE type = 'commission_boost'
+AND (value_data->>'percent')::numeric > 5
+AND value_data->>'duration_days' IS NOT NULL;
+```
+
+**Average gift card amount:**
+```sql
+SELECT AVG((value_data->>'amount')::numeric) as avg_amount
+FROM benefits
+WHERE type = 'gift_card';
+```
+
+**Count benefits by amount range:**
+```sql
+SELECT
+  CASE
+    WHEN (value_data->>'amount')::numeric < 50 THEN '<$50'
+    WHEN (value_data->>'amount')::numeric < 100 THEN '$50-$100'
+    ELSE '>$100'
+  END as range,
+  COUNT(*) as count
+FROM benefits
+WHERE type IN ('gift_card', 'spark_ads')
+GROUP BY range
+ORDER BY range;
+```
+
+**Find all commission boosts without duration (indefinite):**
+```sql
+SELECT * FROM benefits
+WHERE type = 'commission_boost'
+AND value_data->>'duration_days' IS NULL;
+```
+
+**Get all benefits with percent >10% (commission OR discount):**
+```sql
+SELECT * FROM benefits
+WHERE type IN ('commission_boost', 'discount')
+AND (value_data->>'percent')::numeric > 10;
+```
+
+### Optional Database CHECK Constraint
+
+Add validation at database level to enforce Category 1/2 requirements:
+
+```sql
+-- Optional: Add CHECK constraint (PostgreSQL)
+ALTER TABLE benefits ADD CONSTRAINT check_category_data
+CHECK (
+  -- Category 1: Requires value_data
+  (type IN ('commission_boost', 'spark_ads', 'gift_card', 'discount')
+   AND value_data IS NOT NULL)
+  OR
+  -- Category 2: Requires description
+  (type IN ('physical_gift', 'experience')
+   AND description IS NOT NULL
+   AND description != '')
+);
+```
+
+**Note:** This constraint is optional. API validation (Zod) already prevents invalid data. Adding this provides an extra safety layer if direct database access occurs.
+
+**Trade-offs:**
+- ✅ Prevents manual DB errors
+- ✅ Extra validation layer
+- ❌ Harder to temporarily bypass for testing
+- ❌ Must be managed during schema migrations
+
+**Recommendation:** Add only if multiple admins have direct DB access.
+
+### Fulfillment UI Benefits
+
+Structured data makes fulfillment tasks clearer for admins:
+
+**Example: Commission Boost Fulfillment**
+```typescript
+// components/admin/FulfillmentCard.tsx
+
+export function FulfillmentCard({ redemption }: { redemption: Redemption }) {
+  const { benefit } = redemption;
+
+  // Structured data provides clear fields
+  if (benefit.type === 'commission_boost') {
+    const { percent, duration_days } = benefit.value_data;
+
+    return (
+      <div className="border rounded-lg p-4 bg-white">
+        <h3 className="font-semibold mb-2">Pending Fulfillment</h3>
+        <div className="space-y-1 text-sm">
+          <p><strong>Creator:</strong> @{redemption.user.handle}</p>
+          <p><strong>Reward:</strong> Pay Boost</p>
+          <p><strong>Commission:</strong> {percent}%</p>
+          <p><strong>Duration:</strong> {duration_days ? `${duration_days} days` : 'Indefinite'}</p>
+          <p className="text-gray-600 mt-2">
+            <strong>Task:</strong> Activate commission in TikTok Seller Center
+          </p>
+        </div>
+        <button
+          onClick={() => markAsFulfilled(redemption.id)}
+          className="mt-4 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+        >
+          Mark as Fulfilled
+        </button>
+      </div>
+    );
+  }
+
+  // Gift card fulfillment
+  if (benefit.type === 'gift_card') {
+    const { amount } = benefit.value_data;
+
+    return (
+      <div className="border rounded-lg p-4 bg-white">
+        <h3 className="font-semibold mb-2">Pending Fulfillment</h3>
+        <div className="space-y-1 text-sm">
+          <p><strong>Creator:</strong> @{redemption.user.handle}</p>
+          <p><strong>Reward:</strong> Gift Card</p>
+          <p><strong>Amount:</strong> ${amount}</p>
+          <p className="text-gray-600 mt-2">
+            <strong>Task:</strong> Send gift card code via email
+          </p>
+        </div>
+        <textarea
+          placeholder="Paste gift card code here..."
+          className="w-full mt-2 px-3 py-2 border rounded text-sm"
+          rows={2}
+        />
+        <button
+          onClick={() => markAsFulfilled(redemption.id)}
+          className="mt-2 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+        >
+          Send Code & Mark Fulfilled
+        </button>
+      </div>
+    );
+  }
+
+  // Physical gift fulfillment (freeform)
+  if (benefit.type === 'physical_gift') {
+    return (
+      <div className="border rounded-lg p-4 bg-white">
+        <h3 className="font-semibold mb-2">Pending Fulfillment</h3>
+        <div className="space-y-1 text-sm">
+          <p><strong>Creator:</strong> @{redemption.user.handle}</p>
+          <p><strong>Reward:</strong> Gift Drop</p>
+          <p><strong>Description:</strong> {benefit.description}</p>
+          <p className="text-gray-600 mt-2">
+            <strong>Task:</strong> Ship physical item to creator
+          </p>
+        </div>
+        <textarea
+          placeholder="Enter tracking number or fulfillment notes..."
+          className="w-full mt-2 px-3 py-2 border rounded text-sm"
+          rows={2}
+        />
+        <button
+          onClick={() => markAsFulfilled(redemption.id)}
+          className="mt-2 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+        >
+          Mark as Fulfilled
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+```
+
+**Benefits of structured data for fulfillment:**
+1. Clear numeric values (no parsing "$50" from text)
+2. Conditional UI based on type
+3. Pre-filled task instructions
+4. Easy to filter/sort pending tasks by amount/percent
+
+### Testing Checklist
+
+- [ ] Category 1 benefits require value_data (validation error if missing)
+- [ ] Category 2 benefits require description (validation error if missing)
+- [ ] Admin UI shows correct form based on benefit type
+- [ ] Commission boost form accepts percent (0-100) and optional duration
+- [ ] Gift card/Spark ads forms accept positive amount
+- [ ] Discount form accepts percent (0-100)
+- [ ] Physical gift/Experience forms show textarea with char counter
+- [ ] Character counter updates in real-time
+- [ ] Character counter shows warning color when approaching limit (>900 chars)
+- [ ] Form prevents submission if char limit exceeded
+- [ ] Truncation helper correctly truncates to 150 chars for card view
+- [ ] Truncation helper adds "..." ellipsis
+- [ ] SQL queries correctly extract JSONB values
+- [ ] SQL queries cast numeric values correctly (`::numeric`)
+- [ ] Average/sum queries work on amount/percent fields
+- [ ] Optional CHECK constraint prevents invalid category data (if enabled)
+- [ ] Fulfillment UI displays structured data clearly
+- [ ] Fulfillment UI shows correct task based on benefit type
+
+---
+
+## 4.2 Missions (Task Completion)
+
+**Reference:** See Loyalty.md Section 4 Mode 3 (Missions) and lines 1583-1612 (missions, mission_progress tables with sequential unlock system)
+
+**Decision:** Missions use hardcoded display names per mission type. Admin title/description fields are for internal reference only (not shown to creators).
+
+### Mission Display Name Mapping (Hardcoded)
+
+```typescript
+// lib/missions.ts
+
+export const MISSION_DISPLAY_NAMES: Record<string, { name: string; description: string }> = {
+  'sales': {
+    name: 'Unlock Payday',
+    description: 'Reach your sales target'
+  },
+  'videos': {
+    name: 'Lights, Camera, Go!',
+    description: 'Film and post new clips'
+  },
+  'likes': {
+    name: 'Road to Viral',
+    description: 'Rack up those likes'
+  },
+  'views': {
+    name: 'Eyes on You',
+    description: 'Boost your total views'
+  },
+  'raffle': {
+    name: 'VIP Raffle',
+    description: 'Enter to win {prize_name}'
+  }
+};
+
+export const MISSION_TYPES = ['sales', 'videos', 'likes', 'views', 'raffle'] as const;
+export type MissionType = typeof MISSION_TYPES[number];
+```
+
+### Mission Display Helper
+
+```typescript
+// lib/missions.ts
+
+/**
+ * Get display name and description for mission type
+ * @param missionType - Mission type ('sales', 'videos', etc.)
+ * @param prizeName - Optional prize name for raffles
+ * @returns Display name and description
+ */
+export function getMissionDisplay(
+  missionType: MissionType,
+  prizeName?: string
+): { name: string; description: string } {
+  const display = MISSION_DISPLAY_NAMES[missionType];
+
+  if (!display) {
+    throw new Error(`Invalid mission type: ${missionType}`);
+  }
+
+  // For raffles, interpolate prize name
+  if (missionType === 'raffle' && prizeName) {
+    return {
+      name: display.name,
+      description: display.description.replace('{prize_name}', prizeName)
+    };
+  }
+
+  return display;
+}
+```
+
+**Usage example:**
+```typescript
+// Creator UI
+const mission = await db.missions.findOne({ id: missionId });
+const display = getMissionDisplay(mission.mission_type, mission.prize_name);
+
+// Render:
+// <h3>{display.name}</h3>
+// <p>{display.description}</p>
+// Admin sees: mission.title (internal reference)
+// Creator sees: display.name (hardcoded)
+```
+
+### Progress Tracking (Daily Cron Integration)
+
+**Add to existing Flow 1 (Daily Metrics Sync):**
+
+```typescript
+// app/api/cron/metrics-sync/route.ts
+
+export async function POST(request: Request) {
+  // ... existing metrics sync code ...
+
+  // Add mission progress tracking
+  await updateMissionProgress();
+
+  return NextResponse.json({ success: true });
+}
+
+/**
+ * Update mission progress for all active missions
+ * Runs once daily during metrics sync
+ */
+async function updateMissionProgress() {
+  // Get all enabled missions
+  const activeMissions = await db.missions.findMany({
+    where: { enabled: true }
+  });
+
+  // Get all active users
+  const users = await db.users.findMany({
+    where: { is_active: true }
+  });
+
+  for (const user of users) {
+    for (const mission of activeMissions) {
+      // Skip raffles (no progress tracking)
+      if (mission.mission_type === 'raffle') continue;
+
+      // Check tier eligibility
+      if (mission.tier_eligibility !== 'all' &&
+          mission.tier_eligibility !== user.current_tier) {
+        continue;
+      }
+
+      // Calculate progress based on mission type
+      const currentValue = await calculateMissionProgress(user.id, mission);
+
+      // Upsert progress record
+      await db.mission_progress.upsert({
+        where: {
+          user_id_mission_id_checkpoint_start: {
+            user_id: user.id,
+            mission_id: mission.id,
+            checkpoint_start: user.checkpoint_start
+          }
+        },
+        create: {
+          user_id: user.id,
+          mission_id: mission.id,
+          current_value: currentValue,
+          status: 'active',
+          checkpoint_start: user.checkpoint_start,
+          checkpoint_end: user.next_checkpoint_at
+        },
+        update: {
+          current_value: currentValue
+        }
+      });
+
+      // Mark completed if target reached
+      if (currentValue >= mission.target_value) {
+        await db.mission_progress.update({
+          where: {
+            user_id_mission_id_checkpoint_start: {
+              user_id: user.id,
+              mission_id: mission.id,
+              checkpoint_start: user.checkpoint_start
+            }
+          },
+          data: {
+            status: 'completed',
+            completed_at: new Date()
+          }
+        });
+
+        // Notify creator
+        await sendNotification(user.id, {
+          title: 'Mission Complete!',
+          body: `You completed "${getMissionDisplay(mission.mission_type).name}". Claim your reward in the Missions tab!`
+        });
+      }
+    }
+  }
+}
+```
+
+### Mission Progress Calculation
+
+```typescript
+// lib/missions.ts
+
+/**
+ * Calculate mission progress based on mission type
+ * @param userId - User ID
+ * @param mission - Mission object
+ * @returns Current progress value
+ */
+export async function calculateMissionProgress(
+  userId: string,
+  mission: Mission
+): Promise<number> {
+  const user = await db.users.findUnique({ where: { id: userId } });
+  const checkpointStart = user.checkpoint_start;
+
+  switch (mission.mission_type) {
+    case 'sales':
+      // Sum tiktok_sales from metrics since checkpoint start (includes manual adjustments)
+      const salesResult = await db.metrics.aggregate({
+        where: {
+          user_id: userId,
+          created_at: { gte: checkpointStart }
+        },
+        _sum: { tiktok_sales: true }
+      });
+      // Add manual adjustments to TikTok sales
+      return (salesResult._sum.tiktok_sales || 0) + (user.manual_adjustments_total || 0);
+
+    case 'videos':
+      // Count videos posted since checkpoint start
+      const videoCount = await db.videos.count({
+        where: {
+          user_id: userId,
+          created_at: { gte: checkpointStart }
+        }
+      });
+      return videoCount;
+
+    case 'views':
+      // Sum views on videos since checkpoint start
+      const viewsResult = await db.videos.aggregate({
+        where: {
+          user_id: userId,
+          created_at: { gte: checkpointStart }
+        },
+        _sum: { views: true }
+      });
+      return viewsResult._sum.views || 0;
+
+    case 'likes':
+      // Sum likes on videos since checkpoint start
+      const likesResult = await db.videos.aggregate({
+        where: {
+          user_id: userId,
+          created_at: { gte: checkpointStart }
+        },
+        _sum: { likes: true }
+      });
+      return likesResult._sum.likes || 0;
+
+    case 'raffle':
+      // Raffles don't track progress
+      return 0;
+
+    default:
+      throw new Error(`Unknown mission type: ${mission.mission_type}`);
+  }
+}
+```
+
+**Why this is simple:**
+- ✅ Reuses existing daily cron infrastructure (Flow 1)
+- ✅ Queries existing data (metrics, videos tables)
+- ✅ Single function with switch statement (4 SQL queries)
+- ✅ No real-time tracking needed (updates once per day)
+
+### Tier Change Handler
+
+**Add to Flow 6 (Daily Tier Calculation):**
+
+```typescript
+// lib/tier-management.ts
+
+/**
+ * Handle mission tier change when user's tier changes
+ * OLD BEHAVIOR (REMOVED): Used to cancel and re-enroll missions
+ * NEW BEHAVIOR: Missions persist - no action needed during tier change
+ * Next mission unlock happens naturally after fulfillment
+ */
+export async function handleMissionTierChange(
+  userId: string,
+  oldTier: string,
+  newTier: string
+) {
+  const user = await db.users.findUnique({ where: { id: userId } });
+
+  // OLD TIER MISSIONS PERSIST - Do NOT cancel
+  // Creator continues working on old tier missions until fulfillment
+  // This applies to in-progress, completed, and claimed missions
+
+  // NO ACTION NEEDED for tier change
+  // Missions will naturally complete/fulfill based on their original tier
+  // After fulfillment, unlockNextMissionInSequence() will check new tier
+
+  // NOTE: This means:
+  // - Silver creator working on Silver Sales Mission 1 (15k/20k views)
+  // - Gets upgraded to Gold
+  // - Continues Silver Sales Mission 1
+  // - After fulfillment → Gold Sales Mission 1 appears (if exists)
+  // - If Gold has no Sales missions → no replacement appears
+}
+```
+
+**Call from tier calculation:**
+```typescript
+// In Flow 6 (Daily Tier Calculation)
+if (newTier !== user.current_tier) {
+  await db.users.update({
+    where: { id: user.id },
+    data: { current_tier: newTier }
+  });
+
+  // Handle tier-specific missions
+  await handleMissionTierChange(user.id, user.current_tier, newTier);
+}
+```
+
+### Admin UI - Create Mission Form
+
+```typescript
+// components/admin/CreateMissionForm.tsx
+
+export function CreateMissionForm() {
+  const [missionType, setMissionType] = useState<MissionType>('sales');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [targetValue, setTargetValue] = useState(0);
+  const [tierEligibility, setTierEligibility] = useState('all');
+  const [displayOrder, setDisplayOrder] = useState(1);
+  const [selectedBenefit, setSelectedBenefit] = useState<string>('');
+
+  const { benefits } = useBenefits();
+
+  // Get creator-facing display for preview
+  const display = getMissionDisplay(missionType);
+
+  return (
+    <form className="space-y-6 max-w-2xl">
+      <h2 className="text-2xl font-bold">Create Mission</h2>
+
+      {/* Internal reference fields */}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Title (Internal Reference Only)
+        </label>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+          placeholder="Bronze Sales Mission Q1"
+          required
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          For admin reference only - creators won't see this
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Description (Internal Notes, Optional)
+        </label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+          rows={3}
+          placeholder="Internal notes about this mission..."
+        />
+      </div>
+
+      {/* Mission configuration */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Mission Type</label>
+        <select
+          value={missionType}
+          onChange={(e) => setMissionType(e.target.value as MissionType)}
+          className="w-full px-3 py-2 border rounded"
+          required
+        >
+          <option value="sales">Sales Target</option>
+          <option value="videos">Video Posts</option>
+          <option value="views">Video Views</option>
+          <option value="likes">Engagement (Likes)</option>
+          <option value="raffle">Raffle Entry</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Target Value</label>
+        <input
+          type="number"
+          min="0"
+          value={targetValue}
+          onChange={(e) => setTargetValue(parseInt(e.target.value))}
+          className="w-full px-3 py-2 border rounded"
+          required
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          {missionType === 'sales' && 'Dollar amount (e.g., 500 for $500)'}
+          {missionType === 'videos' && 'Number of videos (e.g., 10)'}
+          {missionType === 'views' && 'Total views (e.g., 50000)'}
+          {missionType === 'likes' && 'Total likes (e.g., 1000)'}
+          {missionType === 'raffle' && 'Set to 0 (no progress tracking for raffles)'}
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Reward</label>
+        <select
+          value={selectedBenefit}
+          onChange={(e) => setSelectedBenefit(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+          required
+        >
+          <option value="">Select reward...</option>
+          {benefits.map(benefit => (
+            <option key={benefit.id} value={benefit.id}>
+              {benefit.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Tier Eligibility</label>
+        <select
+          value={tierEligibility}
+          onChange={(e) => setTierEligibility(e.target.value)}
+          className="w-full px-3 py-2 border rounded"
+        >
+          <option value="all">All Tiers</option>
+          <option value="tier_1">Bronze (tier_1)</option>
+          <option value="tier_2">Silver (tier_2)</option>
+          <option value="tier_3">Gold (tier_3)</option>
+          <option value="tier_4">Platinum (tier_4)</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Display Order</label>
+        <input
+          type="number"
+          min="1"
+          value={displayOrder}
+          onChange={(e) => setDisplayOrder(parseInt(e.target.value))}
+          className="w-full px-3 py-2 border rounded"
+          required
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Sequential unlock: Mission with order 1 appears first, then 2, then 3, etc.
+          After completing order 1 and fulfillment, order 2 appears.
+        </p>
+      </div>
+
+      {/* Creator-facing preview */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded">
+        <p className="text-sm text-blue-600 mb-2">Creator will see:</p>
+        <div className="bg-white p-3 rounded border">
+          <h3 className="font-semibold text-lg">{display.name}</h3>
+          <p className="text-sm text-gray-600">{display.description}</p>
+          <p className="text-sm mt-2">Target: {targetValue}</p>
+        </div>
+      </div>
+
+      <div className="text-sm text-gray-600">
+        <p><strong>Note:</strong> Mission deadline = Checkpoint date</p>
+        <p>Progress updates once per day during metrics sync</p>
+      </div>
+
+      <button
+        type="submit"
+        className="px-6 py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+      >
+        Create Mission
+      </button>
+    </form>
+  );
+}
+```
+
+### Admin UI - Raffle Activation
+
+```typescript
+// components/admin/RaffleActivationToggle.tsx
+
+export function RaffleActivationToggle({ mission }: { mission: Mission }) {
+  const [activated, setActivated] = useState(mission.activated);
+
+  const handleToggle = async () => {
+    const response = await fetch(`/api/admin/missions/${mission.id}/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activated: !activated })
+    });
+
+    if (response.ok) {
+      setActivated(!activated);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      <span className="font-medium">
+        Status: {activated ? '✅ Active (Accepting Entries)' : '⏸️ Dormant'}
+      </span>
+      <button
+        onClick={handleToggle}
+        className={`px-4 py-2 rounded font-semibold ${
+          activated
+            ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+            : 'bg-green-600 hover:bg-green-700 text-white'
+        }`}
+      >
+        {activated ? 'Deactivate Raffle' : 'Activate Raffle'}
+      </button>
+    </div>
+  );
+}
+```
+
+**API Route:**
+```typescript
+// app/api/admin/missions/[id]/activate/route.ts
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await requireAdmin();
+  const { activated } = await request.json();
+
+  await db.missions.update({
+    where: { id: params.id },
+    data: { activated }
+  });
+
+  return NextResponse.json({ success: true });
+}
+```
+
+### Creator UI - Mission Card Component
+
+```typescript
+// components/MissionCard.tsx
+
+export function MissionCard({ mission, progress }: {
+  mission: Mission;
+  progress: MissionProgress | null;
+}) {
+  const display = getMissionDisplay(mission.mission_type);
+  const percentage = progress
+    ? Math.min(100, (progress.current_value / mission.target_value) * 100)
+    : 0;
+
+  return (
+    <div className="border rounded-lg p-4 bg-white">
+      {/* Status badge */}
+      {progress?.status === 'cancelled' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">
+            ⚠️ Mission expired (tier changed)
+          </span>
+        </div>
+      )}
+      {progress?.status === 'completed' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+            ✅ Completed
+          </span>
+        </div>
+      )}
+      {progress?.status === 'claimed' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+            Reward claimed
+          </span>
+        </div>
+      )}
+      {progress?.status === 'processing' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+            🎟️ Entry Submitted - Waiting for Winner
+          </span>
+        </div>
+      )}
+      {progress?.status === 'won' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+            🎉 You Won! Coordinating Delivery
+          </span>
+        </div>
+      )}
+      {progress?.status === 'lost' && (
+        <div className="mb-2">
+          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+            Better Luck Next Time
+          </span>
+        </div>
+      )}
+
+      {/* Mission name (hardcoded display) */}
+      <h3 className="text-lg font-semibold mb-2">{display.name}</h3>
+      <p className="text-sm text-gray-600 mb-4">{display.description}</p>
+
+      {/* Progress bar (active missions only) */}
+      {progress?.status === 'active' && (
+        <>
+          <div className="mb-2">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 mb-2">
+            Progress: {progress.current_value} / {mission.target_value}
+          </p>
+          <p className="text-xs text-gray-500">
+            Deadline: {formatDate(progress.checkpoint_end)}
+          </p>
+        </>
+      )}
+
+      {/* Participate button (raffle missions only) */}
+      {mission.mission_type === 'raffle' && !progress && mission.activated && (
+        <button
+          onClick={() => participateInRaffle(mission.id)}
+          className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+        >
+          Participate in Raffle
+        </button>
+      )}
+
+      {/* Dormant raffle message */}
+      {mission.mission_type === 'raffle' && !progress && !mission.activated && (
+        <p className="mt-4 text-sm text-gray-500 italic">
+          Raffle start will be announced soon
+        </p>
+      )}
+
+      {/* Processing raffle countdown */}
+      {mission.mission_type === 'raffle' && progress?.status === 'processing' && (
+        <p className="mt-4 text-sm text-gray-600">
+          {getDaysRemaining(mission.raffle_end_date)} days till raffle!
+        </p>
+      )}
+
+      {/* Claim button (completed missions only) */}
+      {progress?.status === 'completed' && !progress.claimed_at && (
+        <button
+          onClick={() => claimMissionReward(mission.id)}
+          className="w-full mt-4 px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700"
+        >
+          Claim Reward
+        </button>
+      )}
+
+      {/* Reward preview */}
+      <div className="mt-4 pt-4 border-t">
+        <p className="text-xs text-gray-500 mb-1">Reward:</p>
+        <p className="text-sm font-medium">{mission.benefit.name}</p>
+      </div>
+    </div>
+  );
+}
+```
+
+### Mission Claim Flow
+
+```typescript
+// lib/missions.ts
+
+/**
+ * Claim mission reward
+ * Creates redemption record and marks mission as claimed
+ */
+export async function claimMissionReward(
+  userId: string,
+  missionId: string
+): Promise<{ success: boolean; redemptionId?: string; error?: string }> {
+  // 1. Get mission progress
+  const progress = await db.mission_progress.findFirst({
+    where: {
+      user_id: userId,
+      mission_id: missionId,
+      status: 'completed'
+    },
+    include: {
+      mission: {
+        include: {
+          benefit: true
+        }
+      }
+    }
+  });
+
+  if (!progress) {
+    return { success: false, error: 'Mission not found or not completed' };
+  }
+
+  // 2. Check if already claimed
+  if (progress.claimed_at) {
+    return { success: false, error: 'Reward already claimed' };
+  }
+
+  const user = await db.users.findUnique({ where: { id: userId } });
+
+  // 3. Mark mission as claimed
+  await db.mission_progress.update({
+    where: { id: progress.id },
+    data: {
+      status: 'claimed',
+      claimed_at: new Date()
+    }
+  });
+
+  // 4. Create redemption (appears in Rewards tab for fulfillment)
+  const redemption = await db.redemptions.create({
+    data: {
+      user_id: userId,
+      benefit_id: progress.mission.benefit_id,
+      status: 'pending',
+      tier_at_claim: user.current_tier,
+      redemption_type: progress.mission.benefit.redemption_type,
+      claimed_at: new Date()
+    }
+  });
+
+  // 5. Notify creator
+  await sendNotification(userId, {
+    title: 'Reward Claimed!',
+    body: `Your ${progress.mission.benefit.name} will be fulfilled within 24 hours. Check the Rewards tab for status.`
+  });
+
+  return { success: true, redemptionId: redemption.id };
+}
+```
+
+### Raffle Participation Flow
+
+**API Route - User Participates in Raffle:**
+
+```typescript
+// app/api/missions/[id]/participate/route.ts
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await requireAuth();
+  const userId = session.user.id;
+
+  // 1. Get raffle mission
+  const mission = await db.missions.findUnique({
+    where: { id: params.id },
+    include: { benefit: true }
+  });
+
+  if (!mission || mission.mission_type !== 'raffle') {
+    return NextResponse.json({ error: 'Not a raffle mission' }, { status: 400 });
+  }
+
+  // 2. Check if raffle is activated
+  if (!mission.activated) {
+    return NextResponse.json({ error: 'Raffle not yet active' }, { status: 400 });
+  }
+
+  // 3. Check if already participated
+  const existing = await db.raffle_participants.findUnique({
+    where: {
+      raffle_id_user_id: {
+        raffle_id: params.id,
+        user_id: userId
+      }
+    }
+  });
+
+  if (existing) {
+    return NextResponse.json({ error: 'Already participated' }, { status: 400 });
+  }
+
+  // 4. Check tier eligibility
+  const user = await db.users.findUnique({ where: { id: userId } });
+  if (mission.tier_eligibility !== 'all' && user.current_tier !== mission.tier_eligibility) {
+    return NextResponse.json({ error: 'Not eligible for this raffle' }, { status: 403 });
+  }
+
+  // 5. Create raffle_participants entry
+  await db.raffle_participants.create({
+    data: {
+      raffle_id: params.id,
+      user_id: userId,
+      is_winner: false
+    }
+  });
+
+  // 6. Create mission_progress (status='processing')
+  await db.mission_progress.create({
+    data: {
+      user_id: userId,
+      mission_id: params.id,
+      current_value: 0,
+      status: 'processing',
+      checkpoint_start: user.tier_achieved_at,
+      checkpoint_end: user.next_checkpoint_at
+    }
+  });
+
+  // 7. Create redemption (status='pending')
+  await db.redemptions.create({
+    data: {
+      user_id: userId,
+      benefit_id: mission.benefit_id,
+      status: 'pending',
+      tier_at_claim: user.current_tier,
+      redemption_type: 'instant',
+      claimed_at: new Date()
+    }
+  });
+
+  // 8. Notify user
+  await sendNotification(userId, {
+    title: 'Raffle Entry Confirmed!',
+    body: `You've entered the ${mission.title}. Winner will be announced on ${formatDate(mission.raffle_end_date)}.`
+  });
+
+  return NextResponse.json({ success: true });
+}
+```
+
+**Frontend Button:**
+```tsx
+<button
+  onClick={() => fetch(`/api/missions/${mission.id}/participate`, { method: 'POST' })}
+  className="w-full px-4 py-2 bg-blue-600 text-white rounded font-semibold"
+>
+  Participate in Raffle
+</button>
+```
+
+**API route:**
+```typescript
+// app/api/missions/[id]/claim/route.ts
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await requireAuth();
+  const result = await claimMissionReward(session.user.id, params.id);
+
+  if (!result.success) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    redemptionId: result.redemptionId
+  });
+}
+```
+
+### Sequential Mission Unlock After Fulfillment
+
+**Trigger:** Admin marks redemption as "fulfilled" → Unlock next mission in sequence
+
+```typescript
+// lib/missions.ts
+
+/**
+ * Unlock next mission in sequence after admin fulfills reward
+ * @param redemptionId - The redemption that was just fulfilled
+ */
+export async function unlockNextMissionInSequence(redemptionId: string) {
+  // 1. Get redemption and find associated mission progress
+  const redemption = await db.redemptions.findUnique({
+    where: { id: redemptionId },
+    include: { user: true, benefit: true }
+  });
+
+  if (!redemption) return;
+
+  // 2. Find mission progress that was just fulfilled
+  const fulfilledProgress = await db.mission_progress.findFirst({
+    where: {
+      user_id: redemption.user_id,
+      mission: { benefit_id: redemption.benefit_id },
+      status: 'claimed',
+      claimed_at: { gte: new Date(redemption.claimed_at.getTime() - 2000) } // Within 2 seconds
+    },
+    include: { mission: true }
+  });
+
+  if (!fulfilledProgress) return;
+
+  // 3. Mark mission progress as fulfilled
+  await db.mission_progress.update({
+    where: { id: fulfilledProgress.id },
+    data: {
+      status: 'fulfilled',
+      fulfilled_at: new Date()
+    }
+  });
+
+  const completedMission = fulfilledProgress.mission;
+  const currentUser = redemption.user;
+
+  // 4. Find next mission in sequence (use CURRENT tier, not completed mission's tier)
+  // This handles tier changes: if user upgraded/demoted, use new tier's missions
+  const nextMission = await db.missions.findFirst({
+    where: {
+      client_id: completedMission.client_id,
+      tier_eligibility: currentUser.current_tier, // Use current tier
+      mission_type: completedMission.mission_type, // Same mission type
+      display_order: 1, // Always start at order 1 of new/same tier
+      enabled: true
+    }
+  });
+
+  // 5. If next mission exists, create progress record
+  if (nextMission) {
+    await db.mission_progress.create({
+      data: {
+        user_id: redemption.user_id,
+        mission_id: nextMission.id,
+        current_value: 0,
+        status: 'active',
+        checkpoint_start: redemption.user.checkpoint_start,
+        checkpoint_end: redemption.user.next_checkpoint_at
+      }
+    });
+
+    // Notify creator
+    await sendNotification(redemption.user_id, {
+      title: 'New Mission Unlocked!',
+      body: `${getMissionDisplay(nextMission.mission_type).name} is now available. Check your Missions tab!`
+    });
+  }
+}
+```
+
+**Call from admin fulfillment handler:**
+```typescript
+// app/api/admin/redemptions/[id]/fulfill/route.ts
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await requireAdmin();
+  const { fulfillment_notes } = await request.json();
+
+  // Update redemption status
+  await db.redemptions.update({
+    where: { id: params.id },
+    data: {
+      status: 'fulfilled',
+      fulfilled_at: new Date(),
+      fulfilled_by: session.user.id,
+      fulfillment_notes
+    }
+  });
+
+  // ✨ Unlock next mission in sequence
+  await unlockNextMissionInSequence(params.id);
+
+  return NextResponse.json({ success: true });
+}
+```
+
+**Get Active Missions for Creator (API):**
+```typescript
+// app/api/creator/missions/route.ts
+
+export async function GET(request: Request) {
+  const user = await requireAuth(request);
+
+  // Get all mission progress for this user (all statuses except fulfilled)
+  const activeMissions = await db.mission_progress.findMany({
+    where: {
+      user_id: user.id,
+      status: { in: ['active', 'completed', 'claimed'] },
+      checkpoint_start: user.checkpoint_start
+    },
+    include: {
+      mission: {
+        include: { benefit: true }
+      }
+    },
+    orderBy: [
+      { mission: { mission_type: 'asc' } },
+      { mission: { display_order: 'asc' } }
+    ]
+  });
+
+  // Enrich with display names
+  return activeMissions.map(progress => ({
+    ...progress,
+    display_name: MISSION_DISPLAY_NAMES[progress.mission.mission_type],
+    display_description: MISSION_DESCRIPTIONS[progress.mission.mission_type],
+    deadline: getMissionDeadline(progress.mission, user)
+  }));
+}
+```
+
+**Get Completed Missions (Archived):**
+```typescript
+// app/api/creator/missions/completed/route.ts
+
+export async function GET(request: Request) {
+  const user = await requireAuth(request);
+
+  // Only fulfilled missions appear here
+  const completedMissions = await db.mission_progress.findMany({
+    where: {
+      user_id: user.id,
+      status: 'fulfilled'
+    },
+    include: {
+      mission: { include: { benefit: true } }
+    },
+    orderBy: { fulfilled_at: 'desc' }
+  });
+
+  return completedMissions.map(progress => ({
+    ...progress,
+    display_name: MISSION_DISPLAY_NAMES[progress.mission.mission_type],
+    benefit_name: progress.mission.benefit.name,
+    fulfilled_at: progress.fulfilled_at
+  }));
+}
+```
+
+###Raffle Winner Selection & Email Notifications
+
+**Admin UI Workflow - Select Raffle Winner:**
+
+```typescript
+// app/api/admin/raffles/[id]/select-winner/route.ts
+
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await requireAdmin();
+  const { winner_user_id } = await request.json();
+
+  const raffle = await db.missions.findUnique({
+    where: { id: params.id, mission_type: 'raffle' }
+  });
+
+  if (!raffle || !raffle.raffle_end_date) {
+    return NextResponse.json({ error: 'Invalid raffle' }, { status: 400 });
+  }
+
+  // 1. Get all participants
+  const allParticipants = await db.raffle_participants.findMany({
+    where: { raffle_id: params.id },
+    include: { user: true }
+  });
+
+  if (allParticipants.length === 0) {
+    return NextResponse.json({ error: 'No participants in raffle' }, { status: 400 });
+  }
+
+  // 2. Mark winner in raffle_participants
+  await db.raffle_participants.update({
+    where: {
+      raffle_id_user_id: {
+        raffle_id: params.id,
+        user_id: winner_user_id
+      }
+    },
+    data: {
+      is_winner: true,
+      winner_selected_at: new Date()
+    }
+  });
+
+  // 3. Update all participants' mission_progress status
+  const winner = allParticipants.find(p => p.user_id === winner_user_id);
+  const losers = allParticipants.filter(p => p.user_id !== winner_user_id);
+
+  // Bulk reject non-winners' redemptions
+  const loserRedemptions = await db.redemptions.findMany({
+    where: {
+      benefit_id: raffle.benefit_id,
+      user_id: { in: losers.map(l => l.user_id) },
+      status: 'pending'
+    }
+  });
+
+  await db.redemptions.updateMany({
+    where: {
+      id: { in: loserRedemptions.map(r => r.id) }
+    },
+    data: {
+      status: 'rejected',
+      rejection_reason: 'Raffle entry - not selected as winner',
+      rejected_at: new Date(),
+      rejected_by: session.user.id
+    }
+  });
+
+  // Mark non-winners' mission_progress as 'lost'
+  for (const loser of losers) {
+    await db.mission_progress.updateMany({
+      where: {
+        user_id: loser.user_id,
+        mission_id: params.id,
+        status: 'processing'
+      },
+      data: {
+        status: 'lost',
+        fulfilled_at: new Date()
+      }
+    });
+  }
+
+  // Mark winner's mission_progress as 'won'
+  await db.mission_progress.updateMany({
+    where: {
+      user_id: winner_user_id,
+      mission_id: params.id,
+      status: 'processing'
+    },
+    data: {
+      status: 'won',
+      completed_at: new Date()
+    }
+  });
+
+  // 4. Generate CSV for admin to download loser emails
+  const loserEmails = losers.map(l => ({
+    email: l.user.email,
+    tiktok_handle: l.user.tiktok_handle,
+    participated_at: l.participated_at
+  }));
+
+  // Return CSV data to admin
+  return NextResponse.json({
+    success: true,
+    winner_id: winner_user_id,
+    total_participants: allParticipants.length,
+    loser_emails_csv: loserEmails
+  });
+}
+```
+
+**Admin UI Component:**
+```typescript
+// components/admin/RaffleWinnerSelector.tsx
+
+export function RaffleWinnerSelector({ raffleId }: { raffleId: string }) {
+  const [participants, setParticipants] = useState<RaffleParticipant[]>([]);
+  const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch participants
+    fetch(`/api/admin/raffles/${raffleId}/participants`)
+      .then(res => res.json())
+      .then(data => setParticipants(data));
+  }, [raffleId]);
+
+  const handleSelectWinner = async () => {
+    if (!selectedWinner) return;
+
+    const confirmed = window.confirm(
+      `Confirm ${participants.find(p => p.user_id === selectedWinner)?.user.tiktok_handle} as winner? This will send emails to all participants.`
+    );
+
+    if (!confirmed) return;
+
+    await fetch(`/api/admin/raffles/${raffleId}/select-winner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner_user_id: selectedWinner })
+    });
+
+    alert('Winner selected! Emails sent to all participants.');
+  };
+
+  return (
+    <div className="p-6 bg-white rounded-lg shadow">
+      <h2 className="text-2xl font-bold mb-4">Select Raffle Winner</h2>
+      <p className="text-gray-600 mb-4">
+        Total Participants: {participants.length}
+      </p>
+
+      <div className="space-y-2 mb-6">
+        {participants.map(p => (
+          <label key={p.id} className="flex items-center gap-3 p-3 border rounded hover:bg-gray-50">
+            <input
+              type="radio"
+              name="winner"
+              value={p.user_id}
+              checked={selectedWinner === p.user_id}
+              onChange={() => setSelectedWinner(p.user_id)}
+            />
+            <span className="font-medium">{p.user.tiktok_handle}</span>
+            <span className="text-sm text-gray-500">
+              Participated: {new Date(p.participated_at).toLocaleDateString()}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <button
+        onClick={handleSelectWinner}
+        disabled={!selectedWinner}
+        className="px-6 py-3 bg-blue-600 text-white rounded disabled:bg-gray-300"
+      >
+        Select Winner & Send Emails
+      </button>
+    </div>
+  );
+}
+```
+
+### Mission Deadline Helper
+
+```typescript
+// lib/missions.ts
+
+/**
+ * Get mission deadline
+ * Raffles use custom end date, regular missions use checkpoint date
+ */
+export function getMissionDeadline(mission: Mission, user: User): Date {
+  // Raffle missions with custom end date
+  if (mission.raffle_end_date) {
+    return new Date(mission.raffle_end_date);
+  }
+
+  // Default: checkpoint date (regular missions)
+  return user.next_checkpoint_at;
+}
+```
+
+### Testing Checklist
+
+**Basic Functionality:**
+- [ ] Daily cron updates mission progress for all active missions
+- [ ] Progress calculation correct for each mission type (sales, videos, views, likes)
+- [ ] Raffles don't track progress (skipped in daily sync)
+- [ ] Completed missions trigger notification
+- [ ] Mission display uses hardcoded names (not admin title)
+- [ ] Admin title/description stored but not shown to creators
+
+**Sequential Unlock System:**
+- [ ] Only ONE mission per type active at a time (e.g., only Sales Mission 1 visible)
+- [ ] Next mission unlocks after admin fulfills previous mission's reward
+- [ ] Next mission finder uses current tier (handles tier changes correctly)
+- [ ] Creator can have multiple types active simultaneously (1 sales + 1 videos + 1 raffle)
+- [ ] UNIQUE constraint enforces unique display_order per tier+type
+- [ ] Gap in display_order skips to next available (order 1, 3, 5 → after 1 comes 3)
+
+**Mission Tabs:**
+- [ ] Available Missions tab shows: active, completed, claimed missions
+- [ ] Completed Missions tab shows: only fulfilled missions (archived, read-only)
+- [ ] Fulfilled missions disappear from Available tab
+- [ ] Creator cannot claim from Completed Missions tab
+
+**Tier Changes:**
+- [ ] In-progress missions from old tier persist (not cancelled)
+- [ ] Completed/claimed missions from old tier persist
+- [ ] After fulfillment → new tier's Mission order=1 appears (if mission type exists)
+- [ ] If new tier lacks mission type → no replacement appears
+- [ ] Works for both upgrade and demotion
+
+**Raffle Special Cases:**
+- [ ] Raffle uses sequential unlock (one raffle at a time per tier)
+- [ ] Dormant raffles show "Raffle start will be announced soon" (eligible users)
+- [ ] Non-eligible users always see LOCKED raffle
+- [ ] After activation, eligible users see [Participate] button
+- [ ] After participation, status='processing', shows countdown to raffle_end_date
+- [ ] After winner selection: Winner status='won', Losers status='lost'
+- [ ] Losers move to Mission History immediately (CRITICAL - no "you won" confusion)
+- [ ] Winner stays in Available Missions until admin fulfills
+- [ ] Admin downloads CSV with loser emails (no automated emails)
+- [ ] Next raffle appears after current raffle is fulfilled
+- [ ] Redemptions created at participation (not at claim)
+- [ ] Losers' redemptions bulk rejected (status='rejected')
+
+**Claims & Redemptions:**
+- [ ] Claim creates redemption in redemptions table
+- [ ] Claim marks mission as 'claimed' (prevents duplicate claims)
+- [ ] Admin fulfillment marks mission_progress as 'fulfilled'
+- [ ] Admin fulfillment triggers unlockNextMissionInSequence()
+
+**UI & Display:**
+- [ ] Progress bar shows correct percentage
+- [ ] Mission deadline displays correctly (checkpoint date or raffle end date)
+- [ ] Multiple simultaneous mission types work correctly (different types, not same type)
+- [ ] Mission card component reused across Home + Missions tabs
+
+**Database Constraints:**
+- [ ] CHECK constraint prevents invalid raffle missions (end date required, target=0)
+- [ ] UNIQUE constraint enforces one mission per tier+type+display_order
+- [ ] UNIQUE constraint allows one progress per mission per checkpoint
+
+---
+

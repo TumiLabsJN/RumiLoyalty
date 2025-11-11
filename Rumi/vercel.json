@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-automation",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "functions": {
+    "api/cron/daily-automation.js": {
+      "maxDuration": 300
+    }
+  }
+}
