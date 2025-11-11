@@ -1438,8 +1438,12 @@ CREATE TABLE users (
   current_tier VARCHAR(50) DEFAULT 'tier_1',
 
   -- Checkpoint tracking (for fixed_checkpoint mode)
-  tier_achieved_at TIMESTAMP, -- When did they reach current tier?
-  next_checkpoint_at TIMESTAMP, -- When is their next evaluation?
+  -- NOTE: These fields track the user's CURRENT checkpoint period (updates when tier changes)
+  -- mission_progress table uses SNAPSHOTS of these values (checkpoint_start/checkpoint_end)
+  tier_achieved_at TIMESTAMP, -- When did they reach current tier? (Start of current checkpoint period)
+                              -- mission_progress.checkpoint_start references this value as a snapshot
+  next_checkpoint_at TIMESTAMP, -- When is their next evaluation? (End of current checkpoint period)
+                                -- mission_progress.checkpoint_end references this value as a snapshot
   checkpoint_sales_target DECIMAL(10, 2), -- Sales needed to maintain tier
 
   -- Precomputed fields (updated daily during midnight sync for performance)
@@ -1545,7 +1549,9 @@ CREATE TABLE rewards (
   -- Reward details
   type VARCHAR(100) NOT NULL, -- 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
   name VARCHAR(255), -- Auto-generated from type + value_data (Section 2 decision)
-  description TEXT,
+  description VARCHAR(15), -- User-facing display for physical_gift/experience only (e.g., "VIP Event Access")
+                           -- NULL for other reward types (gift_card, commission_boost, spark_ads, discount)
+                           -- Same length as raffle_prize_name for consistency
 
   -- Value storage (Section 3: Smart Hybrid approach)
   value_data JSONB, -- JSON for structured data (percent, amount, duration_days)
@@ -1554,7 +1560,7 @@ CREATE TABLE rewards (
     -- spark_ads: {"amount": 100}
     -- gift_card: {"amount": 50}
     -- discount: {"percent": 10, "duration_days": 7}
-    -- physical_gift/experience: Uses description TEXT instead
+    -- physical_gift/experience: Uses description VARCHAR(15) instead
 
   -- Tier targeting (Section 8)
   tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6' (exact match)
@@ -1581,6 +1587,12 @@ CREATE TABLE rewards (
 
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Validation: description required for physical_gift/experience only
+  CHECK (
+    (type IN ('physical_gift', 'experience') AND description IS NOT NULL AND LENGTH(description) <= 15) OR
+    (type NOT IN ('physical_gift', 'experience') AND description IS NULL)
+  )
 
   -- Constraints
   CONSTRAINT check_quantity_with_frequency CHECK (
@@ -1636,7 +1648,8 @@ CREATE TABLE missions (
 
   -- Mission details
   title VARCHAR(255) NOT NULL, -- Admin internal reference only (not shown to creators)
-  description TEXT, -- Admin notes (optional, not shown to creators)
+  description TEXT, -- Admin-only notes (NEVER shown to creators, internal use only)
+                    -- For raffle user-facing text, use raffle_prize_name VARCHAR(15) instead
 
   -- Mission type & target (Section 7)
   mission_type VARCHAR(50) NOT NULL, -- 'sales', 'videos', 'views', 'likes', 'raffle'
@@ -1720,8 +1733,11 @@ CREATE TABLE mission_progress (
   fulfilled_at TIMESTAMP, -- When admin fulfilled reward (triggers next mission unlock)
 
   -- Checkpoint period linkage (Section 4: Missions reset at checkpoint)
-  checkpoint_start TIMESTAMP, -- Links to user's checkpoint period
-  checkpoint_end TIMESTAMP,
+  -- NOTE: These are SNAPSHOTS copied from users table when mission is created
+  -- They NEVER update, even if user's tier changes (preserves original mission deadline)
+  checkpoint_start TIMESTAMP, -- Snapshot of user's tier_achieved_at when mission was created
+  checkpoint_end TIMESTAMP, -- Snapshot of user's next_checkpoint_at when mission was created
+                            -- Used for: mission deadlines, checkpoint resets, historical tracking
 
   UNIQUE(user_id, mission_id, checkpoint_start) -- One progress record per mission per checkpoint
 );

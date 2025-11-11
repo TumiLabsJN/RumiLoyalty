@@ -1029,7 +1029,10 @@ CREATE TABLE rewards (
   -- Reward details
   type VARCHAR(100) NOT NULL, -- 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
   name VARCHAR(255), -- Auto-generated from type + value_data
-  description TEXT, -- Freeform text for physical_gift/experience
+  description VARCHAR(15), -- User-facing display for physical_gift/experience only (max 15 chars)
+                           -- Examples: "VIP Event Access", "Wireless Phones"
+                           -- NULL for other reward types
+                           -- Same limit as raffle_prize_name for consistency
 
   -- Value storage (Section 3: Smart Hybrid approach)
   value_data JSONB, -- JSON for structured data (percent, amount, duration_days)
@@ -1038,7 +1041,7 @@ CREATE TABLE rewards (
     -- spark_ads: {"amount": 100}
     -- gift_card: {"amount": 50}
     -- discount: {"percent": 10}
-    -- physical_gift/experience: Uses description TEXT instead
+    -- physical_gift/experience: Uses description VARCHAR(15) instead
 
   -- Tier targeting
   tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6' (exact match, not minimum)

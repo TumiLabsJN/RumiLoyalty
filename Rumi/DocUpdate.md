@@ -567,7 +567,7 @@ Resolved on 2025-01-11. Performed complete standardization to "Rewards" across a
 
 ### CONFLICT 11: Checkpoint Period Field Naming Patterns
 
-**Status:** ❌ NOT RESOLVED
+**Status:** ✅ RESOLVED
 
 **Source of Truth:** Loyalty.md
 
@@ -590,76 +590,109 @@ checkpoint_start TIMESTAMP,      -- Links to user's tier_achieved_at
 checkpoint_end TIMESTAMP,        -- Links to user's next_checkpoint_at
 ```
 
-**Recommended Fix:**
-Add clear documentation explaining relationship between these fields.
+**Solution Implemented:**
+Alternative A - Enhanced Documentation (no schema changes)
 
-**Add to Loyalty.md line 1372 comment:**
-```sql
-tier_achieved_at TIMESTAMP,      -- Start of current tier's checkpoint period (mission_progress.checkpoint_start references this)
-next_checkpoint_at TIMESTAMP,    -- End of current checkpoint period (mission_progress.checkpoint_end references this)
-```
+**Files Modified:**
+1. **Loyalty.md lines 1441-1446** - Added detailed comments explaining:
+   - These fields track CURRENT checkpoint period (updates when tier changes)
+   - mission_progress uses SNAPSHOTS of these values
+   - Relationship between tier_achieved_at → checkpoint_start and next_checkpoint_at → checkpoint_end
 
-**Add to Missions.md line 1637 comment:**
-```sql
-checkpoint_start TIMESTAMP,      -- Snapshot of user's tier_achieved_at when mission started
-checkpoint_end TIMESTAMP,        -- Snapshot of user's next_checkpoint_at when mission started
-  -- Note: These are copies, not foreign keys, because checkpoint periods can change
-```
+2. **Loyalty.md lines 1727-1731** - Added detailed comments explaining:
+   - checkpoint_start/checkpoint_end are SNAPSHOTS (never update)
+   - Preserve original mission deadline even after tier changes
+   - Used for mission deadlines, checkpoint resets, historical tracking
 
-**Files to Update:**
-1. **Loyalty.md lines 1371-1372** - Update comments explaining relationship
-2. **Missions.md lines 1637-1638** - Update comments explaining relationship
-3. **Pseudocode.md** - Add note about checkpoint period field mapping
+3. **Missions.md lines 838-842** - Added matching comments explaining snapshot pattern
+
+4. **Pseudocode.md lines 3677-3686** - Added comment for raffle participation mission creation
+
+5. **Pseudocode.md lines 3802-3811** - Added comment for sequential unlock mission creation
+
+6. **Pseudocode.md lines 3017-3032** - Added comment for mission progress upsert
+
+7. **Pseudocode.md** - Fixed 5 instances of incorrect `user.checkpoint_start` → `user.tier_achieved_at`
+   - Lines 3023, 3031, 3046, 3082, 3866
 
 **Verification:**
-- [ ] Both tables clearly document field purpose
-- [ ] Relationship between fields is explained
-- [ ] Developers understand why different naming exists
+- [x] Both tables clearly document field purpose
+- [x] Relationship between fields is explained
+- [x] Developers understand why different naming exists (LIVE vs SNAPSHOT)
+- [x] Pseudocode.md uses correct field names
+- [x] Comments explain snapshot pattern in all mission_progress creation code
 
-**Resolution Notes:** (LLM: Fill this in after fixing)
+**Resolution Notes:**
+Resolved on 2025-01-11. Chose Alternative A (Enhanced Documentation) to preserve semantic clarity without schema changes. The naming difference exists for good reason: `tier_achieved_at` is user-centric (when did this person reach their tier?) while `checkpoint_start` is mission-centric (snapshot of checkpoint period). Added comprehensive comments explaining:
+- users table fields track CURRENT checkpoint period (updates when tier changes)
+- mission_progress fields are SNAPSHOTS (frozen at mission creation, never update)
+- This design preserves original mission deadlines even after tier promotions
+- Fixed bug: Corrected 5 instances in Pseudocode.md using non-existent `user.checkpoint_start` field
 
 ---
 
 ### CONFLICT 12: Mission Description Field Purpose
 
-**Status:** ❌ NOT RESOLVED
+**Status:** ✅ RESOLVED
 
-**Source of Truth:** Loyalty.md line 1568-1569
+**Source of Truth:** Loyalty.md + user decision (VARCHAR(15) consistency)
 
 **Problem:**
 - Loyalty.md: `description TEXT` is "Admin notes (optional, not shown to creators)"
 - Missions.md line 96: Uses description for raffle display text
 - Conflicting purposes: internal notes vs user-facing text
+- Additional issue: rewards.description had inconsistent character limits (17 in frontend vs TEXT in schema)
 
-**Schema Definition (Loyalty.md line 1568-1569):**
-```sql
-description TEXT, -- Admin notes (optional, not shown to creators)
-```
+**Solution Implemented:**
+Standardized all user-facing dynamic fields to **VARCHAR(15)** for consistency
 
-**Missions.md Usage (line 96):**
-```
-Uses description for raffle: "Enter to win {prize_name}"
-```
+**Files Modified:**
 
-**Resolution:**
-This conflict is already addressed by CONFLICT 3 (raffle_prize_name field).
+1. **Loyalty.md line 1552-1554** - Changed rewards.description from TEXT to VARCHAR(15):
+   - Added comment: "User-facing display for physical_gift/experience only"
+   - Added comment: "Same length as raffle_prize_name for consistency"
 
-**Clarification Needed:**
-1. If raffle_prize_name field is added → description remains admin-only
-2. If raffle_prize_name field is NOT added → description becomes dual-purpose
+2. **Loyalty.md line 1591-1595** - Added CHECK constraint for rewards.description:
+   - Ensures description IS NOT NULL for physical_gift/experience
+   - Ensures description IS NULL for other reward types
+   - Validates LENGTH(description) <= 15
 
-**Decision Pending:** See CONFLICT 3 resolution
+3. **Loyalty.md line 1651-1652** - Enhanced missions.description comment:
+   - Clarified "Admin-only notes (NEVER shown to creators)"
+   - Added reference: "For raffle user-facing text, use raffle_prize_name VARCHAR(15)"
 
-**Files to Update:**
-1. **Loyalty.md line 1569** - Clarify description purpose based on CONFLICT 3 decision
-2. **Missions.md line 96** - Update to reference correct field
+4. **Rewards.md line 1032-1035** - Changed description from TEXT to VARCHAR(15):
+   - Updated comment to match Loyalty.md
+   - Added examples and consistency note
+
+5. **Missions.md line 96-99** - Fixed raffle documentation:
+   - Changed "Description is dynamic" → "Prize name is dynamic"
+   - Specified field name: "via raffle_prize_name field (VARCHAR(15))"
+   - Added template: "Enter to win {raffle_prize_name}"
+   - Added clarification: "description field: Admin-only notes (TEXT, not shown to creators)"
+
+6. **App Code/V1/app/rewards/page.tsx** - Updated 4 frontend comments:
+   - Line 154: "17-char" → "15-char" (physical_gift comment)
+   - Line 156: "17-char" → "15-char" (experience comment)
+   - Line 423: "17 char limit" → "15 char limit (matches raffle_prize_name)"
+   - Line 480: "17 char limit" → "15 char limit (VARCHAR(15))" + example "Wireless Phones"
+   - Line 508: "17 char limit" → "15 char limit (VARCHAR(15))" + example "VIP Event"
 
 **Verification:**
-- [ ] Wait for CONFLICT 3 resolution
-- [ ] Update documentation based on decision
-- [ ] Ensure description purpose is clear
+- [x] missions.description is admin-only (TEXT, never shown to creators)
+- [x] rewards.description is user-facing for physical_gift/experience only (VARCHAR(15))
+- [x] raffle_prize_name is user-facing for raffles (VARCHAR(15))
+- [x] All user-facing dynamic fields = VARCHAR(15) for consistency
+- [x] CHECK constraint enforces description usage rules
+- [x] Frontend comments updated to reflect 15-char limit
 
-**Resolution Notes:** (LLM: Fill this in after fixing, depends on CONFLICT 3)
+**Resolution Notes:**
+Resolved on 2025-01-11. Achieved VARCHAR(15) consistency across all user-facing dynamic fields. Key decisions:
+- missions.description = Admin-only notes (TEXT, internal use)
+- rewards.description = User-facing for physical_gift/experience only (VARCHAR(15))
+- raffle_prize_name = User-facing for raffles (VARCHAR(15))
+- All 3 fields serve different purposes but user-facing fields share same 15-char limit
+- Added database CHECK constraint to prevent misuse of rewards.description field
 
 ---
 

@@ -1,3 +1,16 @@
+# Commission Boost Refactor
+
+# VIP Level Mechanic Refactor
+something in PromptEngineering.md 
+
+# API Contracts (pending)
+Home page was done incorrectly, API Contracts were created without doublechecking the Main Repo documents (Loyalty.md and Pseudocode.md)
+- For future API Contracts, we need to ensure its done based on the above
+- Architecture.md, API_CONTRACTS.md and API-Structure.md relevance (?)
+    - Understand best workflow :)
+
+
+    
 # 2.5 Side quest
 Home: Sales mission = Next: $30 Gift Card" must be dynamic and have a CLAIM button.
 - If this button is hit, the Rewards tab Sales Mission must also go in processing
@@ -497,32 +510,5 @@ If it does, when the user gets logged out and needs to sign in via sign in page 
 
 
 
-
-
-
-
-
-
-
-# DONE
-
-# 1 Incorporate Missions Logic
-Multiple missions per VIP level set by Admin
-**To map out cost** per VIP level
-
-This impacts Home page that has the Sales mission ! Mention it.
-
-```CLI: Main pt5 | From LoyaltyToDo's```
-
-
-# 1.25 Raffles are standalone (always 1 participation)
-CHANGE the above, they should be dynamic as well
-1. Backend activate raffle
-2. Setup level, reward 
-3. Activate
-4. All users that meet qualifications can see mission / activate it
-
-USE CASE:
-A. Day 0, we plan Loyalty Program with a Raffle in Platinum level
-B. Day 15, I convince client to try a Raffle earlier - test it. For Gold Level
-    1. I go to dashboard, and activate the dynamic process as well
+# New Pay Boost (Rewards Page)
+Rewards card that has ACTIVE for benefits that persist for a certain amount of time

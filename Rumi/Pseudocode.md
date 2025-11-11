@@ -3014,12 +3014,13 @@ async function updateMissionProgress() {
       const currentValue = await calculateMissionProgress(user.id, mission);
 
       // Upsert progress record
+      // NOTE: checkpoint_start/checkpoint_end snapshot user's checkpoint period when mission starts
       await db.mission_progress.upsert({
         where: {
           user_id_mission_id_checkpoint_start: {
             user_id: user.id,
             mission_id: mission.id,
-            checkpoint_start: user.checkpoint_start
+            checkpoint_start: user.tier_achieved_at
           }
         },
         create: {
@@ -3027,8 +3028,8 @@ async function updateMissionProgress() {
           mission_id: mission.id,
           current_value: currentValue,
           status: 'active',
-          checkpoint_start: user.checkpoint_start,
-          checkpoint_end: user.next_checkpoint_at
+          checkpoint_start: user.tier_achieved_at, // Snapshot: checkpoint period start
+          checkpoint_end: user.next_checkpoint_at   // Snapshot: checkpoint period end
         },
         update: {
           current_value: currentValue
@@ -3042,7 +3043,7 @@ async function updateMissionProgress() {
             user_id_mission_id_checkpoint_start: {
               user_id: user.id,
               mission_id: mission.id,
-              checkpoint_start: user.checkpoint_start
+              checkpoint_start: user.tier_achieved_at
             }
           },
           data: {
@@ -3078,7 +3079,7 @@ export async function calculateMissionProgress(
   mission: Mission
 ): Promise<number> {
   const user = await db.users.findUnique({ where: { id: userId } });
-  const checkpointStart = user.checkpoint_start;
+  const checkpointStart = user.tier_achieved_at; // User's current checkpoint period start
 
   switch (mission.mission_type) {
     case 'sales':
@@ -3674,14 +3675,16 @@ export async function POST(
   });
 
   // 6. Create mission_progress (status='processing')
+  // NOTE: checkpoint_start/checkpoint_end are SNAPSHOTS of user's current checkpoint period
+  // These values are frozen and never update, even if user's tier changes later
   await db.mission_progress.create({
     data: {
       user_id: userId,
       mission_id: params.id,
       current_value: 0,
       status: 'processing',
-      checkpoint_start: user.tier_achieved_at,
-      checkpoint_end: user.next_checkpoint_at
+      checkpoint_start: user.tier_achieved_at, // Snapshot: current checkpoint start
+      checkpoint_end: user.next_checkpoint_at   // Snapshot: current checkpoint end (mission deadline)
     }
   });
 
@@ -3797,6 +3800,7 @@ export async function unlockNextMissionInSequence(redemptionId: string) {
   });
 
   // 5. If next mission exists, create progress record
+  // NOTE: Sequential unlock captures CURRENT checkpoint period (may differ from previous mission)
   if (nextMission) {
     await db.mission_progress.create({
       data: {
@@ -3804,8 +3808,8 @@ export async function unlockNextMissionInSequence(redemptionId: string) {
         mission_id: nextMission.id,
         current_value: 0,
         status: 'active',
-        checkpoint_start: redemption.user.checkpoint_start,
-        checkpoint_end: redemption.user.next_checkpoint_at
+        checkpoint_start: redemption.user.tier_achieved_at, // Snapshot: current checkpoint start
+        checkpoint_end: redemption.user.next_checkpoint_at   // Snapshot: current checkpoint end
       }
     });
 
@@ -3859,7 +3863,7 @@ export async function GET(request: Request) {
     where: {
       user_id: user.id,
       status: { in: ['active', 'completed', 'claimed'] },
-      checkpoint_start: user.checkpoint_start
+      checkpoint_start: user.tier_achieved_at // Find missions from current checkpoint period
     },
     include: {
       mission: {

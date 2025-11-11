@@ -151,9 +151,9 @@
       const getBenefitName = (type: string, name: string, description: string): string => {
         switch (type) {
           case "physical_gift":
-            return description // Show 17-char description from backend (e.g., "Wireless Headphones")
+            return description // Show 15-char description from backend (e.g., "Wireless Phones")
           case "experience":
-            return description // Show 17-char description from backend (e.g., "VIP Event Access")
+            return description // Show 15-char description from backend (e.g., "VIP Event Access")
           default:
             return name // Use auto-generated name (e.g., "Gift Card: $50")
         }
@@ -420,7 +420,7 @@
        * - id: Benefit UUID
        * - type: Backend benefit type (gift_card, commission_boost, spark_ads, discount, physical_gift, experience)
        * - name: Auto-generated display name ("Gift Card: $50", "Pay Boost: 5%")
-       * - description: Benefit details (17 char limit for physical_gift/experience, longer for others)
+       * - description: Benefit details (15 char limit for physical_gift/experience, matches raffle_prize_name)
        * - value_data: JSONB for structured types ({"amount": 50}, {"percent": 5, "duration_days": 30})
        * - tier_eligibility: Required tier (tier_1, tier_2, tier_3, tier_4) - EXACT match
        * - redemption_frequency: 'one-time', 'monthly', 'weekly', 'unlimited'
@@ -476,8 +476,8 @@
         {
           id: "b4",
           type: "physical_gift",
-          name: "Gift Drop: Wireless Headphones",
-          description: "Wireless Headphones", // 17 char limit from backend
+          name: "Gift Drop: Wireless Phones",
+          description: "Wireless Phones", // 15 char limit from backend (VARCHAR(15))
           value_data: null, // Physical gifts use description instead
           tier_eligibility: "tier_3",
           redemption_frequency: "one-time",
@@ -505,7 +505,7 @@
           id: "b6",
           type: "experience",
           name: "Mystery Trip: VIP Event Access",
-          description: "VIP Event Access", // 17 char limit from backend
+          description: "VIP Event", // 15 char limit from backend (VARCHAR(15))
           value_data: null,
           tier_eligibility: "tier_4", // Platinum only
           redemption_frequency: "one-time",

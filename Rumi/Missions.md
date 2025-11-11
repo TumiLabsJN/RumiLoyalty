@@ -93,8 +93,10 @@ Sequential unlock (next mission appears)
 | **raffle** | "VIP Raffle" | "Enter to win {prize_name}" | Participation clicks | 0 (no progress) |
 
 **Unique Characteristics:**
-- **Description is dynamic:** Admin sets prize name (max 15 chars)
+- **Prize name is dynamic:** Admin sets via raffle_prize_name field (VARCHAR(15), max 15 chars)
   - Example: "Enter to win iPhone 16 Pro"
+  - Template: "Enter to win {raffle_prize_name}"
+- **description field:** Admin-only notes (TEXT, not shown to creators)
 - **No progress tracking:** Creator clicks "Participate" button (not completion-based)
 - **Separate table:** Uses `raffle_participants` (not `mission_progress` for tracking)
 - **Custom deadline:** `raffle_end_date` field (not checkpoint-based)
@@ -835,8 +837,11 @@ CREATE TABLE mission_progress (
   fulfilled_at TIMESTAMP, -- When admin fulfilled (triggers next mission unlock)
 
   -- Checkpoint period linkage (missions reset at checkpoint)
-  checkpoint_start TIMESTAMP, -- Which checkpoint period
-  checkpoint_end TIMESTAMP,
+  -- NOTE: These are SNAPSHOTS from users.tier_achieved_at and users.next_checkpoint_at
+  -- Copied when mission is created, NEVER updated (even if user's tier changes)
+  checkpoint_start TIMESTAMP, -- Snapshot of user's tier_achieved_at (when checkpoint period started)
+  checkpoint_end TIMESTAMP, -- Snapshot of user's next_checkpoint_at (mission deadline)
+                            -- Preserves original deadline even after tier promotions
 
   UNIQUE(user_id, mission_id, checkpoint_start) -- One progress per mission per checkpoint
 );
