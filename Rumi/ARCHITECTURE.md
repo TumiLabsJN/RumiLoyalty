@@ -449,22 +449,31 @@ export const missionRepository = {
 
   /**
    * Update mission status
+   * SECURITY: Always filter by client_id to prevent cross-tenant mutations
    */
   async updateStatus(
     missionId: string,
-    status: 'active' | 'completed' | 'claimed' | 'fulfilled'
+    clientId: string,  // Required for tenant isolation
+    status: 'active' | 'completed' | 'dormant'
   ): Promise<void> {
     const supabase = createClient()
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('mission_progress')
       .update({
         status,
         updated_at: new Date().toISOString(),
       })
       .eq('mission_id', missionId)
+      .eq('client_id', clientId)  // Enforces tenant isolation
+      .select('id', { count: 'exact', head: true })
 
     if (error) throw error
+
+    // Fail if no rows updated (prevents cross-tenant mutation)
+    if (count === 0) {
+      throw new NotFoundError('Mission not found')
+    }
   },
 }
 ```
@@ -805,8 +814,10 @@ const { data: missions } = await supabase
 
 **Checklist for Every Repository Function:**
 - [ ] Does it query a tenant-scoped table? (missions, rewards, tiers, etc.)
-- [ ] Does it include `.eq('client_id', user.client_id)`?
+- [ ] Does it include `.eq('client_id', clientId)` filter?
 - [ ] Is the client_id from authenticated user (not user input)?
+- [ ] For UPDATE/DELETE: Does it verify `count > 0` after mutation?
+- [ ] For UPDATE/DELETE: Does it throw `NotFoundError` if `count === 0`?
 
 **Exception:** Global tables (no client_id):
 - `users` table (has client_id as foreign key)

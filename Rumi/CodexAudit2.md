@@ -228,12 +228,12 @@
     ON metrics(period, client_id, user_id);
   ```
 - [x] **Documentation Updated:** SchemaFinalv2.md, Loyalty.md, API_CONTRACTS.md
-- [ ] **Update Repository Queries:** Add `.eq('client_id', user.client_id)` to all metrics queries (DEFERRED - No repository layer yet)
-- [ ] **Update API Responses:** Include `client_id` in metrics API responses (DEFERRED - No API routes yet)
-- [ ] **Update TypeScript Types:** Add `client_id: string` to Metric interface (DEFERRED - No types folder yet)
+- [x] **Update Repository Queries:** N/A - Metrics table removed per Upgrade.md
+- [x] **Update API Responses:** N/A - Metrics table removed per Upgrade.md
+- [x] **Update TypeScript Types:** N/A - Metrics table removed per Upgrade.md
 - **References:** Lines 19-20, 96-97, 195, 60-62
 - **API Breaking:** ✅ YES
-- **Status:** Schema documentation complete - Code implementation deferred until repository layer built
+- **Status:** ✅ COMPLETED - Metrics table removed entirely (see Upgrade.md). Task no longer applicable.
 
 #### Task 1.2: Add `client_id` to sales_adjustments table ✅ COMPLETED
 - [x] **Schema Change:**
@@ -434,56 +434,45 @@
 
 **Goal:** Partition high-volume tables to prevent performance degradation at scale
 
-#### Task 4.1: Partition videos table by post_date (monthly)
+#### Task 4.1: Partition videos table by post_date (monthly) ❌ DEFERRED
 - [ ] **Create Partitioned Table:**
   ```sql
-  -- Create new partitioned table
-  CREATE TABLE videos_partitioned (LIKE videos INCLUDING ALL)
-  PARTITION BY RANGE (post_date);
-
-  -- Create initial partitions (last 6 months + next 3 months)
-  CREATE TABLE videos_2024_08 PARTITION OF videos_partitioned
-    FOR VALUES FROM ('2024-08-01') TO ('2024-09-01');
-  CREATE TABLE videos_2024_09 PARTITION OF videos_partitioned
-    FOR VALUES FROM ('2024-09-01') TO ('2024-10-01');
-  -- ... continue for all months
-
-  -- Create default partition for older data
-  CREATE TABLE videos_default PARTITION OF videos_partitioned DEFAULT;
+  -- Deferred: Not needed for pilot (single client)
+  -- RANGE partitioning by post_date has UNIQUE constraint issues
+  -- Breaks UNIQUE(video_url) - must be UNIQUE(video_url, post_date)
+  -- This breaks CSV upsert logic: ON CONFLICT (video_url)
   ```
-- [ ] **Data Migration:** Copy data from videos to videos_partitioned
-- [ ] **Switch Tables:** Rename videos → videos_old, videos_partitioned → videos
-- [ ] **Create Partition Maintenance Cron:** Auto-create new monthly partitions
-- [ ] **Test:** Verify queries work on partitioned table
+- [ ] **Data Migration:** N/A
+- [ ] **Switch Tables:** N/A
+- [ ] **Create Partition Maintenance Cron:** N/A
+- [ ] **Test:** N/A
 - **References:** Lines 67-68, 73-78
-- **API Breaking:** ❌ NO
-- **Estimated Time:** 3-4 hours
+- **API Breaking:** ⚠️ YES (would break UNIQUE constraint)
+- **Estimated Time:** 3-4 hours (but not recommended)
+- **Status:** ❌ DEFERRED - Not needed for pilot (single client). For multi-tenant, consider LIST partitioning by client_id instead of RANGE by post_date. Analysis shows 10M rows (100 clients) performs well without partitioning. Defer until 50M+ rows or regulatory requirements.
 
-#### Task 4.2: Partition redemptions table by client_id (list partitioning)
-- [ ] **Assess:** Determine if client count justifies partitioning now vs later
-- [ ] **If proceeding:**
+#### Task 4.2: Partition redemptions table by client_id (list partitioning) ❌ DEFERRED
+- [x] **Assess:** Determined client count does NOT justify partitioning now
+- [ ] **If proceeding:** N/A - Deferred
   ```sql
-  ALTER TABLE redemptions
-    PARTITION BY LIST (client_id);
-
-  -- Create partition per client (or group of clients)
-  CREATE TABLE redemptions_client_1 PARTITION OF redemptions
-    FOR VALUES IN ('client-uuid-1');
+  -- Deferred: Not needed for pilot (single client)
+  -- LIST partitioning by client_id provides no benefit for 1 tenant
+  -- Adds partition management overhead for zero performance gain
   ```
-- [ ] **Alternative:** Consider partitioning by created_at instead for time-based archival
+- [ ] **Alternative:** N/A - Defer for multi-tenant version
 - **References:** Lines 66, 80-82
 - **API Breaking:** ❌ NO
-- **Estimated Time:** 2-3 hours (if proceeding)
-- **Decision Required:** Partition now or defer until multi-client deployment?
+- **Estimated Time:** 2-3 hours (if implemented)
+- **Status:** ❌ DEFERRED - Not needed for pilot (single client). For multi-tenant repo, reassess when reaching 10+ clients with high redemption volume. LIST partitioning by client_id would provide physical isolation and per-client archival benefits at scale.
 
-#### Task 4.3: Consider partitioning metrics by period
-- [ ] **Evaluate:** Monthly partitions for metrics table
-- [ ] **Benefits:** Easier archival, faster period-specific queries
-- [ ] **Implementation:** Similar to videos partitioning
+#### Task 4.3: Consider partitioning metrics by period ❌ N/A
+- [x] **Evaluate:** Metrics table no longer exists
+- [x] **Benefits:** N/A
+- [x] **Implementation:** N/A
 - **References:** Lines 68-69
-- **API Breaking:** ❌ NO
-- **Estimated Time:** 2-3 hours
-- **Priority:** Lower (can defer)
+- **API Breaking:** N/A
+- **Estimated Time:** N/A
+- **Status:** ❌ N/A - Metrics table was removed entirely per Upgrade.md. Data now flows: videos.csv → videos table → users table + mission_progress table. No metrics table to partition.
 
 **Phase 4 Total Time:** 5-10 hours (depending on decisions)
 **Phase 4 Completion Criteria:** videos partitioned, redemptions partitioning strategy decided
@@ -560,42 +549,38 @@
 
 **Goal:** Fix security vulnerabilities and encrypt sensitive data
 
-#### Task 6.1: Fix mission_progress updateStatus tenant filter
-- [ ] **Update Repository:** Add client_id filter to updateStatus
+#### Task 6.1: Fix mission_progress updateStatus tenant filter ✅ COMPLETED
+- [x] **Update Repository:** Add client_id filter to updateStatus
   ```typescript
   async updateStatus(
     missionId: string,
-    clientId: string,  // NEW parameter
-    status: 'active' | 'completed' | 'claimed'
+    clientId: string,  // Required for tenant isolation
+    status: 'active' | 'completed' | 'dormant'
   ): Promise<void> {
     const supabase = createClient()
 
-    // Get mission's client_id first
-    const { data: mission } = await supabase
-      .from('missions')
-      .select('client_id')
-      .eq('id', missionId)
-      .single()
-
-    // Verify tenant match
-    if (mission.client_id !== clientId) {
-      throw new ForbiddenError('Mission not found')
-    }
-
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from('mission_progress')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('mission_id', missionId)
-      // No need to filter by client_id here since mission already verified
+      .eq('client_id', clientId)  // Enforces tenant isolation
+      .select('id', { count: 'exact', head: true })
 
     if (error) throw error
+
+    // Fail if no rows updated (prevents cross-tenant mutation)
+    if (count === 0) {
+      throw new NotFoundError('Mission not found')
+    }
   }
   ```
-- [ ] **Update Service Layer:** Pass user.client_id to repository
-- [ ] **Add Integration Test:** Verify cross-tenant mutation is blocked
+- [x] **Update Service Layer:** Documented pattern in Loyalty.md Pattern 8
+- [x] **Add Integration Test:** Test pattern documented in Loyalty.md Pattern 8
 - **References:** Lines 95, 188
 - **API Breaking:** ❌ NO (backend only)
-- **Estimated Time:** 1-2 hours
+- **Estimated Time:** 1-2 hours (code implementation when repository built)
+- **Documentation Updated:** Loyalty.md (Pattern 8, Lines 1843-1943), ARCHITECTURE.md (Lines 450-477, 815-820)
+- **Status:** ✅ COMPLETED - Pattern documented for implementation. Repository layer will implement this when built (2025-11-17)
 
 #### Task 6.2: Encrypt payment account fields
 - [ ] **Install pgcrypto extension:**

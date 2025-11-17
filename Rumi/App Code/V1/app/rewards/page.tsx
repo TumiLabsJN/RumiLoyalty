@@ -1,5 +1,4 @@
 "use client";
-import * as React from "react";
 import { useState } from "react";
 import {
   Trophy,
@@ -21,17 +20,16 @@ import { ScheduleDiscountModal } from "@/components/schedule-discount-modal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { FlippableCard, FlipFrontSide, FlipBackSide, FlipInfoButton } from "@/components/FlippableCard";
 
 export default function RewardsPage() {
-      // Test scenario state
-      const [activeScenario, setActiveScenario] = useState("scenario-1");
-      const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+      // API delay constants (milliseconds)
+      const CLAIM_DELAY_MS = 2000;
+      const SCHEDULE_DELAY_MS = 1500;
+      const AUTO_FLIP_DELAY_MS = 6000;
 
       const [showScheduleModal, setShowScheduleModal] = useState(false);
       const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
-
-      // Track which benefit cards are flipped (for info button)
-      const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
 
       const handleRedeemClick = async (benefit: any) => {
         console.log("[v0] Redeem clicked for benefit:", benefit.id)
@@ -52,7 +50,7 @@ export default function RewardsPage() {
           // TODO: POST /api/benefits/:id/claim
           // Backend will update benefit.status to 'claimed'
           // This will trigger the "Processing..." badge to appear
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, CLAIM_DELAY_MS))
 
           toast.success("Reward claimed!", {
             description: "You'll receive it within 24 hours",
@@ -76,7 +74,7 @@ export default function RewardsPage() {
           // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
 
           // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1500))
+          await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
 
           // Show success message
           const dateStr = scheduledDate.toLocaleDateString("en-US", {
@@ -178,460 +176,67 @@ export default function RewardsPage() {
         }
       };
 
-      /**
-       * TEST SCENARIOS - Discount Scheduling Feature
-       */
-      const scenarios = {
-        "scenario-1": {
-          name: "Default - Single Discount (10%)",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: "tier_2",
-            },
-            {
-              id: "b5",
-              type: "discount",
-              name: "Deal Boost: 10%",
-              description: "10% follower discount (scheduled activation)",
-              value_data: { percent: 10, duration_days: 7 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b3",
-              type: "spark_ads",
-              name: "Reach Boost: $100",
-              description: "$100 USD in Spark Ads budget",
-              value_data: { amount: 100 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 3,
-              used_count: 1,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-          ],
-        },
-        "scenario-2": {
-          name: "Multiple Discounts (10%, 15%, 20%)",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b5",
-              type: "discount",
-              name: "Deal Boost: 10%",
-              description: "10% follower discount",
-              value_data: { percent: 10, duration_days: 7 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b6",
-              type: "discount",
-              name: "Deal Boost: 15%",
-              description: "15% follower discount",
-              value_data: { percent: 15, duration_days: 14 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b7",
-              type: "discount",
-              name: "Deal Boost: 20%",
-              description: "20% follower discount",
-              value_data: { percent: 20, duration_days: 30 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-          ],
-        },
-        "scenario-3": {
-          name: "Discount Limit Reached",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: "tier_2",
-            },
-            {
-              id: "b5",
-              type: "discount",
-              name: "Deal Boost: 10%",
-              description: "10% follower discount",
-              value_data: { percent: 10, duration_days: 7 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 1, // Already used!
-              can_claim: false, // Cannot claim
-              is_locked: false,
-              preview_from_tier: null,
-            },
-          ],
-        },
-        "scenario-4": {
-          name: "Locked Discount (Platinum Only)",
-          currentTier: "tier_2", // Silver user
-          redemptionCount: 3,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $25",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 25 },
-              tier_eligibility: "tier_2",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b7",
-              type: "discount",
-              name: "Deal Boost: 20%",
-              description: "20% follower discount",
-              value_data: { percent: 20, duration_days: 30 },
-              tier_eligibility: "tier_4", // Platinum only
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: false,
-              is_locked: true, // Locked!
-              preview_from_tier: "tier_2", // Silver can preview
-            },
-          ],
-        },
-        "scenario-5": {
-          name: "No Discounts - Other Rewards Only",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: "tier_2",
-            },
-            {
-              id: "b2",
-              type: "commission_boost",
-              name: "Pay Boost: 5%",
-              description: "Increase commission for 30 days",
-              value_data: { percent: 5, duration_days: 30 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b3",
-              type: "spark_ads",
-              name: "Reach Boost: $100",
-              description: "$100 USD in Spark Ads budget",
-              value_data: { amount: 100 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 3,
-              used_count: 1,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b4",
-              type: "physical_gift",
-              name: "Gift Drop: Wireless Headphones",
-              description: "Wireless Headphones",
-              value_data: null,
-              tier_eligibility: "tier_3",
-              redemption_frequency: "one-time",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-          ],
-        },
-        "scenario-6": {
-          name: "TEST: Redeeming Status (All Types)",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b2",
-              type: "commission_boost",
-              name: "Pay Boost: 5%",
-              description: "Increase commission for 30 days",
-              value_data: { percent: 5, duration_days: 30 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b3",
-              type: "spark_ads",
-              name: "Reach Boost: $100",
-              description: "$100 USD in Spark Ads budget",
-              value_data: { amount: 100 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 3,
-              used_count: 1,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b4",
-              type: "physical_gift",
-              name: "Gift Drop: Wireless Headphones",
-              description: "Wireless Headphones",
-              value_data: null,
-              tier_eligibility: "tier_3",
-              redemption_frequency: "one-time",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-            {
-              id: "b5",
-              type: "experience",
-              name: "Mystery Trip: VIP Event Access",
-              description: "VIP Event",
-              value_data: null,
-              tier_eligibility: "tier_3",
-              redemption_frequency: "one-time",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-            },
-          ],
-        },
-        "scenario-7": {
-          name: "All 6 Reward Types",
-          currentTier: "tier_3",
-          redemptionCount: 8,
-          benefits: [
-            {
-              id: "b1",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-            {
-              id: "b2",
-              type: "commission_boost",
-              name: "Pay Boost: 5%",
-              description: "More commission for 30 days",
-              value_data: { percent: 5, duration_days: 30 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-            {
-              id: "b3",
-              type: "spark_ads",
-              name: "Reach Boost: $100",
-              description: "In Spark Ads for more visibility",
-              value_data: { amount: 100 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 3,
-              used_count: 1,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimed",
-            },
-            {
-              id: "b4",
-              type: "physical_gift",
-              name: "Gift Drop: Wireless Headphones",
-              description: "Claim your Gift!",
-              value_data: null,
-              tier_eligibility: "tier_3",
-              redemption_frequency: "one-time",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-            {
-              id: "b5",
-              type: "discount",
-              name: "Deal Boost: 10%",
-              description: "Earn a discount for your viewers",
-              value_data: { percent: 10, duration_days: 7 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-            {
-              id: "b6",
-              type: "experience",
-              name: "Mystery Trip",
-              description: "Reach Gold to find out!",
-              value_data: null,
-              tier_eligibility: "tier_3",
-              redemption_frequency: "one-time",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-          ],
-        },
-        "scenario-8": {
-          name: "Commission Boost - Clearing",
-          currentTier: "tier_3",
-          redemptionCount: 5,
-          benefits: [
-            {
-              id: "b1",
-              type: "commission_boost",
-              name: "Pay Boost: 5%",
-              description: "More commission for 30 days",
-              value_data: { percent: 5, duration_days: 30 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 1,
-              used_count: 0,
-              can_claim: false,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimed",
-              boost_status: "pending_payout",
-            },
-            {
-              id: "b2",
-              type: "gift_card",
-              name: "Gift Card: $50",
-              description: "Redeem for Amazon gift card",
-              value_data: { amount: 50 },
-              tier_eligibility: "tier_3",
-              redemption_frequency: "monthly",
-              redemption_quantity: 2,
-              used_count: 0,
-              can_claim: true,
-              is_locked: false,
-              preview_from_tier: null,
-              status: "claimable",
-            },
-          ],
-        },
+      // Get display name for tier
+      const getTierDisplayName = (tier: string): string => {
+        switch (tier) {
+          case "tier_1":
+            return "Bronze";
+          case "tier_2":
+            return "Silver";
+          case "tier_3":
+            return "Gold";
+          case "tier_4":
+            return "Platinum";
+          default:
+            return "Unknown";
+        }
       };
 
-      // Get current scenario data
-      const currentScenario = scenarios[activeScenario as keyof typeof scenarios];
-      const currentTier = currentScenario.currentTier;
-      const redemptionCount = currentScenario.redemptionCount;
-      const benefits = currentScenario.benefits;
+      /**
+       * TEST DATA - Minimal scenario for flip card testing
+       * Full test scenarios available in /home/jorge/Loyalty/Rumi/RewardsTestScenarios.md
+       */
+      const testData = {
+        currentTier: "tier_3",
+        redemptionCount: 5,
+        benefits: [
+          {
+            id: "b1",
+            type: "commission_boost",
+            name: "Pay Boost: 5%",
+            description: "More commission for 30 days",
+            value_data: { percent: 5, duration_days: 30 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 3,
+            used_count: 1,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed",
+            boost_status: "pending_payout",  // For testing flip card
+          },
+          {
+            id: "b2",
+            type: "gift_card",
+            name: "Gift Card: $50",
+            description: "Redeem for Amazon gift card",
+            value_data: { amount: 50 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 2,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable",
+          },
+        ],
+      };
+
+      const currentTier = testData.currentTier;
+      const redemptionCount = testData.redemptionCount;
+      const benefits = testData.benefits;
 
       // Tier colors (matches VIP level)
       const tierColors = {
@@ -684,73 +289,19 @@ export default function RewardsPage() {
           const bIsIneligible = b.is_locked || !b.can_claim;
 
           // Sort: Eligible first, ineligible last
-          if (aIsIneligible && !bIsIneligible) return 1
-          if (!aIsIneligible && bIsIneligible) return -1
-          return 0
+          if (aIsIneligible && !bIsIneligible) return 1;
+          if (!aIsIneligible && bIsIneligible) return -1;
+          return 0;
         });
 
       return (
-        <>
-          {/* Test Scenarios Toggle Button */}
-          <button
-            onClick={() => setDebugPanelOpen(!debugPanelOpen)}
-            className="fixed top-4 right-4 z-50 bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-2xl border-2 border-white"
-            aria-label="Toggle test scenarios"
-          >
-            🧪
-          </button>
-
-          {/* Test Scenarios Panel */}
-          {debugPanelOpen && (
-            <div className="fixed top-16 right-4 z-50 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border-2 border-purple-500 p-4 w-64 max-h-[70vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  🧪 Test Scenarios
-                  <span className="text-xs text-slate-500">({Object.keys(scenarios).length})</span>
-                </h3>
-                <button
-                  onClick={() => setDebugPanelOpen(false)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-1.5">
-                {Object.entries(scenarios).map(([key, scenario]) => (
-                  <Button
-                    key={key}
-                    onClick={() => setActiveScenario(key)}
-                    variant={activeScenario === key ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "w-full justify-start text-xs h-auto py-2 px-3",
-                      activeScenario === key && "bg-purple-600 hover:bg-purple-700"
-                    )}
-                  >
-                    <span className="font-semibold truncate w-full text-left">
-                      {scenario.name}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-
-              <div className="mt-3 pt-3 border-t border-slate-200">
-                <p className="text-xs text-slate-600">
-                  <span className="font-semibold">Active:</span> {currentScenario.name}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Original Page Content */}
-          <PageLayout
+        <PageLayout
             title="Rewards"
             headerContent={
               <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/30">
                 <Trophy className="w-5 h-5" style={{ color: currentTierColor }} />
                 <span className="text-base font-semibold text-white">
-                  {currentTier === "tier_1" ? "Bronze" : currentTier === "tier_2" ? "Silver" : currentTier === "tier_3" ? "Gold" : "Platinum"}
+                  {getTierDisplayName(currentTier)}
                 </span>
               </div>
             }
@@ -769,10 +320,7 @@ export default function RewardsPage() {
               );
 
               // Get tier display name for locked badge
-              const requiredTierName = benefit.tier_eligibility === "tier_1" ? "Bronze"
-                : benefit.tier_eligibility === "tier_2" ? "Silver"
-                : benefit.tier_eligibility === "tier_3" ? "Gold"
-                : "Platinum";
+              const requiredTierName = getTierDisplayName(benefit.tier_eligibility);
 
               // Check if this is a commission boost in clearing status
               const isClearing = benefit.type === "commission_boost" &&
@@ -780,53 +328,41 @@ export default function RewardsPage() {
                                 benefit.boost_status === "pending_payout";
 
               return (
-                <div key={benefit.id} className="relative w-full" style={{ perspective: '1000px' }}>
-                  <div
-                    className="relative w-full transition-transform duration-600 ease-in-out"
-                    style={{
-                      transformStyle: 'preserve-3d',
-                      transform: flippedCards[benefit.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
-                    }}
-                  >
-                    {/* FRONT SIDE */}
-                    <div style={{ backfaceVisibility: 'hidden' }}>
-                      <div className={cardClass}>
-                        <div className="flex items-center gap-3">
-                          {/* ALWAYS show benefit icon (not lock) */}
-                          {getIconForBenefitType(benefit.type)}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-semibold text-slate-900">
-                                {getBenefitName(benefit.type, benefit.name, benefit.description)}
-                              </h4>
-                              {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
-                              {benefit.redemption_quantity && benefit.redemption_quantity > 1 && !benefit.is_locked && (
-                                <span className="text-xs text-slate-500 font-medium">
-                                  {benefit.used_count}/{benefit.redemption_quantity}
-                                </span>
+                <FlippableCard key={benefit.id} id={benefit.id} autoFlipDelay={AUTO_FLIP_DELAY_MS}>
+                  {({ flip, flipBack, isFlipped }) => (
+                    <>
+                      <FlipFrontSide>
+                        <div className={cardClass}>
+                          <div className="flex items-center gap-3">
+                            {/* ALWAYS show benefit icon (not lock) */}
+                            {getIconForBenefitType(benefit.type)}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-semibold text-slate-900">
+                                  {getBenefitName(benefit.type, benefit.name, benefit.description)}
+                                </h4>
+                                {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
+                                {benefit.redemption_quantity && benefit.redemption_quantity > 1 && !benefit.is_locked && (
+                                  <span className="text-xs text-slate-500 font-medium">
+                                    {benefit.used_count}/{benefit.redemption_quantity}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-600">
+                                {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
+                              </p>
+
+                              {!benefit.can_claim && !benefit.is_locked && (
+                                <p className="text-xs text-amber-600 font-medium mt-1">Limit reached</p>
                               )}
                             </div>
-                            <p className="text-xs text-slate-600">
-                              {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
-                            </p>
-
-                            {!benefit.can_claim && !benefit.is_locked && (
-                              <p className="text-xs text-amber-600 font-medium mt-1">Limit reached</p>
-                            )}
                           </div>
-                        </div>
 
-                        {/* RIGHT SIDE: Action Buttons & Status Badges */}
-                        <div className="flex items-center gap-2">
-                          {/* INFO ICON: Only for Clearing status */}
-                          {isClearing && (
-                              <button
-                                onClick={() => setFlippedCards(prev => ({ ...prev, [benefit.id]: !prev[benefit.id] }))}
-                                className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-blue-100 transition-colors"
-                                aria-label="More information"
-                              >
-                                <Info className="h-4 w-4 text-blue-500" />
-                              </button>
+                          {/* RIGHT SIDE: Action Buttons & Status Badges */}
+                          <div className="flex items-center gap-2">
+                            {/* INFO ICON: Only for Clearing status */}
+                            {isClearing && (
+                              <FlipInfoButton onClick={flip} />
                             )}
 
                             {/* STATUS BADGE: Clearing (Commission Boost Pending Payout) */}
@@ -851,7 +387,7 @@ export default function RewardsPage() {
                                 onClick={() => handleRedeemClick(benefit)}
                                 className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-sm px-4 py-2 rounded-lg font-medium"
                               >
-                                {benefit.type === "discount" ? "Schedule" : "Claim"}
+                                {(benefit.type === "discount" || benefit.type === "commission_boost") ? "Schedule" : "Claim"}
                               </Button>
                             )}
 
@@ -871,36 +407,21 @@ export default function RewardsPage() {
                             )}
                           </div>
                         </div>
-                      </div>
-                    </div>
+                      </FlipFrontSide>
 
-                    {/* BACK SIDE: Info explanation */}
-                    {isClearing && (
-                      <div
-                        className="absolute top-0 left-0 w-full"
-                        style={{
-                          backfaceVisibility: 'hidden',
-                          transform: 'rotateY(180deg)',
-                        }}
-                      >
-                        <div className={cn(cardClass, "flex-col items-start gap-3")}>
-                          <div className="flex items-center justify-between w-full">
-                            <h4 className="text-sm font-semibold text-slate-900">Why is this clearing?</h4>
-                            <button
-                              onClick={() => setFlippedCards(prev => ({ ...prev, [benefit.id]: false }))}
-                              className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-slate-100 transition-colors"
-                              aria-label="Close"
-                            >
-                              <Info className="h-4 w-4 text-slate-500" />
-                            </button>
+                      {/* BACK SIDE: Info explanation */}
+                      {isClearing && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center justify-center p-4 rounded-lg border bg-slate-50 border-slate-200 min-h-[88px]">
+                            <p className="text-xs text-slate-600 leading-snug text-center max-w-full">
+                              Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
+                            </p>
                           </div>
-                          <p className="text-sm text-slate-600 leading-relaxed">
-                            Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                        </FlipBackSide>
+                      )}
+                    </>
+                  )}
+                </FlippableCard>
               )
             })}
           </div>
@@ -936,6 +457,5 @@ export default function RewardsPage() {
             />
           )}
         </PageLayout>
-      </>
-    )
+      )
   }

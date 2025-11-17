@@ -266,6 +266,7 @@ CREATE TABLE videos (
 
 CREATE INDEX idx_videos_user_id ON videos(user_id);
 CREATE INDEX idx_videos_post_date ON videos(post_date);
+CREATE INDEX idx_videos_user_postdate ON videos(user_id, post_date);
 CREATE UNIQUE INDEX idx_videos_url ON videos(video_url);
 
 -- Rewards table (configurable rewards per client)
@@ -1836,6 +1837,108 @@ Commission Boost Timeline:
 - Admin debugging: "Why is this boost stuck in pending_info?"
 - Compliance audit: "Show all payouts in Q1 2025"
 - Analytics: "Average time from expiration to payout"
+
+---
+
+### Pattern 8: Multi-Tenant Query Isolation (Cross-Tenant Mutation Prevention)
+
+**Problem:** Repository methods that update/delete by ID only (without client_id verification) allow cross-tenant mutations. An attacker who guesses another tenant's UUID can modify their data.
+
+**Attack Scenario:**
+```typescript
+// Vulnerable code - updates ANY mission_id without tenant check
+await missionRepository.updateStatus('uuid-from-tenant-B', 'completed')
+// ❌ Cross-tenant mutation! Attacker from Tenant A modified Tenant B's mission
+```
+
+**Solution:** ALWAYS filter UPDATE/DELETE queries by BOTH the primary key AND client_id.
+
+**Schema Requirements:**
+- All tenant-scoped tables MUST have `client_id UUID NOT NULL REFERENCES clients(id)` (already implemented in Phase 1)
+- Composite indexes on (client_id, id) for fast lookups
+
+**Implementation Pattern:**
+
+```typescript
+// CORRECT: Repository method with tenant isolation
+async updateStatus(
+  missionId: string,
+  clientId: string,  // Always require client_id parameter
+  status: 'active' | 'completed' | 'dormant'
+): Promise<void> {
+  const supabase = createClient()
+
+  // Update with compound WHERE filter
+  const { error, count } = await supabase
+    .from('mission_progress')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('mission_id', missionId)
+    .eq('client_id', clientId)  // ← Enforces tenant isolation
+    .select('id', { count: 'exact', head: true })
+
+  if (error) throw error
+
+  // Fail if no rows updated (mission doesn't exist OR wrong tenant)
+  if (count === 0) {
+    throw new NotFoundError('Mission not found')
+  }
+}
+```
+
+**Service Layer Integration:**
+```typescript
+// lib/services/missionService.ts
+export async function completeMission(userId: string, missionId: string): Promise<void> {
+  // 1. Get user's client_id
+  const user = await userRepository.findById(userId)
+
+  // 2. Pass client_id to repository (tenant verification)
+  await missionRepository.updateStatus(missionId, user.client_id, 'completed')
+}
+```
+
+**Why This Works:**
+1. ✅ **Database enforces isolation:** WHERE clause filters by tenant at query level
+2. ✅ **No extra SELECT:** Single UPDATE query (better performance than verification-first approach)
+3. ✅ **Secure error handling:** Returns "not found" for both missing records AND cross-tenant attempts (doesn't leak existence)
+4. ✅ **Leverages Phase 1:** Uses existing client_id columns added for multi-tenant support
+
+**Security Principle:**
+> "Defense in depth - verify tenant ownership at EVERY data access boundary"
+
+Even if application logic is bypassed, the database query will NOT modify another tenant's data.
+
+---
+
+**Benefits:**
+
+- ✅ **Prevents IDOR attacks** (Insecure Direct Object Reference - OWASP #1)
+- ✅ **Zero trust architecture** - Never assume caller verified tenant
+- ✅ **Single query performance** - No extra SELECT needed
+- ✅ **Fail-safe** - Wrong client_id = zero rows updated = operation fails
+- ✅ **Audit-friendly** - Clear in logs which tenant attempted the operation
+
+**Where to Apply:**
+- ALL repository UPDATE methods (updateStatus, markComplete, softDelete, etc.)
+- ALL repository DELETE methods (remove, archive, etc.)
+- ANY mutation on tenant-scoped tables (missions, rewards, redemptions, users, etc.)
+
+**Testing Pattern:**
+```typescript
+// Test cross-tenant mutation prevention
+it('should NOT allow updating mission from different tenant', async () => {
+  const mission = await createMission({ client_id: 'tenant-A' })
+
+  // Attempt to update from Tenant B
+  await expect(
+    missionRepository.updateStatus(mission.id, 'tenant-B', 'completed')
+  ).rejects.toThrow('Mission not found')
+
+  // Verify mission unchanged
+  const unchanged = await missionRepository.findById(mission.id)
+  expect(unchanged.status).toBe('active') // Still original status
+})
+```
 
 ---
 
