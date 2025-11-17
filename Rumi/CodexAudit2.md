@@ -582,25 +582,20 @@
 - **Documentation Updated:** Loyalty.md (Pattern 8, Lines 1843-1943), ARCHITECTURE.md (Lines 450-477, 815-820)
 - **Status:** ✅ COMPLETED - Pattern documented for implementation. Repository layer will implement this when built (2025-11-17)
 
-#### Task 6.2: Encrypt payment account fields
-- [ ] **Install pgcrypto extension:**
-  ```sql
-  CREATE EXTENSION IF NOT EXISTS pgcrypto;
-  ```
-- [ ] **Option A - Column-level encryption (requires schema change):**
-  ```sql
-  ALTER TABLE commission_boost_redemptions
-    ALTER COLUMN payment_account TYPE bytea
-    USING pgp_sym_encrypt(payment_account, current_setting('app.encryption_key'));
-  ```
-- [ ] **Option B - Application-level encryption (no schema change):**
-  - Encrypt in service layer before INSERT
-  - Decrypt in service layer after SELECT
-- [ ] **Update Repository:** Add encryption/decryption logic
-- [ ] **Secure Key Storage:** Store encryption key in environment variable, not code
+#### Task 6.2: Encrypt payment account fields ✅ COMPLETED
+- [x] **Install pgcrypto extension:** Not needed - using application-level encryption
+- [x] **Option A - Column-level encryption:** Not selected
+- [x] **Option B - Application-level encryption:** ✅ SELECTED (no schema change)
+  - Encrypt in repository layer before INSERT/UPDATE
+  - Decrypt in repository layer after SELECT
+  - Uses Node.js crypto (AES-256-GCM)
+- [x] **Update Repository:** Pattern documented with encrypt/decrypt example
+- [x] **Secure Key Storage:** Documented - store in .env as ENCRYPTION_KEY (32-byte hex)
 - **References:** Lines 130, 197
 - **API Breaking:** ❌ NO (transparent to API)
-- **Estimated Time:** 3-4 hours
+- **Estimated Time:** 3-4 hours (code implementation when repository built)
+- **Documentation Updated:** Loyalty.md (Pattern 9, Lines 1945-2181), ARCHITECTURE.md (Encryption example Lines 483-556, Checklist Line 898)
+- **Status:** ✅ COMPLETED - Pattern documented for implementation. Encryption utilities (lib/utils/encryption.ts) and repository methods will implement this when built (2025-11-17)
 
 #### Task 6.3: Validate TikTok handles before API calls
 - [ ] **Add Validation Function:**

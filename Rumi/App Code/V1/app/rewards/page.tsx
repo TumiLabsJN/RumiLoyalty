@@ -13,10 +13,13 @@ import {
   Palmtree,
   ClockArrowDown,
   Info,
+  Calendar,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/pagelayout";
 import { ScheduleDiscountModal } from "@/components/schedule-discount-modal";
+import { SchedulePayboostModal } from "@/components/schedule-payboost-modal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -30,11 +33,13 @@ export default function RewardsPage() {
 
       const [showScheduleModal, setShowScheduleModal] = useState(false);
       const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
+      const [showPayboostModal, setShowPayboostModal] = useState(false);
+      const [selectedPayboost, setSelectedPayboost] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
 
       const handleRedeemClick = async (benefit: any) => {
         console.log("[v0] Redeem clicked for benefit:", benefit.id)
 
-        // If discount type, open scheduling modal
+        // If discount type, open discount scheduling modal
         if (benefit.type === "discount") {
           setSelectedDiscount({
             id: benefit.id,
@@ -42,6 +47,17 @@ export default function RewardsPage() {
             durationDays: benefit.value_data?.duration_days || 30,
           })
           setShowScheduleModal(true)
+          return
+        }
+
+        // If commission boost type, open payboost scheduling modal
+        if (benefit.type === "commission_boost") {
+          setSelectedPayboost({
+            id: benefit.id,
+            percent: benefit.value_data?.percent || 0,
+            durationDays: benefit.value_data?.duration_days || 30,
+          })
+          setShowPayboostModal(true)
           return
         }
 
@@ -97,6 +113,40 @@ export default function RewardsPage() {
         } catch (error) {
           console.error("Failed to schedule discount:", error)
           toast.error("Failed to schedule discount", {
+            description: "Please try again or contact support",
+            duration: 5000,
+          })
+        }
+      }
+
+      const handleSchedulePayboost = async (scheduledDate: Date) => {
+        if (!selectedPayboost) return
+
+        console.log("[v0] Schedule payboost for:", selectedPayboost.id, scheduledDate.toISOString())
+
+        try {
+          // TODO: POST /api/benefits/:id/claim
+          // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
+
+          // Simulate API call
+          await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
+
+          // Show success message
+          const dateStr = scheduledDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
+
+          toast.success(`Pay Boost scheduled for ${dateStr} at 6:00 PM ET`, {
+            description: "We'll activate your commission boost at this time",
+            duration: 5000,
+          })
+
+          // Reset selected payboost
+          setSelectedPayboost(null)
+        } catch (error) {
+          console.error("Failed to schedule pay boost:", error)
+          toast.error("Failed to schedule pay boost", {
             description: "Please try again or contact support",
             duration: 5000,
           })
@@ -192,6 +242,26 @@ export default function RewardsPage() {
         }
       };
 
+      // Format scheduled date/time for display
+      const formatScheduledDateTime = (date: Date, type: string): string => {
+        const dateStr = date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+
+        if (type === "commission_boost") {
+          return `${dateStr}, 6:00 PM ET`;
+        }
+
+        const timeStr = date.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "America/New_York",
+        });
+        return `${dateStr}, ${timeStr}`;
+      };
+
       /**
        * TEST DATA - Minimal scenario for flip card testing
        * Full test scenarios available in /home/jorge/Loyalty/Rumi/RewardsTestScenarios.md
@@ -230,6 +300,54 @@ export default function RewardsPage() {
             is_locked: false,
             preview_from_tier: null,
             status: "claimable",
+          },
+          {
+            id: "b3",
+            type: "commission_boost",
+            name: "Pay Boost: 10%",
+            description: "More commission for 30 days",
+            value_data: { percent: 10, duration_days: 30 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 3,
+            used_count: 1,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable",  // Changed to claimable for testing schedule modal
+          },
+          {
+            id: "b4",
+            type: "discount",
+            name: "Deal Boost: 15%",
+            description: "Earn a discount for your viewers",
+            value_data: { percent: 15, duration_days: 7 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 2,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed",
+            scheduled_activation_date: new Date("2025-01-20T14:30:00-05:00"), // Jan 20 at 2:30 PM EST
+          },
+          {
+            id: "b5",
+            type: "commission_boost",
+            name: "Pay Boost: 10%",
+            description: "More commission for 30 days",
+            value_data: { percent: 10, duration_days: 30 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 3,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed",
+            activation_date: new Date("2025-11-01T18:00:00-05:00"), // Nov 1 at 6:00 PM EST (in the past)
+            expiration_date: new Date("2025-11-30T18:00:00-05:00"),  // Nov 30 at 6:00 PM EST (in the future)
           },
         ],
       };
@@ -312,13 +430,6 @@ export default function RewardsPage() {
           {/* Benefit Cards */}
           <div className="space-y-3">
             {displayBenefits.map((benefit) => {
-              const cardClass = cn(
-                "flex items-center justify-between p-4 rounded-lg border",
-                benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
-                !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
-                benefit.is_locked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
-              );
-
               // Get tier display name for locked badge
               const requiredTierName = getTierDisplayName(benefit.tier_eligibility);
 
@@ -326,6 +437,27 @@ export default function RewardsPage() {
               const isClearing = benefit.type === "commission_boost" &&
                                 benefit.status === "claimed" &&
                                 benefit.boost_status === "pending_payout";
+
+              // Check if this is a scheduled benefit (discount or commission boost)
+              const isScheduled = benefit.status === "claimed" &&
+                                 benefit.scheduled_activation_date &&
+                                 (benefit.type === "discount" || benefit.type === "commission_boost");
+
+              // Check if this is an active benefit (discount or commission boost currently running)
+              const isActive = benefit.status === "claimed" &&
+                              benefit.activation_date &&
+                              benefit.expiration_date &&
+                              (benefit.type === "discount" || benefit.type === "commission_boost") &&
+                              new Date() >= new Date(benefit.activation_date) &&
+                              new Date() <= new Date(benefit.expiration_date);
+
+              const cardClass = cn(
+                "flex items-center justify-between p-4 rounded-lg border",
+                isActive && "bg-green-50 border-green-200",
+                !isActive && benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
+                !isActive && !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
+                benefit.is_locked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
+              );
 
               return (
                 <FlippableCard key={benefit.id} id={benefit.id} autoFlipDelay={AUTO_FLIP_DELAY_MS}>
@@ -360,8 +492,8 @@ export default function RewardsPage() {
 
                           {/* RIGHT SIDE: Action Buttons & Status Badges */}
                           <div className="flex items-center gap-2">
-                            {/* INFO ICON: Only for Clearing status */}
-                            {isClearing && (
+                            {/* INFO ICON: For Clearing, Scheduled, or Active status */}
+                            {(isClearing || isScheduled || isActive) && (
                               <FlipInfoButton onClick={flip} />
                             )}
 
@@ -373,15 +505,32 @@ export default function RewardsPage() {
                               </div>
                             )}
 
+                            {/* STATUS BADGE: Scheduled (Discount or Commission Boost) */}
+                            {isScheduled && !isClearing && !isActive && (
+                              <div className="flex items-center gap-2 bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <Calendar className="h-4 w-4 text-purple-500" />
+                                Scheduled
+                              </div>
+                            )}
+
+                            {/* STATUS BADGE: Active (Discount or Commission Boost Currently Running) */}
+                            {isActive && !isClearing && (
+                              <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                Active
+                              </div>
+                            )}
+
                             {/* STATUS BADGE: Redeeming (Processing) */}
-                            {benefit.status === "claimed" && !isClearing && (
+                            {benefit.status === "claimed" && !isClearing && !isScheduled && !isActive && (
                               <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3 py-2 rounded-lg text-xs font-medium">
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 Processing...
                               </div>
                             )}
 
-                            {/* ACTION BUTTON: Claim or Schedule */}
+                            {/* STATUS BADGE: Default Claim - Action button shows "Claim" */}
+                            {/* STATUS BADGE: Default Schedule - Action button shows "Schedule" */}
                             {benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
                               <Button
                                 onClick={() => handleRedeemClick(benefit)}
@@ -409,13 +558,54 @@ export default function RewardsPage() {
                         </div>
                       </FlipFrontSide>
 
-                      {/* BACK SIDE: Info explanation */}
+                      {/* BACK SIDE: Clearing explanation */}
                       {isClearing && (
                         <FlipBackSide onClick={flipBack}>
                           <div className="flex items-center justify-center p-4 rounded-lg border bg-slate-50 border-slate-200 min-h-[88px]">
                             <p className="text-xs text-slate-600 leading-snug text-center max-w-full">
                               Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
                             </p>
+                          </div>
+                        </FlipBackSide>
+                      )}
+
+                      {/* BACK SIDE: Scheduled details */}
+                      {isScheduled && !isClearing && !isActive && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center p-4 rounded-lg border bg-purple-50 border-purple-200">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Calendar className="h-4 w-4 text-purple-500" />
+                                <p className="text-xs font-semibold text-purple-700">
+                                  {formatScheduledDateTime(benefit.scheduled_activation_date, benefit.type)}
+                                </p>
+                              </div>
+                              <p className="text-xs text-slate-600">
+                                Will be active for {benefit.value_data?.duration_days || 30} days
+                              </p>
+                            </div>
+                          </div>
+                        </FlipBackSide>
+                      )}
+
+                      {/* BACK SIDE: Active details */}
+                      {isActive && !isClearing && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center p-4 rounded-lg border bg-green-50 border-green-200">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-xs text-slate-600">Started:</p>
+                                <p className="text-xs font-semibold text-green-700">
+                                  {formatScheduledDateTime(benefit.activation_date, benefit.type)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-slate-600">Expires:</p>
+                                <p className="text-xs font-semibold text-green-700">
+                                  {formatScheduledDateTime(benefit.expiration_date, benefit.type)}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </FlipBackSide>
                       )}
@@ -454,6 +644,20 @@ export default function RewardsPage() {
               onConfirm={handleScheduleDiscount}
               discountPercent={selectedDiscount.percent}
               durationDays={selectedDiscount.durationDays}
+            />
+          )}
+
+          {/* Schedule Payboost Modal */}
+          {selectedPayboost && (
+            <SchedulePayboostModal
+              open={showPayboostModal}
+              onClose={() => {
+                setShowPayboostModal(false)
+                setSelectedPayboost(null)
+              }}
+              onConfirm={handleSchedulePayboost}
+              boostPercent={selectedPayboost.percent}
+              durationDays={selectedPayboost.durationDays}
             />
           )}
         </PageLayout>

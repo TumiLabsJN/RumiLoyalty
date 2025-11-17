@@ -480,6 +480,83 @@ export const missionRepository = {
 
 ---
 
+### Encryption Repository Example
+
+**Use Case:** Encrypting sensitive payment information before storage
+
+```typescript
+// lib/repositories/commissionBoostRepository.ts
+import { createClient } from '@/lib/utils/supabase'
+import { encrypt, decrypt } from '@/lib/utils/encryption'
+import type { PaymentInfo } from '@/lib/types/payment'
+
+export const commissionBoostRepository = {
+  /**
+   * Update payment information with encryption
+   * SECURITY: Always encrypt payment_account before storage
+   */
+  async updatePaymentInfo(
+    boostId: string,
+    clientId: string,
+    paymentInfo: PaymentInfo
+  ): Promise<void> {
+    const supabase = createClient()
+
+    // Encrypt sensitive field
+    const encryptedAccount = encrypt(paymentInfo.payment_account)
+
+    const { error, count } = await supabase
+      .from('commission_boost_redemptions')
+      .update({
+        payment_method: paymentInfo.payment_method,
+        payment_account: encryptedAccount,
+        payment_account_confirm: encryptedAccount,
+        payment_info_collected_at: new Date().toISOString()
+      })
+      .eq('id', boostId)
+      .eq('client_id', clientId)  // Tenant isolation
+      .select('id', { count: 'exact', head: true })
+
+    if (error) throw error
+    if (count === 0) throw new NotFoundError('Boost not found')
+  },
+
+  /**
+   * Retrieve payment information with decryption
+   * SECURITY: Always decrypt payment_account after retrieval
+   */
+  async getPaymentInfo(
+    boostId: string,
+    clientId: string
+  ): Promise<PaymentInfo> {
+    const supabase = createClient()
+
+    const { data, error } = await supabase
+      .from('commission_boost_redemptions')
+      .select('payment_method, payment_account')
+      .eq('id', boostId)
+      .eq('client_id', clientId)  // Tenant isolation
+      .single()
+
+    if (error) throw error
+
+    // Decrypt sensitive field
+    return {
+      payment_method: data.payment_method,
+      payment_account: decrypt(data.payment_account)
+    }
+  }
+}
+```
+
+**Key Points:**
+- Encrypt BEFORE insert/update
+- Decrypt AFTER select
+- Never log decrypted values
+- Always include tenant isolation (client_id filter)
+
+---
+
 ### External Data Repository Example
 
 **Note:** Current implementation uses Cruva CSV export, not TikTok API. This example shows potential future TikTok API integration.
@@ -818,6 +895,7 @@ const { data: missions } = await supabase
 - [ ] Is the client_id from authenticated user (not user input)?
 - [ ] For UPDATE/DELETE: Does it verify `count > 0` after mutation?
 - [ ] For UPDATE/DELETE: Does it throw `NotFoundError` if `count === 0`?
+- [ ] For sensitive fields: Does it encrypt before INSERT/UPDATE and decrypt after SELECT?
 
 **Exception:** Global tables (no client_id):
 - `users` table (has client_id as foreign key)

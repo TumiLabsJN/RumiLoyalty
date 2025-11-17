@@ -1942,6 +1942,244 @@ it('should NOT allow updating mission from different tenant', async () => {
 
 ---
 
+### Pattern 9: Sensitive Data Encryption (Payment Account Security)
+
+**Problem:** Sensitive payment information (Venmo handles, PayPal emails) stored in plaintext is vulnerable if database is compromised. GDPR/CCPA require protection of personal financial data.
+
+**Security Risk:**
+```typescript
+// Current vulnerability - plaintext storage
+await supabase
+  .from('commission_boost_redemptions')
+  .insert({
+    payment_account: 'sara@example.com',  // ❌ Plaintext email
+    payment_method: 'paypal'
+  })
+
+// Database breach → Attacker gets 500+ payment accounts immediately
+```
+
+**Solution:** Application-level encryption using AES-256-GCM before storing in database.
+
+**Implementation:**
+
+```typescript
+// lib/utils/encryption.ts
+import crypto from 'crypto'
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY! // 32-byte hex string
+const ALGORITHM = 'aes-256-gcm'
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, 'hex'),
+    iv
+  )
+
+  let encrypted = cipher.update(text, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+
+  const authTag = cipher.getAuthTag()
+
+  // Format: iv:authTag:encrypted (all hex-encoded)
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
+}
+
+export function decrypt(encryptedText: string): string {
+  const [ivHex, authTagHex, encrypted] = encryptedText.split(':')
+
+  const iv = Buffer.from(ivHex, 'hex')
+  const authTag = Buffer.from(authTagHex, 'hex')
+  const decipher = crypto.createDecipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, 'hex'),
+    iv
+  )
+
+  decipher.setAuthTag(authTag)
+
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+  decrypted += decipher.final('utf8')
+
+  return decrypted
+}
+```
+
+**Repository Integration:**
+
+```typescript
+// lib/repositories/commissionBoostRepository.ts
+import { encrypt, decrypt } from '@/lib/utils/encryption'
+
+export const commissionBoostRepository = {
+  /**
+   * Update payment information (encrypted)
+   */
+  async updatePaymentInfo(
+    boostId: string,
+    clientId: string,
+    paymentMethod: 'venmo' | 'paypal',
+    paymentAccount: string
+  ): Promise<void> {
+    const supabase = createClient()
+
+    // Encrypt before storing
+    const encryptedAccount = encrypt(paymentAccount)
+
+    const { error } = await supabase
+      .from('commission_boost_redemptions')
+      .update({
+        payment_method: paymentMethod,
+        payment_account: encryptedAccount,
+        payment_account_confirm: encryptedAccount,
+        payment_info_collected_at: new Date().toISOString(),
+        payment_info_confirmed: true
+      })
+      .eq('id', boostId)
+      .eq('client_id', clientId)  // Tenant isolation
+
+    if (error) throw error
+  },
+
+  /**
+   * Retrieve payment information (decrypted)
+   */
+  async getPaymentInfo(boostId: string, clientId: string) {
+    const supabase = createClient()
+
+    const { data, error } = await supabase
+      .from('commission_boost_redemptions')
+      .select('payment_method, payment_account')
+      .eq('id', boostId)
+      .eq('client_id', clientId)  // Tenant isolation
+      .single()
+
+    if (error) throw error
+
+    // Decrypt after reading
+    return {
+      payment_method: data.payment_method,
+      payment_account: decrypt(data.payment_account)
+    }
+  }
+}
+```
+
+**Environment Setup:**
+
+```bash
+# Generate encryption key (one-time setup)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Add to .env
+ENCRYPTION_KEY=a1b2c3d4e5f6...  # 64-character hex string (32 bytes)
+```
+
+**Schema Note:**
+```sql
+-- No schema changes needed
+-- payment_account VARCHAR(255) stores encrypted string
+-- Encrypted format: "iv:authTag:ciphertext" (hex-encoded)
+-- Example length: ~150-200 characters (fits in VARCHAR(255))
+```
+
+---
+
+**Why This Works:**
+
+1. ✅ **AES-256-GCM is industry standard** - Used by banks, government, cloud providers
+2. ✅ **Authentication tag prevents tampering** - GCM mode detects if ciphertext modified
+3. ✅ **Random IV per encryption** - Same plaintext produces different ciphertext each time
+4. ✅ **Key stored separately** - Environment variable, not in code or database
+5. ✅ **No schema changes** - Encrypted string fits in existing VARCHAR(255)
+
+**Security Principle:**
+> "Defense in depth - encrypt sensitive PII at rest, even within trusted database"
+
+Even if attacker gains read access to database, they cannot decrypt payment accounts without the encryption key.
+
+---
+
+**Benefits:**
+
+- ✅ **Prevents data breach exposure** - Encrypted payment accounts useless without key
+- ✅ **GDPR/CCPA compliance** - Personal financial data encrypted at rest
+- ✅ **Audit-friendly** - Demonstrates security best practices
+- ✅ **No performance impact** - Encrypt/decrypt is milliseconds
+- ✅ **Transparent to users** - No UX changes
+
+**Where to Apply:**
+- Commission boost payment accounts (Venmo handles, PayPal emails)
+- Any other PII: SSN, tax IDs, bank account numbers (if added later)
+- NOT needed for: TikTok handles, emails (already public), order IDs
+
+**Key Management Best Practices:**
+
+```typescript
+// ✅ CORRECT: Key from environment
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!
+
+// ❌ WRONG: Hardcoded key in code
+const ENCRYPTION_KEY = 'a1b2c3d4...'  // Never do this!
+
+// ✅ CORRECT: Validate key on startup
+if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length !== 64) {
+  throw new Error('ENCRYPTION_KEY must be 64-character hex string')
+}
+
+// ✅ CORRECT: Different keys for dev/staging/prod
+# .env.development
+ENCRYPTION_KEY=dev_key_here...
+
+# .env.production
+ENCRYPTION_KEY=prod_key_here...
+```
+
+**Testing Pattern:**
+
+```typescript
+// tests/utils/encryption.test.ts
+import { encrypt, decrypt } from '@/lib/utils/encryption'
+
+describe('encryption utilities', () => {
+  it('should encrypt and decrypt correctly', () => {
+    const plaintext = 'sara@example.com'
+    const encrypted = encrypt(plaintext)
+    const decrypted = decrypt(encrypted)
+
+    expect(decrypted).toBe(plaintext)
+    expect(encrypted).not.toBe(plaintext)
+  })
+
+  it('should produce different ciphertext for same plaintext', () => {
+    const plaintext = 'sara@example.com'
+    const encrypted1 = encrypt(plaintext)
+    const encrypted2 = encrypt(plaintext)
+
+    // Different IV means different ciphertext
+    expect(encrypted1).not.toBe(encrypted2)
+
+    // But both decrypt to same plaintext
+    expect(decrypt(encrypted1)).toBe(plaintext)
+    expect(decrypt(encrypted2)).toBe(plaintext)
+  })
+
+  it('should throw on tampered ciphertext', () => {
+    const plaintext = 'sara@example.com'
+    const encrypted = encrypt(plaintext)
+
+    // Tamper with ciphertext
+    const tampered = encrypted.replace(/.$/, '0')
+
+    expect(() => decrypt(tampered)).toThrow()
+  })
+})
+```
+
+---
+
 ### Implementation Checklist
 
 **Before implementing any state-changing flow:**
