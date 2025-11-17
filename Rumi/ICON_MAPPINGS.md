@@ -8,8 +8,9 @@ This document provides the canonical icon mappings for all reward types and miss
 ## Library
 **Lucide React** - https://lucide.dev/icons/
 
-All icons are imported from `lucide-react`:
+Icons are imported from `lucide-react`, with custom components for specialized needs:
 ```typescript
+// Lucide icons
 import {
   Gift,
   HandCoins,
@@ -23,6 +24,11 @@ import {
   Trophy,
   Clover
 } from "lucide-react"
+
+// Custom SVG components (defined inline in rewards page)
+const GiftDropIcon = ({ className }: { className?: string }) => (
+  <svg className={className} /* ... */ />
+)
 ```
 
 ---
@@ -37,10 +43,10 @@ Maps `rewards.type` (database) to Lucide icon component.
 | `commission_boost` | `<HandCoins />` | 💰 | Temporary pay increases (e.g., +5% for 30 days) |
 | `spark_ads` | `<Megaphone />` | 📢 | TikTok Spark Ads budget (reach boost) |
 | `discount` | `<BadgePercent />` | 🏷️ | Follower discounts (deal boost) |
-| `physical_gift` | `<Gift />` * | 📦 | Physical items (iPhone, headphones, MacBook) |
+| `physical_gift` | `<GiftDropIcon />` * | 📦 | Physical items (iPhone, headphones, MacBook) |
 | `experience` | `<Palmtree />` | 🌴 | VIP events, brand summits, exclusive access |
 
-**\*Note:** `physical_gift` currently uses `<Gift />` but could use a custom `<GiftDropIcon />` for differentiation from `gift_card`.
+**\*Note:** `physical_gift` uses a custom `<GiftDropIcon />` (SVG component) for differentiation from `gift_card`.
 
 ### Implementation Example:
 
@@ -58,7 +64,7 @@ function getIconForRewardType(type: string) {
     case "discount":
       return <BadgePercent className={iconClass} />
     case "physical_gift":
-      return <Gift className={iconClass} />  // Or <GiftDropIcon />
+      return <GiftDropIcon className={iconClass} />
     case "experience":
       return <Palmtree className={iconClass} />
     default:
@@ -187,17 +193,25 @@ Quick lookup for finding icons across different contexts.
 ## FUTURE CONSIDERATIONS
 
 ### Potential New Icons:
-- **Physical gifts:** `<Package />` or custom `<GiftDropIcon />` instead of generic `<Gift />`
 - **Comments mission type:** `<MessageCircle />` (if comment engagement tracking is added)
 - **Shares mission type:** `<Share2 />` (if share tracking is added)
+- **Followers mission type:** `<Users />` (if follower growth tracking is added)
 
 ### Custom Icon Components:
-If Lucide doesn't have the exact icon needed, create custom components:
+If Lucide doesn't have the exact icon needed, create custom components. Example (currently used for `physical_gift`):
 ```typescript
-// components/icons/GiftDropIcon.tsx
-export const GiftDropIcon = ({ className }: { className?: string }) => (
-  <svg className={className} /* custom SVG path */>
-    {/* ... */}
+// Defined inline in rewards page
+const GiftDropIcon = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    aria-hidden="true"
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    fill="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path d="M20 7h-.7c.229-.467.349-.98.351-1.5a3.5 3.5 0 0 0-3.5-3.5c-1.717 0-3.215 1.2-4.331 2.481C10.4 2.842 8.949 2 7.5 2A3.5 3.5 0 0 0 4 5.5c.003.52.123 1.033.351 1.5H4a2 2 0 0 0-2 2v2a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V9a2 2 0 0 0-2-2Zm-9.942 0H7.5a1.5 1.5 0 0 1 0-3c.9 0 2 .754 3.092 2.122-.219.337-.392.635-.534.878Zm6.1 0h-3.742c.933-1.368 2.371-3 3.739-3a1.5 1.5 0 0 1 0 3h.003ZM13 14h-2v8h2v-8Zm-4 0H4v6a2 2 0 0 0 2 2h3v-8Zm6 0v8h3a2 2 0 0 0 2-2v-6h-5Z"/>
   </svg>
 )
 ```

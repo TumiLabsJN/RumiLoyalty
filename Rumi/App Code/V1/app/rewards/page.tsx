@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Trophy,
   History,
@@ -15,6 +15,7 @@ import {
   Info,
   Calendar,
   CheckCircle2,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/pagelayout";
@@ -35,6 +36,14 @@ export default function RewardsPage() {
       const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
       const [showPayboostModal, setShowPayboostModal] = useState(false);
       const [selectedPayboost, setSelectedPayboost] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
+      const [userTimezone, setUserTimezone] = useState<string>("America/New_York");
+      const [isClient, setIsClient] = useState(false);
+
+      // Detect user's timezone on client-side only (avoid hydration mismatch)
+      useEffect(() => {
+        setUserTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        setIsClient(true);
+      }, []);
 
       const handleRedeemClick = async (benefit: any) => {
         console.log("[v0] Redeem clicked for benefit:", benefit.id)
@@ -65,13 +74,10 @@ export default function RewardsPage() {
         try {
           // TODO: POST /api/benefits/:id/claim
           // Backend will update benefit.status to 'claimed'
-          // This will trigger the "Processing..." badge to appear
+          // This will trigger the "Pending" badge to appear
           await new Promise(resolve => setTimeout(resolve, CLAIM_DELAY_MS))
 
-          toast.success("Reward claimed!", {
-            description: "You'll receive it within 24 hours",
-            duration: 5000,
-          })
+          // No toast for immediate claims - only scheduled rewards show toasts
         } catch (error) {
           toast.error("Failed to claim reward", {
             description: "Please try again or contact support",
@@ -92,18 +98,19 @@ export default function RewardsPage() {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
 
-          // Show success message
-          const dateStr = scheduledDate.toLocaleDateString("en-US", {
+          // Show success message with user's local time
+          const localDateStr = scheduledDate.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
+            timeZone: userTimezone,
           });
-          const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+          const localTimeStr = scheduledDate.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
-            timeZone: "America/New_York",
+            timeZone: userTimezone,
           });
 
-          toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, {
+          toast.success(`Discount scheduled for ${localDateStr} at ${localTimeStr}`, {
             description: "We'll activate your boost at this time",
             duration: 5000,
           })
@@ -131,13 +138,19 @@ export default function RewardsPage() {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
 
-          // Show success message
-          const dateStr = scheduledDate.toLocaleDateString("en-US", {
+          // Show success message with user's local time
+          const localDateStr = scheduledDate.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
+            timeZone: userTimezone,
+          });
+          const localTimeStr = scheduledDate.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            timeZone: userTimezone,
           });
 
-          toast.success(`Pay Boost scheduled for ${dateStr} at 6:00 PM ET`, {
+          toast.success(`Pay Boost scheduled for ${localDateStr} at ${localTimeStr}`, {
             description: "We'll activate your commission boost at this time",
             duration: 5000,
           })
@@ -198,11 +211,11 @@ export default function RewardsPage() {
       const getBenefitDescription = (type: string, description: string, value_data: any): string => {
         switch (type) {
           case "commission_boost":
-            return `More commission for ${value_data?.duration_days || 30} days`
+            return `Higher earnings (${value_data?.duration_days || 30}d)`
           case "spark_ads":
-            return "In Spark Ads for more visibility"
+            return description // Use backend description
           case "discount":
-            return "Earn a discount for your viewers"
+            return "Follower discount"
           case "gift_card":
             return description // Use backend description
           case "physical_gift":
@@ -242,23 +255,33 @@ export default function RewardsPage() {
         }
       };
 
-      // Format scheduled date/time for display
+      // Get user's timezone abbreviation
+      const getUserTimezoneAbbr = (): string => {
+        const now = new Date()
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: userTimezone,
+          timeZoneName: "short",
+        })
+        const parts = formatter.formatToParts(now)
+        const tzPart = parts.find((part) => part.type === "timeZoneName")
+        return tzPart?.value || ""
+      }
+
+      // Format scheduled date/time for display in user's local timezone
       const formatScheduledDateTime = (date: Date, type: string): string => {
         const dateStr = date.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
+          timeZone: userTimezone,
         });
-
-        if (type === "commission_boost") {
-          return `${dateStr}, 6:00 PM ET`;
-        }
 
         const timeStr = date.toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
-          timeZone: "America/New_York",
+          timeZone: userTimezone,
         });
+
         return `${dateStr}, ${timeStr}`;
       };
 
@@ -348,6 +371,112 @@ export default function RewardsPage() {
             status: "claimed",
             activation_date: new Date("2025-11-01T18:00:00-05:00"), // Nov 1 at 6:00 PM EST (in the past)
             expiration_date: new Date("2025-11-30T18:00:00-05:00"),  // Nov 30 at 6:00 PM EST (in the future)
+          },
+          {
+            id: "b6",
+            type: "spark_ads",
+            name: "Ads Boost: $50",
+            description: "Spark Ads promo",
+            value_data: { duration_days: 7 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable",
+          },
+          {
+            id: "b7",
+            type: "experience",
+            name: "VIP Creator Event",
+            description: "Exclusive meetup",
+            value_data: null,
+            tier_eligibility: "tier_3",
+            redemption_frequency: "one-time",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable",
+          },
+          {
+            id: "b8",
+            type: "gift_card",
+            name: "Gift Card: $25",
+            description: "Redeem for Amazon gift card",
+            value_data: { amount: 25 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 2,
+            used_count: 1,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed", // Claimed but not yet fulfilled - triggers Redeeming status
+          },
+          {
+            id: "b9",
+            type: "discount",
+            name: "Deal Boost: 20%",
+            description: "Follower discount",
+            value_data: { percent: 20, duration_days: 7 },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "monthly",
+            redemption_quantity: 2,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable", // Claimable - will show "Schedule" button
+          },
+          {
+            id: "b10",
+            type: "physical_gift",
+            name: "Gift Drop: Headphones 123",
+            description: "Wireless earbuds",
+            value_data: null,
+            tier_eligibility: "tier_3",
+            redemption_frequency: "one-time",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimable", // Claimable - will show "Claim" button
+          },
+          {
+            id: "b11",
+            type: "physical_gift",
+            name: "Gift Drop: Headphones 123",
+            description: "Wireless earbuds",
+            value_data: null,
+            tier_eligibility: "tier_3",
+            redemption_frequency: "one-time",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed", // Claimed
+            shipping_city: "New York", // Shipping info set - triggers Sending status
+          },
+          {
+            id: "b12",
+            type: "physical_gift",
+            name: "Gift Drop: AirPods Pro",
+            description: "Premium earbuds",
+            value_data: null,
+            tier_eligibility: "tier_3",
+            redemption_frequency: "one-time",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed", // Claimed but no shipping info yet - triggers Redeeming status
           },
         ],
       };
@@ -451,11 +580,30 @@ export default function RewardsPage() {
                               new Date() >= new Date(benefit.activation_date) &&
                               new Date() <= new Date(benefit.expiration_date);
 
+              // Check if this is a sending benefit (physical_gift with shipping info set)
+              const isSending = benefit.type === "physical_gift" &&
+                               benefit.status === "claimed" &&
+                               benefit.shipping_city; // shipping_city is set when shipping info collected
+
+              // Check if this is a redeeming physical gift (claimed but no shipping info yet) - NOT flippable
+              const isRedeemingPhysical = benefit.type === "physical_gift" &&
+                                         benefit.status === "claimed" &&
+                                         !benefit.shipping_city;
+
+              // Check if this is a redeeming benefit (claimed but not clearing/scheduled/active/sending/physical)
+              const isRedeeming = benefit.status === "claimed" &&
+                                 !isClearing &&
+                                 !isScheduled &&
+                                 !isActive &&
+                                 !isSending &&
+                                 !isRedeemingPhysical &&
+                                 benefit.type !== "physical_gift"; // Exclude physical gifts from flippable redeeming
+
               const cardClass = cn(
-                "flex items-center justify-between p-4 rounded-lg border",
-                isActive && "bg-green-50 border-green-200",
-                !isActive && benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
-                !isActive && !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
+                "relative flex items-center justify-between p-4 rounded-lg border min-h-[88px]",
+                (isActive || isSending) && "bg-green-50 border-green-200",
+                !isActive && !isSending && benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
+                !isActive && !isSending && !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
                 benefit.is_locked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
               );
 
@@ -465,6 +613,13 @@ export default function RewardsPage() {
                     <>
                       <FlipFrontSide>
                         <div className={cardClass}>
+                          {/* INFO ICON: Positioned in upper right corner for flippable cards */}
+                          {(isClearing || isScheduled || isActive || isSending || isRedeeming) && !isRedeemingPhysical && (
+                            <div className="absolute top-0.5 right-0.5">
+                              <FlipInfoButton onClick={flip} />
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-3">
                             {/* ALWAYS show benefit icon (not lock) */}
                             {getIconForBenefitType(benefit.type)}
@@ -492,11 +647,6 @@ export default function RewardsPage() {
 
                           {/* RIGHT SIDE: Action Buttons & Status Badges */}
                           <div className="flex items-center gap-2">
-                            {/* INFO ICON: For Clearing, Scheduled, or Active status */}
-                            {(isClearing || isScheduled || isActive) && (
-                              <FlipInfoButton onClick={flip} />
-                            )}
-
                             {/* STATUS BADGE: Clearing (Commission Boost Pending Payout) */}
                             {isClearing && (
                               <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-xs font-medium">
@@ -521,11 +671,27 @@ export default function RewardsPage() {
                               </div>
                             )}
 
-                            {/* STATUS BADGE: Redeeming (Processing) */}
-                            {benefit.status === "claimed" && !isClearing && !isScheduled && !isActive && (
+                            {/* STATUS BADGE: Sending (Physical Gift Being Shipped) */}
+                            {isSending && (
+                              <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                Shipping
+                              </div>
+                            )}
+
+                            {/* STATUS BADGE: Redeeming (Pending) - Flippable for non-physical gifts */}
+                            {isRedeeming && (
                               <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3 py-2 rounded-lg text-xs font-medium">
                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                Processing...
+                                Pending
+                              </div>
+                            )}
+
+                            {/* STATUS BADGE: Redeeming Physical (Pending) - NOT flippable for physical gifts */}
+                            {isRedeemingPhysical && (
+                              <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Pending
                               </div>
                             )}
 
@@ -572,7 +738,7 @@ export default function RewardsPage() {
                       {/* BACK SIDE: Scheduled details */}
                       {isScheduled && !isClearing && !isActive && (
                         <FlipBackSide onClick={flipBack}>
-                          <div className="flex items-center p-4 rounded-lg border bg-purple-50 border-purple-200">
+                          <div className="flex items-center p-4 rounded-lg border bg-purple-50 border-purple-200 min-h-[88px]">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <Calendar className="h-4 w-4 text-purple-500" />
@@ -591,7 +757,7 @@ export default function RewardsPage() {
                       {/* BACK SIDE: Active details */}
                       {isActive && !isClearing && (
                         <FlipBackSide onClick={flipBack}>
-                          <div className="flex items-center p-4 rounded-lg border bg-green-50 border-green-200">
+                          <div className="flex items-center p-4 rounded-lg border bg-green-50 border-green-200 min-h-[88px]">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <p className="text-xs text-slate-600">Started:</p>
@@ -606,6 +772,29 @@ export default function RewardsPage() {
                                 </p>
                               </div>
                             </div>
+                          </div>
+                        </FlipBackSide>
+                      )}
+
+                      {/* BACK SIDE: Sending explanation */}
+                      {isSending && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center justify-center gap-2 p-4 rounded-lg border bg-green-50 border-green-200 min-h-[88px]">
+                            <p className="text-sm text-green-700 font-medium leading-snug text-center">
+                              Your gift is on its way!
+                            </p>
+                            <Truck className="h-5 w-5 text-green-600" />
+                          </div>
+                        </FlipBackSide>
+                      )}
+
+                      {/* BACK SIDE: Redeeming explanation */}
+                      {isRedeeming && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center justify-center p-4 rounded-lg border bg-slate-50 border-slate-200 min-h-[88px]">
+                            <p className="text-xs text-slate-600 leading-snug text-center max-w-full">
+                              We will deliver your reward in up to 72 hours
+                            </p>
                           </div>
                         </FlipBackSide>
                       )}

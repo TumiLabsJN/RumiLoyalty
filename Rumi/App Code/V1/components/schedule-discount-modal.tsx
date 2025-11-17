@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Dialog,
@@ -22,8 +22,13 @@ interface ScheduleDiscountModalProps {
   durationDays?: number
   minDate?: Date
   maxDate?: Date
-  timezone?: string
-  timeRange?: { start: string; end: string }
+}
+
+interface TimeSlot {
+  localDisplay: string  // "6:00 AM" (shown to user in their timezone)
+  etHour: number        // 9 (hour in ET)
+  etMin: number         // 0 (minutes in ET)
+  etDisplay: string     // "9:00 AM ET" (for reference)
 }
 
 /**
@@ -33,9 +38,9 @@ interface ScheduleDiscountModalProps {
  *
  * Features:
  * - Date picker (today through +7 days)
- * - Time picker grid (10:00 AM - 6:30 PM ET, 30-min intervals)
- * - Timezone indicator (Eastern Time)
- * - Validation (no past dates, within 7-day window)
+ * - Time picker grid (9:00 AM - 4:00 PM ET, 30-min intervals)
+ * - Shows times in user's local timezone
+ * - Validation (no past dates, within 7-day window, weekdays only in ET)
  * - Loading state during API call
  * - Converts to UTC for backend
  *
@@ -50,53 +55,96 @@ export function ScheduleDiscountModal({
   durationDays = 30,
   minDate = new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow (no same-day scheduling)
   maxDate = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000), // Tomorrow + 7 days = 8 days from now
-  timezone = "America/New_York", // Eastern Time (ET)
-  timeRange = { start: "10:00", end: "18:30" }, // 10 AM - 6:30 PM
 }: ScheduleDiscountModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
-  const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined)
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | undefined>(undefined)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
 
-  // Generate time slots (30-minute intervals)
-  const generateTimeSlots = (): string[] => {
-    const slots: string[] = []
-    const [startHour, startMin] = timeRange.start.split(":").map(Number)
-    const [endHour, endMin] = timeRange.end.split(":").map(Number)
+  // Detect user's timezone
+  const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
 
-    let currentHour = startHour
-    let currentMin = startMin
+  // Get user's timezone abbreviation
+  const getUserTimezoneAbbr = (): string => {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTimezone,
+      timeZoneName: "short",
+    })
+    const parts = formatter.formatToParts(now)
+    const tzPart = parts.find((part) => part.type === "timeZoneName")
+    return tzPart?.value || ""
+  }
 
-    const endTotalMin = endHour * 60 + endMin
+  // Convert ET time to user's local time for display
+  const convertETToLocal = (etHour: number, etMin: number): string => {
+    // Create a date in ET timezone
+    const etDate = new Date()
 
-    while (currentHour * 60 + currentMin <= endTotalMin) {
-      const hour12 = currentHour === 0 ? 12 : currentHour > 12 ? currentHour - 12 : currentHour
-      const ampm = currentHour < 12 ? "AM" : "PM"
-      const minStr = currentMin.toString().padStart(2, "0")
-      slots.push(`${hour12}:${minStr} ${ampm}`)
+    // Set the time in ET
+    const etFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
 
-      // Add 30 minutes
-      currentMin += 30
-      if (currentMin >= 60) {
-        currentMin = 0
-        currentHour += 1
+    // Create date string in ET
+    const now = new Date()
+    const etString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(etHour).padStart(2, '0')}:${String(etMin).padStart(2, '0')}:00`
+
+    // Parse as ET time
+    const utcDate = new Date(etString + "-05:00") // EST offset
+
+    // Format in user's local timezone
+    const localFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTimezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+
+    return localFormatter.format(utcDate)
+  }
+
+  // Generate time slots in user's local timezone (based on ET business hours: 9 AM - 4 PM)
+  const timeSlots = useMemo((): TimeSlot[] => {
+    const slots: TimeSlot[] = []
+
+    // ET business hours: 9 AM to 4 PM (9:00 - 16:00)
+    for (let hour = 9; hour <= 16; hour++) {
+      for (let min of [0, 30]) {
+        if (hour === 16 && min === 30) break // Stop at 4:00 PM ET
+
+        const localDisplay = convertETToLocal(hour, min)
+        const etHour12 = hour > 12 ? hour - 12 : hour
+        const etAmPm = hour >= 12 ? "PM" : "AM"
+        const etDisplay = `${etHour12}:${String(min).padStart(2, '0')} ${etAmPm} ET`
+
+        slots.push({
+          localDisplay,
+          etHour: hour,
+          etMin: min,
+          etDisplay,
+        })
       }
     }
 
     return slots
-  }
+  }, [userTimezone])
 
-  const timeSlots = generateTimeSlots()
-
-  // Group time slots into 2 sections: Morning (9:00-11:30) and Afternoon (12:00-5:00)
+  // Group time slots into 2 sections: Morning and Afternoon (based on local time)
   const getTimeSections = () => {
     const sections = [
-      { icon: "🌅", label: "Morning", timeRange: "9:00 AM - 11:30 AM", times: [] as string[] },
-      { icon: "☀️", label: "Afternoon", timeRange: "12:00 PM - 5:00 PM", times: [] as string[] },
+      { icon: "🌅", label: "Morning", timeRange: "", times: [] as TimeSlot[] },
+      { icon: "☀️", label: "Afternoon", timeRange: "", times: [] as TimeSlot[] },
     ]
 
-    timeSlots.forEach((time) => {
-      const [timeStr, ampm] = time.split(" ")
+    timeSlots.forEach((slot) => {
+      const [timeStr, ampm] = slot.localDisplay.split(" ")
       const [hourStr] = timeStr.split(":")
       let hour = parseInt(hourStr)
 
@@ -105,11 +153,24 @@ export function ScheduleDiscountModal({
       if (ampm === "AM" && hour === 12) hour = 0
 
       if (hour < 12) {
-        sections[0].times.push(time) // Morning: 9:00 AM - 11:30 AM
+        sections[0].times.push(slot)
       } else {
-        sections[1].times.push(time) // Afternoon: 12:00 PM - 5:00 PM (includes up to 6:30 PM from backend)
+        sections[1].times.push(slot)
       }
     })
+
+    // Update time range labels based on actual slots
+    if (sections[0].times.length > 0) {
+      const firstTime = sections[0].times[0].localDisplay
+      const lastTime = sections[0].times[sections[0].times.length - 1].localDisplay
+      sections[0].timeRange = `${firstTime} - ${lastTime}`
+    }
+
+    if (sections[1].times.length > 0) {
+      const firstTime = sections[1].times[0].localDisplay
+      const lastTime = sections[1].times[sections[1].times.length - 1].localDisplay
+      sections[1].timeRange = `${firstTime} - ${lastTime}`
+    }
 
     return sections
   }
@@ -120,20 +181,18 @@ export function ScheduleDiscountModal({
     setExpandedSection(expandedSection === label ? null : label)
   }
 
-  // Convert 12-hour time string to Date object
-  const convertToDateTime = (date: Date, timeStr: string): Date => {
-    const [time, ampm] = timeStr.split(" ")
-    const [hourStr, minStr] = time.split(":")
-    let hour = parseInt(hourStr)
-    const min = parseInt(minStr)
+  // Convert selected local time to ET, then to UTC Date object
+  const convertToDateTime = (date: Date, timeSlot: TimeSlot): Date => {
+    // Create a date at the selected day
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const day = date.getDate()
 
-    // Convert to 24-hour format
-    if (ampm === "PM" && hour !== 12) hour += 12
-    if (ampm === "AM" && hour === 12) hour = 0
+    // Create date string in ET with the selected time
+    const etDateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(timeSlot.etHour).padStart(2, '0')}:${String(timeSlot.etMin).padStart(2, '0')}:00-05:00`
 
-    const combined = new Date(date)
-    combined.setHours(hour, min, 0, 0)
-    return combined
+    // Parse as UTC
+    return new Date(etDateString)
   }
 
   // Format date for display
@@ -142,36 +201,25 @@ export function ScheduleDiscountModal({
       weekday: "short",
       month: "short",
       day: "numeric",
+      timeZone: userTimezone,
     })
-  }
-
-  // Get timezone abbreviation (EST/EDT)
-  const getTimezoneAbbr = (): string => {
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      timeZoneName: "short",
-    })
-    const parts = formatter.formatToParts(now)
-    const tzPart = parts.find((part) => part.type === "timeZoneName")
-    return tzPart?.value || "ET"
   }
 
   const handleConfirm = async () => {
-    if (!selectedDate || !selectedTime) return
+    if (!selectedDate || !selectedTimeSlot) return
 
     setIsSubmitting(true)
 
     try {
       // Combine date + time and convert to UTC
-      const combinedDateTime = convertToDateTime(selectedDate, selectedTime)
+      const combinedDateTime = convertToDateTime(selectedDate, selectedTimeSlot)
 
       // Call parent's onConfirm with UTC timestamp
       await onConfirm(combinedDateTime)
 
       // Reset state and close
       setSelectedDate(undefined)
-      setSelectedTime(undefined)
+      setSelectedTimeSlot(undefined)
       onClose()
     } catch (error) {
       console.error("Failed to schedule discount:", error)
@@ -184,11 +232,11 @@ export function ScheduleDiscountModal({
   const handleClose = () => {
     if (isSubmitting) return // Prevent closing during submission
     setSelectedDate(undefined)
-    setSelectedTime(undefined)
+    setSelectedTimeSlot(undefined)
     onClose()
   }
 
-  const isConfirmDisabled = !selectedDate || !selectedTime || isSubmitting
+  const isConfirmDisabled = !selectedDate || !selectedTimeSlot || isSubmitting
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -201,10 +249,6 @@ export function ScheduleDiscountModal({
             Lock in your{" "}
             <span className="font-semibold text-slate-900">
               +{discountPercent}% Deal Boost for {durationDays} Days 🎯
-            </span>
-            <br />
-            <span className="text-xs text-slate-500 mt-1 inline-block">
-              Schedule starts tomorrow (no same-day activation)
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -228,7 +272,7 @@ export function ScheduleDiscountModal({
                   const dateToCheck = new Date(date)
                   dateToCheck.setHours(0, 0, 0, 0)
 
-                  // Disable if before tomorrow (no same-day scheduling) or after maxDate
+                  // Disable if before tomorrow or after maxDate
                   return dateToCheck < tomorrow || dateToCheck > maxDate
                 }}
                 className="rounded-md border border-slate-200"
@@ -239,7 +283,7 @@ export function ScheduleDiscountModal({
           {/* Time Picker - Collapsible Sections */}
           <div>
             <label className="text-sm font-semibold text-slate-900 mb-3 block">
-              Select Time ({getTimezoneAbbr()})
+              Select Time ({getUserTimezoneAbbr()})
             </label>
             <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
               {timeSections.map((section, index) => (
@@ -273,21 +317,21 @@ export function ScheduleDiscountModal({
                   {expandedSection === section.label && (
                     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100">
                       <div className="grid grid-cols-3 gap-2">
-                        {section.times.map((time) => (
+                        {section.times.map((slot) => (
                           <Button
-                            key={time}
+                            key={slot.etDisplay}
                             type="button"
-                            variant={selectedTime === time ? "default" : "outline"}
-                            onClick={() => setSelectedTime(time)}
+                            variant={selectedTimeSlot?.etDisplay === slot.etDisplay ? "default" : "outline"}
+                            onClick={() => setSelectedTimeSlot(slot)}
                             disabled={isSubmitting}
                             className={cn(
                               "h-10 text-sm font-medium",
-                              selectedTime === time
+                              selectedTimeSlot?.etDisplay === slot.etDisplay
                                 ? "bg-blue-600 text-white hover:bg-blue-700"
                                 : "bg-white text-slate-700 hover:bg-slate-100"
                             )}
                           >
-                            {time}
+                            {slot.localDisplay}
                           </Button>
                         ))}
                       </div>
@@ -298,17 +342,8 @@ export function ScheduleDiscountModal({
             </div>
           </div>
 
-          {/* Timezone Info */}
-          <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-blue-900">
-              Times shown in <span className="font-semibold">Eastern Time ({getTimezoneAbbr()})</span>.
-              Your discount will be activated by the admin team at the selected time.
-            </p>
-          </div>
-
           {/* Selected Summary */}
-          {selectedDate && selectedTime && (
+          {selectedDate && selectedTimeSlot && (
             <div className="bg-white border-2 border-green-500 rounded-xl p-3.5 shadow-sm">
               <div className="flex items-center gap-2 mb-1.5">
                 <div className="bg-green-500 rounded-full p-1">
@@ -317,7 +352,7 @@ export function ScheduleDiscountModal({
                 <p className="text-sm font-bold text-green-700">Locked in!</p>
               </div>
               <p className="text-base font-semibold text-slate-900 mb-1">
-                {formatDate(selectedDate)} at {selectedTime} {getTimezoneAbbr()}
+                {formatDate(selectedDate)} at {selectedTimeSlot.localDisplay}
               </p>
               <p className="text-xs text-slate-600">
                 +{discountPercent}% Deal Boost goes live then—prep your TikTok teaser! 🎬

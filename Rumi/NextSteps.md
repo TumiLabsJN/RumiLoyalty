@@ -170,3 +170,19 @@ Check your auth frontend pages
 
 
 
+# CODEX AUDITHow 
+  From Phase 1 (Already Planned):
+
+  CREATE INDEX idx_videos_user_postdate
+    ON videos(user_id, post_date);
+
+  Additional Recommendation:
+
+  -- For multi-client queries
+  CREATE INDEX idx_videos_client_user_postdate
+    ON videos(client_id, user_id, post_date);
+
+  This 3-column index enables:
+  - Fast per-client aggregations
+  - Fast per-user checkpoint queries
+  - Partition-like performance without partitioning complexity

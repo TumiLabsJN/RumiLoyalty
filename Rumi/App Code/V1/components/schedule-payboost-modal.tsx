@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Dialog,
@@ -21,7 +21,6 @@ interface SchedulePayboostModalProps {
   durationDays?: number
   minDate?: Date
   maxDate?: Date
-  timezone?: string
 }
 
 /**
@@ -32,7 +31,7 @@ interface SchedulePayboostModalProps {
  * Features:
  * - Date picker (today through +7 days)
  * - Fixed time: 6:00 PM ET (no time selection needed)
- * - Timezone indicator (Eastern Time)
+ * - Shows time in user's local timezone
  * - Validation (no past dates, within 7-day window, weekdays only)
  * - Loading state during API call
  * - Converts to UTC for backend
@@ -48,21 +47,62 @@ export function SchedulePayboostModal({
   durationDays = 30,
   minDate = new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow (no same-day scheduling)
   maxDate = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000), // Tomorrow + 7 days = 8 days from now
-  timezone = "America/New_York", // Eastern Time (ET)
 }: SchedulePayboostModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Fixed time for commission boost: 6:00 PM ET
-  const FIXED_TIME = "6:00 PM"
-  const FIXED_HOUR = 18 // 6 PM in 24-hour format
-  const FIXED_MINUTE = 0
+  // Detect user's timezone
+  const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
 
-  // Convert date to DateTime with fixed 6 PM time
+  // Fixed time for commission boost: 6:00 PM ET
+  const FIXED_HOUR_ET = 18 // 6 PM in 24-hour format
+  const FIXED_MINUTE_ET = 0
+
+  // Get user's timezone abbreviation
+  const getUserTimezoneAbbr = (): string => {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTimezone,
+      timeZoneName: "short",
+    })
+    const parts = formatter.formatToParts(now)
+    const tzPart = parts.find((part) => part.type === "timeZoneName")
+    return tzPart?.value || ""
+  }
+
+  // Convert 6 PM ET to user's local time for display
+  const getLocalTimeDisplay = (): string => {
+    // Create a date in ET timezone at 6 PM
+    const now = new Date()
+    const etString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T18:00:00`
+
+    // Parse as ET time (EST is UTC-5)
+    const utcDate = new Date(etString + "-05:00")
+
+    // Format in user's local timezone
+    const localFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTimezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+
+    return localFormatter.format(utcDate)
+  }
+
+  const localTimeDisplay = getLocalTimeDisplay()
+
+  // Convert date to DateTime with fixed 6 PM ET time
   const convertToDateTime = (date: Date): Date => {
-    const combined = new Date(date)
-    combined.setHours(FIXED_HOUR, FIXED_MINUTE, 0, 0)
-    return combined
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const day = date.getDate()
+
+    // Create date string in ET with 6 PM time
+    const etDateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T18:00:00-05:00`
+
+    // Parse as UTC
+    return new Date(etDateString)
   }
 
   // Format date for display
@@ -71,19 +111,8 @@ export function SchedulePayboostModal({
       weekday: "short",
       month: "short",
       day: "numeric",
+      timeZone: userTimezone,
     })
-  }
-
-  // Get timezone abbreviation (EST/EDT)
-  const getTimezoneAbbr = (): string => {
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      timeZoneName: "short",
-    })
-    const parts = formatter.formatToParts(now)
-    const tzPart = parts.find((part) => part.type === "timeZoneName")
-    return tzPart?.value || "ET"
   }
 
   // Check if date is a weekday (Monday-Friday)
@@ -98,7 +127,7 @@ export function SchedulePayboostModal({
     setIsSubmitting(true)
 
     try {
-      // Combine date + fixed 6 PM time and convert to UTC
+      // Combine date + fixed 6 PM ET time and convert to UTC
       const combinedDateTime = convertToDateTime(selectedDate)
 
       // Call parent's onConfirm with UTC timestamp
@@ -128,7 +157,7 @@ export function SchedulePayboostModal({
       <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-slate-900">
-            Schedule Pay Boost Activation
+            Schedule Activation
           </DialogTitle>
           <DialogDescription className="text-sm text-slate-600">
             Lock in your{" "}
@@ -137,7 +166,7 @@ export function SchedulePayboostModal({
             </span>
             <br />
             <span className="text-xs text-slate-500 mt-1 inline-block">
-              Activates at 6:00 PM ET on your chosen date
+              Activates at {localTimeDisplay} on your chosen date
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -185,22 +214,13 @@ export function SchedulePayboostModal({
               <div className="flex items-center justify-center gap-3">
                 <Clock className="h-5 w-5 text-slate-600" />
                 <p className="text-lg font-semibold text-slate-900">
-                  {FIXED_TIME} {getTimezoneAbbr()}
+                  {localTimeDisplay} {getUserTimezoneAbbr()}
                 </p>
               </div>
               <p className="text-xs text-slate-500 text-center mt-2">
                 All commission boosts activate at this time
               </p>
             </div>
-          </div>
-
-          {/* Timezone Info */}
-          <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-blue-900">
-              Times shown in <span className="font-semibold">Eastern Time ({getTimezoneAbbr()})</span>.
-              Your commission boost will be activated by the admin team at 6:00 PM ET on your selected date.
-            </p>
           </div>
 
           {/* Selected Summary */}
@@ -213,7 +233,7 @@ export function SchedulePayboostModal({
                 <p className="text-sm font-bold text-green-700">Locked in!</p>
               </div>
               <p className="text-base font-semibold text-slate-900 mb-1">
-                {formatDate(selectedDate)} at {FIXED_TIME} {getTimezoneAbbr()}
+                {formatDate(selectedDate)} at {localTimeDisplay}
               </p>
               <p className="text-xs text-slate-600">
                 +{boostPercent}% commission boost activates then—watch your earnings grow! 💸
