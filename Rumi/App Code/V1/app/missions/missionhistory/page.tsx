@@ -66,10 +66,9 @@
        * - display_name: Mission title (DYNAMIC for regular missions, HARDCODED "VIP Raffle" for raffles)
        * - description: Mission description (for display)
        * - final_progress: Final achievement value (e.g., "$2,000", "15 videos", null for raffle)
-       * - reward_description: What user earned (null for lost raffles)
+       * - reward_description: What user earned (null for lost raffles, use for raffle prize display)
        * - status: fulfilled | lost (ONLY these two statuses in history)
        * - fulfilled_at: Timestamp when mission completed/raffle finished (dynamic from backend)
-       * - raffle_prize_name: For raffle type only (15 char limit, dynamic from backend)
        */
       const historicMissions = [
         {
@@ -81,7 +80,6 @@
           reward_description: "$50 Bonus",
           status: "fulfilled" as const,
           fulfilled_at: "2024-12-15T10:30:00Z",
-          raffle_prize_name: null,
         },
         {
           id: "2",
@@ -92,7 +90,6 @@
           reward_description: "Reach Boost",
           status: "fulfilled" as const,
           fulfilled_at: "2024-12-10T14:20:00Z",
-          raffle_prize_name: null,
         },
         {
           id: "3",
@@ -103,7 +100,6 @@
           reward_description: null,
           status: "lost" as const,
           fulfilled_at: "2024-12-01T00:00:00Z",
-          raffle_prize_name: "PLASMA TEEWEE",
         },
         {
           id: "4",
@@ -114,7 +110,6 @@
           reward_description: "$25 Gift Card",
           status: "fulfilled" as const,
           fulfilled_at: "2024-11-28T09:15:00Z",
-          raffle_prize_name: null,
         },
         {
           id: "5",
@@ -125,7 +120,6 @@
           reward_description: "AirPods Pro",
           status: "fulfilled" as const,
           fulfilled_at: "2024-11-25T16:45:00Z",
-          raffle_prize_name: "AirPods Pro",
         },
       ]
 
@@ -237,9 +231,9 @@
                   )}
 
                   {/* For lost raffles, show what prize was */}
-                  {isRaffle && isLost && mission.raffle_prize_name && (
+                  {isRaffle && isLost && mission.reward_description && (
                     <p className="text-xs text-slate-500 mt-2">
-                      Prize: {mission.raffle_prize_name}
+                      Prize: {mission.reward_description}
                     </p>
                   )}
                 </div>

@@ -30,7 +30,7 @@
 **Decision Context:** Chosen over simpler Service Layer pattern for a multitenant SaaS product with the following requirements:
 
 ✅ **Multitenancy is critical** - Tenant isolation must be enforced consistently
-✅ **Multiple data sources** - Supabase + TikTok API + future integrations
+✅ **Multiple data sources** - Supabase + Cruva CSV export + future integrations
 ✅ **Long-term product** - Will be maintained for years
 ✅ **Testing required** - SaaS products need comprehensive test coverage
 ✅ **Daily cron jobs** - Backend processing needs clean separation
@@ -81,7 +81,7 @@
                      │
                      ▼
               ┌──────────────┬──────────────┐
-              │   Supabase   │  TikTok API  │
+              │   Supabase   │  Cruva CSV   │
               │  (Database)  │  (External)  │
               └──────────────┴──────────────┘
 ```
@@ -125,7 +125,7 @@ All API endpoints compute data on each request using optimized database queries.
 
 **3. Parallel Query Execution**
 - Independent queries run simultaneously using `Promise.all()`
-- Example: Fetch user data, missions, and metrics in parallel
+- Example: Fetch user data, missions, and rewards in parallel
 - Reduces total wait time
 
 **4. Database Indexes**
@@ -152,7 +152,7 @@ All API endpoints compute data on each request using optimized database queries.
 
 ### Data Update Frequency:
 
-- **TikTok metrics:** Daily sync at midnight UTC (existing cron job)
+- **Video data:** Daily sync at midnight UTC (existing cron job)
 - **Mission progress:** Updated by daily sync
 - **User actions:** Real-time (claim, participate)
 - **API responses:** Always fresh (computed on request)
@@ -473,8 +473,12 @@ export const missionRepository = {
 
 ### External Data Repository Example
 
+**Note:** Current implementation uses Cruva CSV export, not TikTok API. This example shows potential future TikTok API integration.
+
 ```typescript
 // lib/repositories/tiktokRepository.ts
+// NOTE: Current implementation uses Cruva CSV export, not TikTok API
+// This example shows potential future TikTok API integration
 import type { TikTokMetrics } from '@/lib/types/tiktok'
 
 export const tiktokRepository = {

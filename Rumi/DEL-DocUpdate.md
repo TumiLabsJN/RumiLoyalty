@@ -678,6 +678,24 @@ Standardized all user-facing dynamic fields to **VARCHAR(15)** for consistency
    - Line 480: "17 char limit" → "15 char limit (VARCHAR(15))" + example "Wireless Phones"
    - Line 508: "17 char limit" → "15 char limit (VARCHAR(15))" + example "VIP Event"
 
+7. **ADDITIONAL FIXES (comprehensive sweep):**
+   - Loyalty.md line 232: Zod schema max(1000) → max(15)
+   - Loyalty.md lines 2054-2066: Examples "Luxury headphones" → "Headphones" (15 chars)
+   - Loyalty.md line 2085-2087: "Freeform text" → "Short descriptions VARCHAR(15)"
+   - Rewards.md line 98-99: Table examples updated to 15-char limits
+   - Rewards.md lines 157, 317, 354: All "Luxury wireless headphones" → "Headphones"
+   - Rewards.md line 1485: "description TEXT" → "description VARCHAR(15)"
+   - Pseudocode.md line 1850: DescriptionSchema max(1000) → max(15)
+   - Pseudocode.md line 1856: CreateRewardSchema max(1000) → max(15)
+   - Pseudocode.md line 1915-1918: Validation > 1000 → > 15
+   - Pseudocode.md line 2165: maxLength={1000} → maxLength={15}
+   - Pseudocode.md line 2170: Character counter "/ 1000" → "/ 15"
+   - Pseudocode.md line 2308: Comment "max 1000 characters" → "max 15 characters"
+   - Pseudocode.md line 2326: Test assertion updated to 15 chars
+   - Pseudocode.md line 2337: "freeform TEXT" → "short descriptions VARCHAR(15)"
+   - Pseudocode.md lines 2347-2350: Character limit table completely updated
+   - Pseudocode.md line 2535: const maxChars = 1000 → 15
+
 **Verification:**
 - [x] missions.description is admin-only (TEXT, never shown to creators)
 - [x] rewards.description is user-facing for physical_gift/experience only (VARCHAR(15))
@@ -685,51 +703,61 @@ Standardized all user-facing dynamic fields to **VARCHAR(15)** for consistency
 - [x] All user-facing dynamic fields = VARCHAR(15) for consistency
 - [x] CHECK constraint enforces description usage rules
 - [x] Frontend comments updated to reflect 15-char limit
+- [x] ALL Zod schemas updated to max(15)
+- [x] ALL validation logic updated to 15-char limit
+- [x] ALL examples updated to fit within 15 chars
+- [x] ALL UI character counters updated to 15
+- [x] ALL documentation references to 1000/17 chars removed
 
 **Resolution Notes:**
-Resolved on 2025-01-11. Achieved VARCHAR(15) consistency across all user-facing dynamic fields. Key decisions:
+Resolved on 2025-01-11. Achieved complete VARCHAR(15) consistency across ALL documentation files. Key decisions:
 - missions.description = Admin-only notes (TEXT, internal use)
 - rewards.description = User-facing for physical_gift/experience only (VARCHAR(15))
 - raffle_prize_name = User-facing for raffles (VARCHAR(15))
 - All 3 fields serve different purposes but user-facing fields share same 15-char limit
 - Added database CHECK constraint to prevent misuse of rewards.description field
+- Performed comprehensive sweep of all 3 main docs (Loyalty.md, Rewards.md, Pseudocode.md)
+- Updated 20+ additional references to ensure complete consistency
 
 ---
 
 ### CONFLICT 13: Tier Threshold Field Name Convention
 
-**Status:** ✅ NOT A REAL CONFLICT (Documentation Only)
+**Status:** ✅ RESOLVED
 
-**Source of Truth:** Loyalty.md line 1676
+**Source of Truth:** Loyalty.md line 1777
 
 **Problem:**
-- Database: `sales_threshold DECIMAL(10, 2)` (snake_case)
-- API Response: `minSalesThreshold: number` (camelCase with "min" prefix)
-- This is standard practice, not an error
+- Database field: `sales_threshold` (snake_case)
+- API_CONTRACTS.md incorrectly referenced: `min_sales_threshold` (wrong field name)
+- API response field: `minSalesThreshold` (camelCase - correct)
+
+**Issue Found:**
+API_CONTRACTS.md had 2 instances incorrectly referencing `tiers.min_sales_threshold` instead of the actual database field `tiers.sales_threshold`
+
+**Files Modified:**
+
+1. **API_CONTRACTS.md line 365** - Fixed comment:
+   - Before: `// From tiers.min_sales_threshold`
+   - After: `// From tiers.sales_threshold (DB snake_case → API camelCase)`
+
+2. **API_CONTRACTS.md line 583** - Fixed SQL query:
+   - Before: `t.min_sales_threshold`
+   - After: `t.sales_threshold`
 
 **Clarification:**
-- Database uses snake_case (PostgreSQL convention)
-- API responses use camelCase (JavaScript/TypeScript convention)
-- "min" prefix added for clarity in API
-
-**Files to Update:**
-1. **API_CONTRACTS.md** - Add mapping documentation
-
-**Add to API_CONTRACTS.md line 357:**
-```typescript
-nextTier: {
-  id: string
-  name: string
-  color: string
-  minSalesThreshold: number  // Maps to tiers.sales_threshold in database
-}
-```
+- Database uses snake_case: `sales_threshold` (PostgreSQL convention)
+- API responses use camelCase: `minSalesThreshold` (JavaScript/TypeScript convention)
+- "min" prefix added for semantic clarity in API (standard practice)
 
 **Verification:**
-- [ ] API_CONTRACTS.md documents field name mapping
-- [ ] Developers understand snake_case → camelCase conversion is standard
+- [x] API_CONTRACTS.md correctly references database field name
+- [x] Field mapping clearly documented (snake_case → camelCase)
+- [x] SQL query uses correct field name
+- [x] Developers understand this is standard practice, not an error
 
-**Resolution Notes:** (LLM: Fill this in after documenting)
+**Resolution Notes:**
+Resolved on 2025-01-11. Fixed 2 instances in API_CONTRACTS.md where comments/queries incorrectly referenced `min_sales_threshold` instead of the actual database field `sales_threshold`. This was a simple documentation error - the database schema was always correct. Added clear comment showing the field name transformation: `tiers.sales_threshold` (DB) → `minSalesThreshold` (API).
 
 ---
 

@@ -1,7 +1,7 @@
 # Revised
 
 ## Description
-Loyalty program platform for content creators based on TikTok performance metrics (sales and engagement).
+Loyalty program platform for content creators based on TikTok video performance (sales and engagement).
 
 **Architecture:** Multi-tenant database with single client for MVP (ready to scale)
 **Target Users:** ~100 creators in Month 1, scaling to 1000 by Month 12
@@ -13,26 +13,6 @@ Loyalty program platform for content creators based on TikTok performance metric
 - Admin-configurable branding (logo, colors)
 - Modular rewards system (toggle rewards on/off per tier)
 - Thumb-zone optimized for one-handed use
-
-### Timeline & Constraints
-**MVP Timeline:** 6-8 weeks
-- Backend core (Stages 1-3): ~3 weeks
-- Admin + Creator UI (Stages 4-5): ~2 weeks
-- Testing & refinement: ~1 week
-- Buffer: 1-2 weeks
-
-**Development Team:** Solo developer with LLM assistance
-
-**Constraints:**
-- Manual reward fulfillment (no payment processor integration in Phase 1)
-- Uptk as sole data source (mapped sections confirmed, no TikTok API access)
-- Infrastructure: Optimize for efficiency and success rate (scale as needed)
-- Hard launch deadline exists (client ready to deploy)
-
-**Out of Scope (Phase 1):**
-- CRM integration for automated loyalty communications (SMS, Email)
-- Multi-channel event-triggered messaging
-- Phase 2+ features (under construction)
 
 ## Tech Stack
 
@@ -74,12 +54,12 @@ Loyalty program platform for content creators based on TikTok performance metric
 - **Security:** Database-level RLS (not application-level auth)
 - **Multi-tenant ready:** Single codebase, client_id isolation via RLS policies
 - **LLM-optimized:** Stack chosen for Claude Code generation efficiency
-- **Daily automation:** Single cron job (sequential execution) for metrics sync + tier calculation
-  - Runs at midnight UTC daily (`"schedule": "0 0 * * *"`)
+- **Daily automation:** Single cron job (sequential execution) for data sync + tier calculation
+  - Runs at 3:00 PM EST daily (`"schedule": "0 19 * * *"`) - 7:00 PM UTC
   - Data updates once per day (24-hour max delay)
   - Performance: ~2 minutes total at 1000 creators
   - **MVP rationale:** Start simple, validate with user feedback, then optimize if needed
-  - **Easy upgrade path:** Change 1 line in vercel.json to go hourly (`"0 * * * *"`) - no code changes required
+  - **Easy upgrade path:** Change 1 line in vercel.json to go hourly (`"0 20 * * *"`) - no code changes required
   - **Cost:** ~$0.10/month (daily) vs $2.40/month (hourly) - staying efficient during validation phase
   - **Validation triggers:** Upgrade to hourly if >10% support tickets about delays, user requests, or 500+ creators
 
@@ -92,14 +72,13 @@ Loyalty program platform for content creators based on TikTok performance metric
 │  CRUVA (TikTok Analytics Platform)              │
 │  Formerly Uptk - Rebranded                      │
 │                                                 │
-│  Two Data Views:                                │
-│  ├─ CRM > My Affiliate (aggregate per creator) │
+│  Single Data View:                              │
 │  └─ Dashboard > My Videos (per-video details)  │
 └────────────────┬────────────────────────────────┘
                  │
                  │ ① Daily CSV Download
                  │    (Puppeteer automation)
-                 │    affiliates.csv + videos.csv
+                 │    videos.csv
                  │    Midnight UTC
                  ▼
 ┌─────────────────────────────────────────────────┐
@@ -125,7 +104,7 @@ Loyalty program platform for content creators based on TikTok performance metric
 │  Multi-tenant ready, single-tenant  │  │  Storage     │
 │                                     │  │              │
 │  Tables (grouped):                  │  │  Logo uploads│
-│  ├─ Core: clients, users, metrics   │  │  Max 2 MB    │
+│  ├─ Core: clients, users           │  │  Max 2 MB    │
 │  ├─ Rewards: rewards, redemptions  │  │  Public read │
 │  ├─ Content: videos                 │  └──────────────┘
 │  └─ Audit: tier_checkpoints, etc    │
@@ -138,9 +117,737 @@ Loyalty program platform for content creators based on TikTok performance metric
 **Infrastructure details:**
 - Next.js API routes run as Vercel serverless functions
 - Daily automation uses Puppeteer (headless Chrome) triggered by Vercel cron
-- CSV parsing handled by csv-parse library (affiliates.csv + videos.csv)
+- CSV parsing handled by csv-parse library (videos.csv)
 - All Supabase services (PostgreSQL, Auth, Storage) managed by Supabase platform
 - See [Data Flows](#data-flows) section below for detailed processing steps
+
+### Architecture - Schema
+- Multi-tenant database architecture (single client for MVP)
+- Uptk automation script (daily sync)
+- **Daily checkpoint processor:** Evaluates tier maintenance, handles promotions/demotions
+- Row Level Security (RLS) for data isolation
+- Downgrade notification system (email alerts when tier is lost)
+```sql
+-- Clients table (future-proofing for multi-tenant)
+CREATE TABLE clients (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  subdomain VARCHAR(100) UNIQUE, -- For future: 'clientx.loyaltyapp.com'
+
+  -- Branding
+  logo_url TEXT, -- Supabase Storage URL for login screen logo (required for go-live)
+  primary_color VARCHAR(7) DEFAULT '#6366f1', -- Global header color for all screens
+  default_country VARCHAR(100) DEFAULT 'USA', -- Default country for physical gift shipping
+
+  -- Tier calculation settings (future-proofing)
+  tier_calculation_mode VARCHAR(50) DEFAULT 'lifetime',
+    -- Values: 'lifetime' (Phase 1), 'fixed_checkpoint' (Future)
+
+  -- Checkpoint duration (same for all non-Bronze tiers, but calculated per user)
+  checkpoint_months INTEGER DEFAULT 4, -- Each user gets 4-month period starting from their tier_achieved_at
+    -- Example: User A reaches Gold on Jan 15 → checkpoint on May 15
+    --          User B reaches Gold on Feb 3 → checkpoint on Jun 3
+    -- NOT calendar-based (users don't all reset on same day)
+
+  -- VIP tier progression metric
+  vip_metric VARCHAR(20) NOT NULL DEFAULT 'sales',
+    -- Values: 'sales' (revenue $$$) or 'units' (volume #)
+    -- Determines how tier thresholds are measured and checkpoint evaluations calculated
+    -- Immutable after client launch (no migration tooling in MVP)
+    -- CHECK constraint enforces valid values
+
+  -- Note: Tier thresholds, names, colors now stored in 'tiers' table (see line 1740)
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  CHECK (vip_metric IN ('sales', 'units'))
+);
+
+-- MVP: Insert single client row (checkpoint mode enabled by default)
+INSERT INTO clients (name, subdomain, tier_calculation_mode)
+VALUES ('Your Company', 'main', 'fixed_checkpoint');
+
+-- Users table (content creators)
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Primary identifier (from Cruva CSV)
+  tiktok_handle VARCHAR(100) NOT NULL,
+
+  -- Authentication (collected on first login)
+  email VARCHAR(255), -- NULLABLE - added when creator first logs in
+  email_verified BOOLEAN DEFAULT false,
+  is_admin BOOLEAN DEFAULT false, -- Admin role flag (security)
+
+  -- Current tier status
+  current_tier VARCHAR(50) DEFAULT 'tier_1',
+
+  -- Checkpoint tracking (for fixed_checkpoint mode)
+  -- NOTE: These fields track the user's CURRENT checkpoint period (updates when tier changes)
+  -- mission_progress table uses SNAPSHOTS of these values (checkpoint_start/checkpoint_end)
+  tier_achieved_at TIMESTAMP, -- When did they reach current tier? (Start of current checkpoint period)
+                              -- mission_progress.checkpoint_start references this value as a snapshot
+  next_checkpoint_at TIMESTAMP, -- When is their next evaluation? (End of current checkpoint period)
+                                -- mission_progress.checkpoint_end references this value as a snapshot
+  checkpoint_sales_target DECIMAL(10, 2), -- Sales needed to maintain tier (sales mode)
+  checkpoint_units_target INTEGER, -- Units needed to maintain tier (units mode)
+
+  -- Precomputed fields (updated daily during midnight sync for performance)
+  -- Leaderboard
+  leaderboard_rank INTEGER,
+  total_sales DECIMAL(10, 2) DEFAULT 0, -- Lifetime sales for sorting in sales mode
+  total_units INTEGER DEFAULT 0, -- Lifetime units for sorting in units mode
+  manual_adjustments_total DECIMAL(10, 2) DEFAULT 0, -- Sum of manual sales adjustments (for transparency)
+  manual_adjustments_units INTEGER DEFAULT 0, -- Sum of manual unit adjustments (for units mode)
+
+  -- Checkpoint progress
+  checkpoint_sales_current DECIMAL(10, 2) DEFAULT 0, -- Sales in current checkpoint period (sales mode)
+  checkpoint_units_current INTEGER DEFAULT 0, -- Units in current checkpoint period (units mode)
+  projected_tier_at_checkpoint VARCHAR(50),
+
+  -- Checkpoint period engagement metrics
+  checkpoint_videos_posted INTEGER DEFAULT 0,
+  checkpoint_total_views BIGINT DEFAULT 0,
+  checkpoint_total_likes BIGINT DEFAULT 0,
+  checkpoint_total_comments BIGINT DEFAULT 0,
+
+  -- Next tier information
+  next_tier_name VARCHAR(50),
+  next_tier_threshold DECIMAL(10, 2), -- Sales threshold for next tier (sales mode)
+  next_tier_threshold_units INTEGER, -- Units threshold for next tier (units mode)
+
+  -- Last checkpoint result (historical)
+  checkpoint_progress_updated_at TIMESTAMP,
+
+  -- Metadata
+  first_video_date TIMESTAMP, -- When first appeared in Cruva
+  last_login_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(client_id, tiktok_handle), -- Handle unique per client
+  UNIQUE(client_id, email) -- Email unique per client (when provided)
+);
+
+CREATE INDEX idx_users_tiktok_handle ON users(tiktok_handle);
+CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE INDEX idx_users_leaderboard_rank ON users(leaderboard_rank) WHERE leaderboard_rank IS NOT NULL;
+CREATE INDEX idx_users_total_sales ON users(total_sales DESC);
+
+-- Videos table (per-video analytics from videos.csv)
+CREATE TABLE videos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
+
+  -- Video identifiers
+  video_url TEXT UNIQUE NOT NULL,
+  video_title TEXT,
+  post_date DATE NOT NULL,
+
+  -- Engagement metrics
+  views INTEGER DEFAULT 0,
+  likes INTEGER DEFAULT 0,
+  comments INTEGER DEFAULT 0,
+
+  -- Sales metrics
+  gmv DECIMAL(10, 2) DEFAULT 0, -- GMV per video
+  ctr DECIMAL(5, 2), -- Click-through rate
+  units_sold INTEGER DEFAULT 0,
+
+  -- Sync metadata
+  sync_date TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_videos_user_id ON videos(user_id);
+CREATE INDEX idx_videos_post_date ON videos(post_date);
+CREATE UNIQUE INDEX idx_videos_url ON videos(video_url);
+
+-- Rewards table (configurable rewards per client)
+CREATE TABLE rewards (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Reward details
+  type VARCHAR(100) NOT NULL, -- 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
+  name VARCHAR(255), -- Auto-generated from type + value_data (Section 2 decision)
+  description VARCHAR(15), -- User-facing display for physical_gift/experience only (e.g., "VIP Event Access")
+                           -- NULL for other reward types (gift_card, commission_boost, spark_ads, discount)
+                           -- Also used for raffle prize display (max 15 chars)
+
+  -- Value storage (Section 3: Smart Hybrid approach)
+  value_data JSONB, -- JSON for structured data (percent, amount, duration_days)
+    -- Examples:
+    -- commission_boost: {"percent": 5, "duration_days": 30}
+    -- spark_ads: {"amount": 100}
+    -- gift_card: {"amount": 50}
+    -- discount: {"percent": 10, "duration_days": 7}
+    -- physical_gift/experience: Uses description VARCHAR(15) instead
+
+  -- Tier targeting (Section 8)
+  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6' (exact match)
+
+  -- Visibility controls
+  enabled BOOLEAN DEFAULT false,
+  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: NULL = only eligible tier, 'tier_1' = Bronze+ can preview as locked
+
+  -- Redemption limits (Section 6: Numeric quantities)
+  redemption_frequency VARCHAR(50) DEFAULT 'unlimited', -- 'one-time', 'monthly', 'weekly', 'unlimited'
+  redemption_quantity INTEGER DEFAULT 1, -- How many times claimable per frequency period (1-10)
+    -- Examples:
+    -- {redemption_quantity: 2, redemption_frequency: 'monthly'} = 2 per month
+    -- {redemption_quantity: 1, redemption_frequency: 'one-time'} = once (forever for gift_card/physical_gift/experience, per tier for commission_boost/spark_ads/discount)
+    -- {redemption_quantity: NULL, redemption_frequency: 'unlimited'} = unlimited
+
+  -- Redemption process type (hardcoded per reward type in MVP)
+  redemption_type VARCHAR(50) NOT NULL DEFAULT 'instant', -- 'instant' or 'scheduled'
+    -- instant: gift_card, spark_ads, physical_gift, experience
+    -- scheduled: commission_boost, discount (creator/system schedules activation time)
+
+  expires_days INTEGER, -- NULL = no expiration
+  display_order INTEGER, -- For admin UI sorting
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Validation: description required for physical_gift/experience only
+  CHECK (
+    (type IN ('physical_gift', 'experience') AND description IS NOT NULL AND LENGTH(description) <= 15) OR
+    (type NOT IN ('physical_gift', 'experience') AND description IS NULL)
+  )
+
+  -- Constraints
+  CONSTRAINT check_quantity_with_frequency CHECK (
+    (redemption_frequency = 'unlimited' AND redemption_quantity IS NULL) OR
+    (redemption_frequency != 'unlimited' AND redemption_quantity >= 1 AND redemption_quantity <= 10)
+  ),
+  CONSTRAINT check_preview_tier CHECK (
+    preview_from_tier IS NULL OR
+    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
+  )
+);
+
+-- Redemptions table (edge case handling)
+CREATE TABLE redemptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  reward_id UUID REFERENCES rewards(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
+  mission_progress_id UUID REFERENCES mission_progress(id),  -- Link to mission completion (NULL for VIP tier rewards)
+
+  -- Status tracking
+  status VARCHAR(50) DEFAULT 'claimable', -- Options: 'claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'
+    -- 'claimable': Mission completed, reward ready to claim
+    -- 'claimed': Creator claimed, pending admin fulfillment
+    -- 'fulfilled': Admin completed fulfillment
+    -- 'concluded': Fulfillment finalized, moves to history
+    -- 'rejected': Raffle non-winner (bulk rejected by admin)
+
+  -- Eligibility snapshot (locked at claim time)
+  tier_at_claim VARCHAR(50) NOT NULL, -- tier_1/tier_2/tier_3/tier_4 when creator clicked "Claim"
+  claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  -- Redemption type (instant vs scheduled)
+  redemption_type VARCHAR(50) NOT NULL, -- 'instant' or 'scheduled'
+
+  -- Scheduling (for scheduled rewards: commission_boost, discount)
+  scheduled_activation_date DATE, -- Calendar date to activate
+  scheduled_activation_time TIME, -- Time in EST to activate (Discounts: 9 AM-4 PM EST, Boosts: 6 PM EST)
+  google_calendar_event_id VARCHAR(255), -- Google Calendar event ID for admin reminders
+
+  -- Fulfillment tracking
+  fulfilled_at TIMESTAMP, -- When admin marked as fulfilled
+  fulfilled_by UUID REFERENCES users(id), -- Which admin fulfilled
+  fulfillment_notes TEXT, -- Admin's fulfillment details (gift card codes, activation notes, etc.)
+
+  -- Rejection tracking (for raffle non-winners)
+  rejection_reason TEXT, -- Why redemption was rejected (e.g., "Raffle entry - not selected as winner")
+  rejected_at TIMESTAMP, -- When admin rejected
+  rejected_by UUID REFERENCES users(id), -- Which admin rejected
+
+  -- Conclusion tracking
+  concluded_at TIMESTAMP, -- When reward lifecycle finalized
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  CHECK (redemption_type IN ('instant', 'scheduled')),
+  CHECK (status IN ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected')),
+  CHECK (
+    (scheduled_activation_date IS NULL AND scheduled_activation_time IS NULL) OR
+    (scheduled_activation_date IS NOT NULL AND scheduled_activation_time IS NOT NULL)
+  ),
+
+  -- Composite unique constraint for sub-state table foreign keys
+  UNIQUE (id, client_id)  -- Allows redemptions(id, client_id) to be referenced by composite FKs
+);
+
+-- Commission Boost Redemptions (Sub-State for commission_boost rewards)
+CREATE TABLE commission_boost_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  redemption_id UUID NOT NULL UNIQUE REFERENCES redemptions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
+
+  -- Lifecycle state (6 states)
+  boost_status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+    -- 'scheduled': Boost scheduled, not yet active
+    -- 'active': Boost running, tracking sales
+    -- 'expired': Boost period ended, calculating payout
+    -- 'pending_info': Waiting for creator to submit payment info
+    -- 'pending_payout': Payment info collected, admin needs to pay
+    -- 'paid': Final state, payout completed
+
+  -- Date tracking
+  scheduled_activation_date DATE NOT NULL,  -- Date to activate
+  activated_at TIMESTAMP,  -- Actual activation time (6 PM EST)
+  expires_at TIMESTAMP,  -- activated_at + duration_days
+  duration_days INTEGER NOT NULL DEFAULT 30,  -- Boost duration (from reward config, locked at claim)
+
+  -- Commission rates (locked at claim time)
+  boost_rate DECIMAL(5,2) NOT NULL,  -- Commission boost percentage (e.g., 5.00 = 5%)
+  tier_commission_rate DECIMAL(5,2),  -- Tier base rate (for display purposes, locked at claim)
+
+  -- Sales tracking
+  sales_at_activation DECIMAL(10,2),  -- GMV at D0
+  sales_at_expiration DECIMAL(10,2),  -- GMV at DX
+  sales_delta DECIMAL(10,2) GENERATED ALWAYS AS (GREATEST(0, sales_at_expiration - sales_at_activation)) STORED,  -- Calculated delta (auto-calculated)
+
+  -- Payout calculation
+  calculated_commission DECIMAL(10,2),  -- Auto-calculated payout (sales_delta * boost_rate)
+  admin_adjusted_commission DECIMAL(10,2),  -- Manual adjustment (if admin edits payout)
+  final_payout_amount DECIMAL(10,2),  -- Final amount to pay (calculated or adjusted)
+
+  -- Payment info
+  payment_method VARCHAR(20),  -- Options: 'venmo', 'paypal'
+  payment_account VARCHAR(255),  -- Venmo handle or PayPal email
+  payment_account_confirm VARCHAR(255),  -- Double-entry verification (must match)
+  payment_info_collected_at TIMESTAMP,  -- When user submitted
+  payment_info_confirmed BOOLEAN DEFAULT false,  -- Verification flag
+
+  -- Payout tracking
+  payout_sent_at TIMESTAMP,  -- When payment sent
+  payout_sent_by UUID REFERENCES users(id),  -- Which admin sent payment
+  payout_notes TEXT,  -- Admin notes (transaction ID, etc.)
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  CHECK (boost_status IN ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid')),
+  CHECK (payment_method IN ('venmo', 'paypal') OR payment_method IS NULL),
+  CHECK (payment_account = payment_account_confirm OR payment_account IS NULL),
+
+  -- Composite FK to enforce client_id matching with parent redemption
+  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
+);
+
+CREATE INDEX idx_commission_boost_redemption ON commission_boost_redemptions(redemption_id);
+CREATE INDEX idx_commission_boost_status ON commission_boost_redemptions(boost_status);
+CREATE INDEX idx_commission_boost_expiration ON commission_boost_redemptions(expires_at) WHERE boost_status IN ('scheduled', 'active');
+CREATE INDEX idx_commission_boost_tenant ON commission_boost_redemptions(client_id, boost_status);
+
+-- Physical Gift Redemptions (Sub-State for physical_gift rewards)
+CREATE TABLE physical_gift_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  redemption_id UUID NOT NULL UNIQUE REFERENCES redemptions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
+
+  -- Size information (for clothing/shoes only)
+  requires_size BOOLEAN DEFAULT false,           -- Does this gift require size selection?
+  size_category VARCHAR(50),                     -- 'clothing', 'shoes', NULL
+  size_value VARCHAR(20),                        -- 'S', 'M', 'L', 'XL', '8', '9.5', etc.
+  size_submitted_at TIMESTAMP,                   -- When user submitted size info
+
+  -- Shipping information
+  shipping_name VARCHAR(255),
+  shipping_address_line1 VARCHAR(255),
+  shipping_address_line2 VARCHAR(255),
+  shipping_city VARCHAR(100),
+  shipping_state VARCHAR(50),
+  shipping_postal_code VARCHAR(20),
+  shipping_country VARCHAR(100) DEFAULT 'USA',
+  shipping_phone VARCHAR(50),
+  shipping_info_collected_at TIMESTAMP,
+
+  -- Fulfillment tracking
+  tracking_number VARCHAR(255),
+  carrier VARCHAR(50),                           -- 'FedEx', 'UPS', 'USPS', 'DHL'
+  shipped_at TIMESTAMP,
+  delivered_at TIMESTAMP,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  CHECK (
+    (requires_size = false) OR
+    (requires_size = true AND size_category IS NOT NULL AND size_value IS NOT NULL)
+  ),
+
+  -- Composite FK to enforce client_id matching with parent redemption
+  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
+);
+
+CREATE INDEX idx_physical_gift_redemption ON physical_gift_redemptions(redemption_id);
+CREATE INDEX idx_physical_gift_shipped ON physical_gift_redemptions(shipped_at) WHERE shipped_at IS NOT NULL;
+
+-- Missions table (Section 4: Mode 3 - Task completion rewards)
+CREATE TABLE missions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Mission details
+  title VARCHAR(255) NOT NULL, -- Admin internal reference only (not shown to creators)
+  display_name VARCHAR(255) NOT NULL, -- User-facing mission name (e.g., "Unlock Payday", "Lights, Camera, Go!", "Road to Viral", "Eyes on You", "Lucky Ticket")
+  description TEXT, -- Admin-only notes (NEVER shown to creators, internal use only)
+                    -- For raffle user-facing text, use rewards.name via reward_id FK
+
+  -- Mission type & target (Section 7)
+  mission_type VARCHAR(50) NOT NULL, -- 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
+  target_value INTEGER NOT NULL, -- 500 (sales), 10 (videos), 0 (raffle - no progress tracking)
+
+  -- Reward
+  reward_id UUID NOT NULL REFERENCES rewards(id), -- What they unlock when complete
+
+  -- Tier eligibility (Section 8)
+  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6', or 'all'
+    -- Controls which tier can participate in mission
+    -- Combined with preview_from_tier, controls visibility
+
+  -- Raffle-specific (Section 4: Mode 4)
+  raffle_end_date TIMESTAMP NULL, -- ONLY for raffles (any reward type)
+    -- Regular missions use checkpoint as deadline
+    -- Raffles use custom end date for winner selection
+    -- Raffles typically use physical_gift/experience but can use any reward type
+    -- Raffle prize name comes from rewards.name (via reward_id FK)
+
+  -- Visibility controls
+  enabled BOOLEAN DEFAULT true,
+  activated BOOLEAN DEFAULT false, -- For raffles only: false = dormant, true = accepting entries
+    -- Regular missions (sales, videos, views, likes): Ignored (always behave as activated)
+    -- Raffle missions: Start dormant (false), admin manually activates to accept entries
+  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: Locked mission visibility
+  display_order INTEGER NOT NULL, -- Sequential unlock position (1, 2, 3...)
+
+  created_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  CONSTRAINT check_raffle_requirements CHECK (
+    (mission_type != 'raffle') OR
+    (mission_type = 'raffle' AND raffle_end_date IS NOT NULL AND target_value = 0)
+  ),
+  CONSTRAINT check_non_raffle_fields CHECK (
+    (mission_type = 'raffle') OR
+    (mission_type != 'raffle' AND raffle_end_date IS NULL)
+  ),
+  CONSTRAINT check_tier_eligibility CHECK (
+    tier_eligibility = 'all' OR
+    tier_eligibility IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
+  ),
+  CONSTRAINT check_preview_tier_missions CHECK (
+    preview_from_tier IS NULL OR
+    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
+  ),
+  -- Enforce unique display order per tier+type (prevents conflicts in sequential unlock)
+  UNIQUE(client_id, tier_eligibility, mission_type, display_order)
+);
+
+-- Mission progress tracking
+CREATE TABLE mission_progress (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  mission_id UUID REFERENCES missions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
+
+  -- Progress tracking
+  current_value INTEGER DEFAULT 0, -- Current progress (e.g., $350 out of $500)
+  status VARCHAR(50) DEFAULT 'active', -- Options: 'dormant', 'active', 'completed'
+    -- 'dormant': Mission visible but not yet active (raffle with activated=false, OR regular mission before checkpoint)
+    -- 'active': In progress
+    -- 'completed': Target reached (reward claiming handled by redemptions table)
+    --
+    -- Note: After mission_progress.status='completed', the system creates a redemptions record with status='claimable'.
+    -- The reward claiming lifecycle is tracked in the redemptions table, NOT in mission_progress.
+
+  -- Status timestamps
+  completed_at TIMESTAMP, -- When they hit target
+  created_at TIMESTAMP DEFAULT NOW(),  -- Audit trail
+  updated_at TIMESTAMP DEFAULT NOW(),  -- Audit trail
+
+  -- Checkpoint period linkage (Section 4: Missions reset at checkpoint)
+  -- NOTE: These are SNAPSHOTS copied from users table when mission is created
+  -- They NEVER update, even if user's tier changes (preserves original mission deadline)
+  checkpoint_start TIMESTAMP, -- Snapshot of user's tier_achieved_at when mission was created
+  checkpoint_end TIMESTAMP, -- Snapshot of user's next_checkpoint_at when mission was created
+                            -- Used for: mission deadlines, checkpoint resets, historical tracking
+
+  -- Constraints
+  UNIQUE(user_id, mission_id, checkpoint_start), -- One progress record per mission per checkpoint
+  CHECK (status IN ('dormant', 'active', 'completed'))
+);
+
+CREATE INDEX idx_mission_progress_user ON mission_progress(user_id);
+CREATE INDEX idx_mission_progress_status ON mission_progress(status);
+CREATE INDEX idx_mission_progress_tenant ON mission_progress(client_id, user_id, status);
+
+-- Raffle participants table (Section 4: Mode 4 - Raffle participation tracking)
+CREATE TABLE raffle_participations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  mission_id UUID NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mission_progress_id UUID NOT NULL REFERENCES mission_progress(id) ON DELETE CASCADE,
+  redemption_id UUID NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
+
+  participated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  is_winner BOOLEAN,  -- NULL = not yet selected, TRUE = won, FALSE = lost
+  winner_selected_at TIMESTAMP,
+  selected_by UUID REFERENCES users(id),  -- Which admin selected winner
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints
+  UNIQUE(mission_id, user_id),  -- One entry per user per raffle
+  CHECK (
+    (is_winner IS NULL AND winner_selected_at IS NULL) OR
+    (is_winner IS NOT NULL AND winner_selected_at IS NOT NULL)
+  ),
+
+  -- Composite FK to enforce client_id matching with parent redemption
+  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
+);
+
+CREATE INDEX idx_raffle_mission ON raffle_participations(mission_id, is_winner);
+CREATE INDEX idx_raffle_user ON raffle_participations(user_id, mission_id);
+CREATE INDEX idx_raffle_winner ON raffle_participations(is_winner, winner_selected_at) WHERE is_winner = true;
+CREATE INDEX idx_raffle_redemption ON raffle_participations(redemption_id);
+
+-- Tiers table (Section 1: Dynamic tier configuration, 3-6 tiers per client)
+CREATE TABLE tiers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+
+  -- Tier identity
+  tier_order INTEGER NOT NULL, -- Display order: 1-6 (supports 3-6 tiers)
+  tier_id VARCHAR(50) NOT NULL, -- Internal ID: 'tier_1' through 'tier_6' (supports 3-6 tiers)
+  tier_name VARCHAR(100) NOT NULL, -- Admin-customizable: 'Bronze', 'Silver', 'Gold', 'Platinum'
+  tier_color VARCHAR(7) NOT NULL, -- Hex color for UI display
+
+  -- Threshold & rewards
+  sales_threshold DECIMAL(10, 2), -- Minimum sales ($) required to reach tier (sales mode only, mutually exclusive with units_threshold)
+  units_threshold INTEGER, -- Minimum units (#) sold to reach tier (units mode only, mutually exclusive with sales_threshold)
+  commission_rate DECIMAL(5, 2) NOT NULL, -- Commission percentage for this tier
+
+  -- Checkpoint behavior (Section 1: Field 1.8)
+  checkpoint_exempt BOOLEAN DEFAULT false, -- true = no checkpoint evaluations (entry tier only - tier_1/Bronze)
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(client_id, tier_order),
+  UNIQUE(client_id, tier_id),
+
+  -- Constraints: Exactly one threshold must be set (dual field approach for type safety)
+  CHECK (
+    (sales_threshold IS NOT NULL AND units_threshold IS NULL) OR
+    (sales_threshold IS NULL AND units_threshold IS NOT NULL)
+  )
+);
+
+CREATE INDEX idx_tiers_client ON tiers(client_id);
+CREATE INDEX idx_tiers_units_threshold ON tiers(client_id, units_threshold) WHERE units_threshold IS NOT NULL;
+
+-- Sales adjustments table (Section 1: Field 1.9 - Manual sales corrections)
+CREATE TABLE sales_adjustments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
+
+  -- Adjustment details
+  amount DECIMAL(10, 2), -- Positive or negative sales adjustment (sales mode, mutually exclusive with amount_units)
+  amount_units INTEGER, -- Positive or negative units adjustment (units mode, mutually exclusive with amount)
+  reason TEXT NOT NULL, -- Admin explanation (e.g., "Offline sale from event", "Refund correction")
+  adjustment_type VARCHAR(50) NOT NULL, -- 'manual_sale', 'refund', 'bonus', 'correction'
+
+  -- Audit trail
+  adjusted_by UUID REFERENCES users(id), -- Which admin made the adjustment
+  created_at TIMESTAMP DEFAULT NOW(),
+
+  -- Note: Adjustments apply during next daily sync, not immediately
+  -- Tier recalculation happens in daily cron (Section 1 decision)
+  applied_at TIMESTAMP, -- When adjustment was included in tier calculation
+
+  -- Constraints: Exactly one amount must be set
+  CHECK (
+    (amount IS NOT NULL AND amount_units IS NULL) OR
+    (amount IS NULL AND amount_units IS NOT NULL)
+  )
+);
+
+CREATE INDEX idx_sales_adjustments_user ON sales_adjustments(user_id);
+CREATE INDEX idx_sales_adjustments_applied ON sales_adjustments(applied_at);
+
+-- Tier checkpoints table (tracks tier maintenance evaluations)
+CREATE TABLE tier_checkpoints (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
+  checkpoint_date TIMESTAMP NOT NULL,
+  period_start_date TIMESTAMP NOT NULL,
+  period_end_date TIMESTAMP NOT NULL,
+  sales_in_period DECIMAL(10, 2), -- Sales in checkpoint period (sales mode only, includes manual adjustments)
+  sales_required DECIMAL(10, 2), -- Sales required to maintain tier (sales mode only)
+  units_in_period INTEGER, -- Units in checkpoint period (units mode only, includes manual adjustments)
+  units_required INTEGER, -- Units required to maintain tier (units mode only)
+  tier_before VARCHAR(50) NOT NULL,
+  tier_after VARCHAR(50) NOT NULL,
+  status VARCHAR(50) NOT NULL, -- 'maintained', 'promoted', 'demoted'
+  created_at TIMESTAMP DEFAULT NOW(),
+
+  -- Constraints: Exactly one metric pair must be set
+  CHECK (
+    (sales_in_period IS NOT NULL AND units_in_period IS NULL) OR
+    (sales_in_period IS NULL AND units_in_period IS NOT NULL)
+  )
+);
+
+-- Handle changes table (audit trail for TikTok handle changes)
+CREATE TABLE handle_changes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  old_handle VARCHAR(100) NOT NULL,
+  new_handle VARCHAR(100) NOT NULL,
+  detected_at TIMESTAMP DEFAULT NOW(),
+  resolved_by UUID, -- Admin who confirmed the change
+  resolved_at TIMESTAMP
+);
+
+-- Indexes for performance
+CREATE INDEX idx_clients_vip_metric ON clients(vip_metric);
+CREATE INDEX idx_users_client ON users(client_id);
+CREATE INDEX idx_users_next_checkpoint ON users(next_checkpoint_at); -- For daily checkpoint checks
+CREATE INDEX idx_rewards_client ON rewards(client_id);
+CREATE INDEX idx_rewards_enabled ON rewards(enabled);
+CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility, display_order); -- Composite index for GET /api/rewards
+CREATE INDEX idx_missions_lookup ON missions(client_id, enabled, tier_eligibility, display_order); -- Composite index for GET /api/missions
+CREATE INDEX idx_redemptions_user ON redemptions(user_id);
+CREATE INDEX idx_redemptions_status ON redemptions(status);
+CREATE INDEX idx_tier_checkpoints_user ON tier_checkpoints(user_id);
+
+-- Row Level Security (RLS) policies
+-- Security Model: Strict role-based access (Creator/System/Admin)
+
+-- Helper functions for role checks
+CREATE OR REPLACE FUNCTION auth.user_role()
+RETURNS TEXT AS $$
+  SELECT COALESCE(auth.jwt() ->> 'role', 'creator');
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION auth.is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM users WHERE id = auth.uid() AND is_admin = true
+  );
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION auth.current_client_id()
+RETURNS UUID AS $$
+  SELECT client_id FROM users WHERE id = auth.uid();
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+
+-- Table: clients
+ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+CREATE POLICY clients_select ON clients
+  FOR SELECT USING (id = auth.current_client_id() OR auth.is_admin());
+CREATE POLICY clients_insert ON clients
+  FOR INSERT WITH CHECK (auth.is_admin());
+CREATE POLICY clients_update ON clients
+  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
+
+-- Table: users
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY users_select ON users
+  FOR SELECT USING (id = auth.uid() OR auth.is_admin());
+CREATE POLICY users_insert ON users
+  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
+CREATE POLICY users_update_creator ON users
+  FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+CREATE POLICY users_update_system ON users
+  FOR UPDATE USING (auth.user_role() = 'system')
+  WITH CHECK (auth.user_role() = 'system');
+CREATE POLICY users_update_admin ON users
+  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
+CREATE POLICY users_delete ON users
+  FOR DELETE USING (auth.is_admin());
+
+-- Table: rewards
+ALTER TABLE rewards ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rewards_select ON rewards
+  FOR SELECT USING (
+    (client_id = auth.current_client_id() AND enabled = true) OR auth.is_admin()
+  );
+CREATE POLICY rewards_insert ON rewards
+  FOR INSERT WITH CHECK (auth.is_admin());
+CREATE POLICY rewards_update ON rewards
+  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
+CREATE POLICY rewards_delete ON rewards
+  FOR DELETE USING (auth.is_admin());
+
+-- Table: redemptions
+ALTER TABLE redemptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY redemptions_select ON redemptions
+  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
+CREATE POLICY redemptions_insert ON redemptions
+  FOR INSERT WITH CHECK (user_id = auth.uid() AND status = 'claimable');
+CREATE POLICY redemptions_update ON redemptions
+  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
+CREATE POLICY redemptions_delete ON redemptions
+  FOR DELETE USING (auth.is_admin());
+
+-- Table: tier_checkpoints (immutable audit log)
+ALTER TABLE tier_checkpoints ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tier_checkpoints_select ON tier_checkpoints
+  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
+CREATE POLICY tier_checkpoints_insert ON tier_checkpoints
+  FOR INSERT WITH CHECK (auth.user_role() = 'system');
+
+-- Table: videos
+ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY videos_select ON videos
+  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
+CREATE POLICY videos_insert ON videos
+  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
+CREATE POLICY videos_update ON videos
+  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
+  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
+CREATE POLICY videos_delete ON videos
+  FOR DELETE USING (auth.is_admin());
+
+-- Table: handle_changes
+ALTER TABLE handle_changes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY handle_changes_select ON handle_changes
+  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
+CREATE POLICY handle_changes_insert ON handle_changes
+  FOR INSERT WITH CHECK (auth.user_role() = 'system');
+CREATE POLICY handle_changes_update ON handle_changes
+  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
+  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
+
+-- Role-based access summary:
+-- Creator: Read own data, claim rewards
+-- System: Write users/tiers/videos (automation)
+-- Admin: Full access to all tables
+```
+
+
+**MVP Note:** All users will reference the same `client_id`. When scaling to multi-tenant, just add more rows to `clients` table.
+
 
 ## API Security
 
@@ -177,7 +884,7 @@ Loyalty program platform for content creators based on TikTok performance metric
 - `/api/admin/users/[id]` PUT - Manual tier adjustments
 
 #### **System Routes (Cron Secret)**
-- `/api/cron/metrics-sync` POST - **Rate limit: 1/day**
+- `/api/cron/data-sync` POST - **Rate limit: 1/day**
 - `/api/cron/checkpoint-eval` POST - **Rate limit: 1/day**
 
 ### Rate Limiting Implementation
@@ -189,59 +896,10 @@ Loyalty program platform for content creators based on TikTok performance metric
 - Claim Reward: Prevent spam claims
 - Cron Jobs: Prevent accidental double-execution
 
-**Example Implementation:**
-```typescript
-// lib/rate-limit.ts
-import { Redis } from '@upstash/redis';
-
-export async function rateLimit(
-  identifier: string, // userId or IP
-  limit: number,      // max requests
-  window: number      // seconds
-) {
-  const redis = Redis.fromEnv();
-  const key = `rate-limit:${identifier}`;
-  const count = await redis.incr(key);
-
-  if (count === 1) await redis.expire(key, window);
-  if (count > limit) return { error: 'Rate limit exceeded', status: 429 };
-
-  return null;
-}
-
-// Usage in API route
-const rateLimitResponse = await rateLimit(userId, 10, 3600); // 10/hour
-if (rateLimitResponse) return NextResponse.json(rateLimitResponse);
-```
-
 ### Input Validation (Zod)
 
 **All API routes validate input with Zod schemas:**
 
-```typescript
-// lib/schemas.ts
-import { z } from 'zod';
-
-export const ClaimRewardSchema = z.object({
-  rewardId: z.string().uuid(),
-});
-
-export const CreateRewardSchema = z.object({
-  type: z.enum(['gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience']),
-  value_data: z.any().optional(), // Category 1 structured data (JSONB): {percent, amount, duration_days}
-  description: z.string().max(1000).optional(), // Category 2 freeform text
-  // Note: 'name' field is auto-generated by backend (not in creation schema). See Section 2 & Pseudocode.md Section 2.
-  tier_eligibility: z.enum(['tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6']),
-  enabled: z.boolean(),
-  redemption_frequency: z.enum(['one-time', 'monthly', 'weekly', 'unlimited']),
-  redemption_quantity: z.number().int().min(1).max(10).nullable(), // 1-10 for limited frequencies, NULL for unlimited
-});
-
-export const UpdateBrandingSchema = z.object({
-  logo_url: z.string().url().optional(),
-  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i),
-});
-```
 
 ### CSRF Protection
 
@@ -250,28 +908,10 @@ export const UpdateBrandingSchema = z.object({
 - Origin header checking (verifies request from your domain)
 - Blocks cross-origin POST/PUT/DELETE automatically
 
-**Verification test:**
-```typescript
-// Should fail (403 Forbidden)
-fetch('https://loyalty.app/api/admin/rewards', {
-  method: 'POST',
-  headers: { 'Origin': 'https://evil-site.com' }
-});
-```
-
 ### Cron Job Security
 
 **Vercel cron secret validation:**
-```typescript
-// app/api/cron/metrics-sync/route.ts
-export async function POST(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  // Execute sync...
-}
-```
+
 
 **Environment variables:**
 - `CRON_SECRET` - Random secret for cron authentication
@@ -292,44 +932,6 @@ export async function POST(request: Request) {
 
 **Size Limit:** Max 2 MB (enforced at all 3 layers)
 
-**Upload Flow:**
-```typescript
-// Layer 1: Client validation
-const handleFileChange = (e) => {
-  const file = e.target.files[0];
-
-  // Check type
-  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-  if (!allowedTypes.includes(file.type)) {
-    toast.error('Only PNG and JPG files allowed');
-    return;
-  }
-
-  // Check size (2 MB)
-  if (file.size > 2 * 1024 * 1024) {
-    toast.error('File must be less than 2 MB');
-    return;
-  }
-
-  uploadLogo(file);
-};
-
-// Layer 2: API route validation
-// /api/admin/logo
-- requireAdmin() check
-- MIME type validation
-- Extension validation (.png, .jpg, .jpeg)
-- Size validation (2 MB)
-- Upload to Supabase Storage
-- Update clients.logo_url
-
-// Layer 3: Supabase Storage bucket policies
-- Public read access
-- Admin-only write (RLS)
-- 2 MB size limit enforced
-- One logo per client (upsert replaces existing)
-```
-
 **Storage Structure:**
 ```
 supabase-storage/logos/
@@ -339,25 +941,7 @@ supabase-storage/logos/
 ```
 
 **Bucket RLS Policies:**
-```sql
--- Public read
-CREATE POLICY "Public read logos" ON storage.objects
-FOR SELECT USING (bucket_id = 'logos');
 
--- Admin-only write
-CREATE POLICY "Admin insert logos" ON storage.objects
-FOR INSERT WITH CHECK (
-  bucket_id = 'logos'
-  AND auth.uid() IN (SELECT id FROM users WHERE is_admin = true)
-);
-
--- Enforce 2 MB size limit
-CREATE POLICY "Enforce size limit" ON storage.objects
-FOR INSERT WITH CHECK (
-  bucket_id = 'logos'
-  AND (metadata->>'size')::int <= 2097152
-);
-```
 
 **Attack Prevention:**
 - ❌ Executable disguised as image → Extension + MIME check
@@ -365,6 +949,87 @@ FOR INSERT WITH CHECK (
 - ❌ SVG with JavaScript → Not allowed
 - ❌ Creator uploads logo → requireAdmin() blocks
 - ❌ Overwrite other client's logo → Path includes client_id
+
+---
+
+## Mission & Reward Lifecycle Model
+
+### Two Separate Lifecycles
+
+The loyalty platform uses **TWO separate database tables** with distinct lifecycles for missions and rewards:
+
+#### **Lifecycle 1: Mission Completion** (mission_progress table)
+```
+dormant → active → completed
+```
+
+**Purpose:** Track creator's progress toward mission goals
+
+**Status transitions:**
+- `dormant`: Mission visible but not yet active (raffle with activated=false, OR regular mission before checkpoint)
+- `active`: Creator is working toward the goal
+- `completed`: Creator reached the target value (mission goal achieved)
+
+**Key point:** Once status='completed', the mission_progress table's job is done. The creator has achieved their goal.
+
+---
+
+#### **Lifecycle 2: Reward Claiming** (redemptions table)
+```
+claimable → claimed → fulfilled → concluded
+```
+
+**Purpose:** Track admin fulfillment and delivery of earned rewards
+
+**Status transitions:**
+- `claimable`: Mission completed, reward ready for creator to claim
+- `claimed`: Creator clicked "Claim", awaiting admin fulfillment
+- `fulfilled`: Admin completed the operational task (sent gift card, activated boost, etc.)
+- `concluded`: Reward lifecycle finalized, moves to history
+- `rejected`: Special case for raffle losers (non-winners)
+
+**Key point:** This lifecycle is independent of mission completion. It tracks the operational fulfillment process.
+
+---
+
+### How The Two Lifecycles Connect
+
+**Trigger point:** When mission_progress.status changes to `'completed'`:
+
+1. **System automatically creates a redemptions record** with:
+   - `status = 'claimable'`
+   - `mission_progress_id` links back to the completed mission
+   - `reward_id` specifies what they earned
+
+2. **Creator then interacts with the redemptions table:**
+   - Sees reward in "Available" tab (status='claimable')
+   - Clicks "Claim" → status='claimed'
+   - Waits for admin → status='fulfilled'
+   - Reward moves to history → status='concluded'
+
+**Example flow:**
+```
+Day 1: Creator completes "Sell $500" mission
+       → mission_progress.status = 'completed'
+       → System creates: redemptions.status = 'claimable'
+
+Day 2: Creator clicks "Claim $50 Gift Card"
+       → redemptions.status = 'claimed'
+
+Day 3: Admin sends gift card code
+       → redemptions.status = 'fulfilled'
+
+Day 4: Admin marks complete
+       → redemptions.status = 'concluded'
+```
+
+**Why separate tables?**
+- **Clean separation of concerns:** Mission logic ≠ Fulfillment logic
+- **Multiple claims possible:** VIP tier rewards don't have missions (mission_progress_id = NULL)
+- **Independent status tracking:** Mission can be complete while fulfillment is pending
+- **Audit trail:** Full history of both achievement and delivery
+
+---
 
 ## Data Flows
 
@@ -389,57 +1054,813 @@ FOR INSERT WITH CHECK (
 
 ### Flow 1: Daily Metrics Sync (Automated)
 
-**Trigger:** Vercel cron job at midnight UTC (`0 0 * * *`)
+**Trigger:** Vercel cron job at 3:00 PM EST daily (`0 19 * * *`) - 7:00 PM UTC
 
 **Frequency:** Once per 24 hours
 
 **Data Freshness:**
-- Creator makes sale at 1:00 AM → Appears in dashboard at 12:00 AM next day
+- Creator makes sale at 1:00 AM → Appears in dashboard at 20:00 UTC next day
 - Maximum delay: 23 hours 59 minutes
 - Average delay: 12 hours
 - User-facing indicator: Dashboard displays "Last updated: X hours ago" with tooltip explaining daily updates
 
 **Steps:**
-1. **Download CSV files from Cruva:**
+1. **Download CSV file from Cruva:**
    - Puppeteer automation logs into Cruva
-   - Navigate to CRM > My Affiliate, download `affiliates.csv`
    - Navigate to Dashboard > My Videos, download `videos.csv`
 
-2. **Parse CSV files:**
+2. **Parse CSV file:**
    - Use `csv-parse` library to convert CSV → JSON
-   - Extract from affiliates.csv: Affiliate Handle, Shop GMV, Video Posts, Live Posts, Post Rate
-   - Extract from videos.csv: Handle, Video URL, Views, Likes, Comments, GMV, CTR, Units Sold, Post date, Video Title
+   - Extract from videos.csv: Handle, Video URL, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title
 
-3. **Process each creator:**
-   - For each row in affiliates.csv:
-     - Match creator by `tiktok_handle`
-     - If match found: Update existing user metrics
-     - If no match: **Auto-create new user** (see Flow 2)
-     - Upsert metrics table (tiktok_sales, videos_posted, live_posts)
-
-4. **Process videos:**
+3. **Process videos:**
    - For each row in videos.csv:
      - Match to user by `tiktok_handle`
+     - If no match: **Auto-create new user** (see Flow 2)
      - Upsert videos table (video_url as unique key)
-     - Aggregate engagement: SUM(views), SUM(likes), SUM(comments)
-     - Update metrics table with engagement totals
 
-5. **Logging:**
+4. **Calculate and update user precomputed fields directly:**
+   ```sql
+   -- Units mode: Update units-based fields
+   UPDATE users u
+   SET
+     total_units = (SELECT COALESCE(SUM(units_sold), 0) FROM videos WHERE user_id = u.id),
+     checkpoint_units_current = (SELECT COALESCE(SUM(units_sold), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_videos_posted = (SELECT COUNT(*) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_views = (SELECT COALESCE(SUM(views), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_likes = (SELECT COALESCE(SUM(likes), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_comments = (SELECT COALESCE(SUM(comments), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at)
+   FROM clients c
+   WHERE u.client_id = c.id AND c.vip_metric = 'units';
+
+   -- Sales mode: Update sales-based fields
+   UPDATE users u
+   SET
+     total_sales = (SELECT COALESCE(SUM(sales_dollars), 0) FROM videos WHERE user_id = u.id),
+     checkpoint_sales_current = (SELECT COALESCE(SUM(sales_dollars), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_videos_posted = (SELECT COUNT(*) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_views = (SELECT COALESCE(SUM(views), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_likes = (SELECT COALESCE(SUM(likes), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     checkpoint_total_comments = (SELECT COALESCE(SUM(comments), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at)
+   FROM clients c
+   WHERE u.client_id = c.id AND c.vip_metric = 'sales';
+   ```
+
+5. **Update mission progress:**
+   ```sql
+   -- Update current_value for all active missions
+   UPDATE mission_progress mp
+   SET
+     current_value = CASE m.mission_type
+       WHEN 'sales_dollars' THEN (
+         SELECT COALESCE(SUM(v.sales_dollars), 0)
+         FROM videos v
+         WHERE v.user_id = mp.user_id
+           AND v.post_date >= mp.checkpoint_start
+           AND v.post_date < mp.checkpoint_end
+       )
+       WHEN 'sales_units' THEN (
+         SELECT COALESCE(SUM(v.sales_units), 0)
+         FROM videos v
+         WHERE v.user_id = mp.user_id
+           AND v.post_date >= mp.checkpoint_start
+           AND v.post_date < mp.checkpoint_end
+       )
+       WHEN 'videos' THEN (
+         SELECT COUNT(*)
+         FROM videos v
+         WHERE v.user_id = mp.user_id
+           AND v.post_date >= mp.checkpoint_start
+           AND v.post_date < mp.checkpoint_end
+       )
+       WHEN 'views' THEN (
+         SELECT COALESCE(SUM(v.views), 0)
+         FROM videos v
+         WHERE v.user_id = mp.user_id
+           AND v.post_date >= mp.checkpoint_start
+           AND v.post_date < mp.checkpoint_end
+       )
+       WHEN 'likes' THEN (
+         SELECT COALESCE(SUM(v.likes), 0)
+         FROM videos v
+         WHERE v.user_id = mp.user_id
+           AND v.post_date >= mp.checkpoint_start
+           AND v.post_date < mp.checkpoint_end
+       )
+     END,
+     status = CASE
+       WHEN current_value >= m.target_value THEN 'completed'
+       ELSE mp.status
+     END,
+     completed_at = CASE
+       WHEN current_value >= m.target_value AND mp.completed_at IS NULL
+       THEN NOW()
+       ELSE mp.completed_at
+     END,
+     updated_at = NOW()
+   FROM missions m
+   WHERE mp.mission_id = m.id
+     AND mp.status IN ('active', 'completed')
+     AND m.mission_type IN ('sales_dollars', 'sales_units', 'videos', 'views', 'likes');
+   ```
+
+6. **Logging:**
    - Record sync results: total processed, matched, new creators, errors
    - Alert admin if >10% creators unmatched (indicates data issue)
 
-6. **Update mission progress (Mode 3):**
-   - For each active mission and eligible user, calculate progress based on mission type
-   - Upsert mission_progress table with current_value
-   - Mark missions as 'completed' if target reached (excludes raffles - no progress tracking)
+7. **Handle raffles:**
+   - **For raffles** (target_value=0, no numeric progress):
+     - Ensure mission_progress rows exist for all eligible users
+     - Query all missions where `mission_type = 'raffle'` and `enabled = true`
+     - For each raffle, get all users matching `tier_eligibility`
+     - Upsert mission_progress: `status = 'dormant'` (if `missions.activated = false`) OR `status = 'active'` (if `missions.activated = true`)
+     - Raffle completion happens when user clicks "Participate" (not via daily sync)
+     - Catches newly promoted users and newly created raffles
    - Send notification to creators for completed missions
-   - See Pseudocode.md Section 4.2 for implementation details
 
-7. **Error handling & alerts:**
+8. **Error handling & alerts:**
    - If any step fails: Send email alert to admin within 15 minutes
    - Email includes: Error message, likely causes (UI changes, login issues), fallback instructions
    - Admin can manually upload CSVs via admin panel (`/admin/manual-upload`) as temporary workaround
    - Automation retries next day at midnight UTC
+
+---
+
+## Critical Implementation Patterns
+
+**Purpose:** Non-negotiable database patterns that ensure data integrity and prevent financial errors. These patterns apply across all flows and must be followed consistently.
+
+**Source:** SchemaDecisions.md Fixes 2-8 (Codex audit recommendations)
+
+---
+
+### Pattern 1: Transactional Workflows (Atomicity)
+
+**Problem:** State transitions not wrapped in transactions can lead to partial updates. Example: Mission completes but redemption not created → creator locked forever.
+
+**Solution:** Wrap all multi-step state changes in database transactions. Either ALL steps succeed or ALL rollback.
+
+**Critical Use Cases:**
+1. Mission completion + redemption creation + next mission unlock
+2. VIP tier promotion + reward creation
+3. Claim button + sub-state record creation
+4. Raffle winner selection + redemption updates
+
+**Implementation Pattern:**
+
+```typescript
+// Mission completion flow (transactional)
+async function completeMission(missionProgressId: string) {
+  return await db.transaction(async (trx) => {
+    // Step 1: Mark mission complete
+    await trx.mission_progress.update({
+      where: { id: missionProgressId },
+      data: { status: 'completed', completed_at: new Date() }
+    });
+
+    // Step 2: Create redemption (idempotent via upsert)
+    await trx.redemptions.upsert({
+      where: {
+        unique_user_mission_redemption: {
+          user_id,
+          mission_progress_id
+        }
+      },
+      create: {
+        user_id,
+        reward_id,
+        status: 'claimable',
+        client_id,
+        tier_at_claim
+      },
+      update: {} // If exists, do nothing (idempotent)
+    });
+
+    // Step 3: Unlock next mission (if exists)
+    const nextMission = await findNextMission(trx, missionType, tier);
+    if (nextMission) {
+      await trx.mission_progress.create({
+        data: {
+          user_id,
+          mission_id: nextMission.id,
+          status: 'active',
+          client_id
+        }
+      });
+    }
+  });
+  // Either ALL succeed or ALL rollback
+}
+```
+
+**Benefits:**
+- ✅ No orphaned states (mission complete without redemption impossible)
+- ✅ Crash recovery (transaction rolls back on failure)
+- ✅ Data consistency guaranteed at database level
+- ✅ Idempotent (retry safe via upsert pattern)
+
+**Where to Apply:**
+- Flow 1, Step 6: Mission progress updates
+- Flow 8: Tier promotion logic
+- Flow 10: Claim reward button
+- Raffle winner selection (admin action)
+
+---
+
+### Pattern 2: Idempotent Operations (Uniqueness Constraints)
+
+**Problem:** Network retries can create duplicate records (e.g., user clicks "Claim" twice during slow network).
+
+**Solution:** Database-level uniqueness constraints prevent duplicates at the source.
+
+**Constraints Implemented:**
+
+```sql
+-- Prevent duplicate mission-based redemptions
+ALTER TABLE redemptions
+ADD CONSTRAINT unique_user_mission_redemption
+UNIQUE (user_id, mission_progress_id)
+WHERE mission_progress_id IS NOT NULL;
+
+-- Prevent duplicate mission progress records
+ALTER TABLE mission_progress
+ADD CONSTRAINT unique_user_mission_checkpoint
+UNIQUE (user_id, mission_id, checkpoint_start);
+```
+
+**Benefits:**
+- ✅ Database rejects duplicate operations automatically
+- ✅ Retries are safe (returns existing record)
+- ✅ Prevents double-payouts
+- ✅ Works even if application logic has bugs
+
+**Application Pattern:**
+
+```typescript
+// Always use upsert for retry safety
+await db.redemptions.upsert({
+  where: {
+    unique_user_mission_redemption: {
+      user_id,
+      mission_progress_id
+    }
+  },
+  create: { /* new record */ },
+  update: {} // If exists, do nothing
+});
+```
+
+---
+
+### Pattern 3: State Transition Validation (Database Triggers)
+
+**Problem:** Application bugs or manual SQL queries could cause invalid state transitions (e.g., `concluded` → `claimable` would allow double-payouts).
+
+**Solution:** Database triggers enforce valid state transition rules at the database level.
+
+**Valid Transitions:**
+
+```typescript
+// Redemptions table
+const VALID_TRANSITIONS = {
+  'claimable': ['claimed'],
+  'claimed': ['fulfilled', 'concluded'], // Can skip fulfilled for instant rewards
+  'fulfilled': ['concluded'],
+  'concluded': [] // Terminal state
+};
+
+// Commission Boost sub-states
+const BOOST_TRANSITIONS = {
+  'scheduled': ['active', 'expired'],
+  'active': ['expired', 'pending_info'],
+  'expired': ['paid'], // Expired boosts get paid $0
+  'pending_info': ['pending_payout'],
+  'pending_payout': ['paid'],
+  'paid': [] // Terminal state
+};
+```
+
+**Database Trigger:**
+
+```sql
+-- Validate redemption state transitions
+CREATE OR REPLACE FUNCTION validate_redemption_transition()
+RETURNS TRIGGER AS $$
+DECLARE
+  allowed BOOLEAN := FALSE;
+BEGIN
+  IF (OLD.status = 'claimable' AND NEW.status = 'claimed') THEN
+    allowed := TRUE;
+  ELSIF (OLD.status = 'claimed' AND NEW.status IN ('fulfilled', 'concluded')) THEN
+    allowed := TRUE;
+  ELSIF (OLD.status = 'fulfilled' AND NEW.status = 'concluded') THEN
+    allowed := TRUE;
+  ELSIF (OLD.status = NEW.status) THEN
+    allowed := TRUE; -- Idempotent updates OK
+  END IF;
+
+  IF NOT allowed THEN
+    RAISE EXCEPTION 'Invalid redemption transition: % -> %', OLD.status, NEW.status;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_redemption_transition
+  BEFORE UPDATE ON redemptions
+  FOR EACH ROW
+  EXECUTE FUNCTION validate_redemption_transition();
+```
+
+**Benefits:**
+- ✅ Prevents backward transitions (concluded → claimable impossible)
+- ✅ Enforces Commission Boost workflow (can't skip steps)
+- ✅ Protects against application bugs and manual SQL errors
+- ✅ Financial safety (prevents double-payout scenarios)
+
+---
+
+### Pattern 4: Auto-Sync Triggers (Commission Boost Status)
+
+**Problem:** Commission Boost has sub-states that must stay synchronized with parent redemption status. Manual sync is error-prone.
+
+**Solution:** Database trigger automatically updates `redemptions.status` when `boost_status` changes.
+
+**Status Mapping:**
+
+```typescript
+const BOOST_TO_REWARD_STATUS = {
+  'scheduled': 'claimed',
+  'active': 'claimed',
+  'expired': 'claimed',
+  'pending_info': 'claimed',
+  'pending_payout': 'fulfilled',
+  'paid': 'concluded'
+};
+```
+
+**Auto-Sync Trigger:**
+
+```sql
+CREATE OR REPLACE FUNCTION auto_sync_boost_to_redemption()
+RETURNS TRIGGER AS $$
+DECLARE
+  expected_redemption_status VARCHAR(50);
+BEGIN
+  -- Determine expected redemption status
+  expected_redemption_status := CASE NEW.boost_status
+    WHEN 'scheduled' THEN 'claimed'
+    WHEN 'active' THEN 'claimed'
+    WHEN 'expired' THEN 'claimed'
+    WHEN 'pending_info' THEN 'claimed'
+    WHEN 'pending_payout' THEN 'fulfilled'
+    WHEN 'paid' THEN 'concluded'
+  END;
+
+  -- Update parent redemption status (self-healing)
+  UPDATE redemptions
+  SET status = expected_redemption_status,
+      updated_at = NOW()
+  WHERE id = NEW.redemption_id
+    AND status != expected_redemption_status; -- Only if out of sync
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER auto_sync_boost_redemption
+  AFTER INSERT OR UPDATE ON commission_boost_redemptions
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_sync_boost_to_redemption();
+```
+
+**Benefits:**
+- ✅ Guarantees boost and redemption status always synchronized
+- ✅ Self-healing (fixes drift automatically)
+- ✅ Safe for PayPal/Venmo automation (database-level guarantee)
+- ✅ Application can't forget to update parent status
+
+**Where to Apply:**
+- Commission boost lifecycle transitions
+- Payment queue processing
+- Admin payout actions
+
+---
+
+### Pattern 5: Status Validation Constraints
+
+**Problem:** Status columns defined as `VARCHAR(50)` accept any string value. Typos like `'claimabel'` create orphaned records.
+
+**Solution:** CHECK constraints enforce valid status values at database level.
+
+**Implementation:**
+
+```sql
+-- Prevent invalid redemption statuses
+ALTER TABLE redemptions
+ADD CONSTRAINT check_redemption_status
+CHECK (status IN ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'));
+
+-- Prevent invalid mission statuses
+ALTER TABLE mission_progress
+ADD CONSTRAINT check_mission_status
+CHECK (status IN ('active', 'dormant', 'completed'));
+
+-- Prevent invalid commission boost sub-states
+ALTER TABLE commission_boost_redemptions
+ADD CONSTRAINT check_boost_status
+CHECK (boost_status IN ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'));
+```
+
+**Benefits:**
+- ✅ Database rejects invalid status values immediately
+- ✅ Prevents typos from creating orphaned records
+- ✅ Self-documenting schema (valid states visible in constraints)
+- ✅ Protects against application bugs
+
+**Why CHECK Constraint (not ENUM):**
+- Flexibility: Adding new states requires simple `ALTER TABLE` (drop old constraint, add new one)
+- Low complexity: Single migration, easy rollback
+- Proven pattern: Battle-tested across millions of PostgreSQL databases
+
+---
+
+### Pattern 6: VIP Reward Lifecycle Management (Backfill + Soft Delete)
+
+**Problem:** VIP tier rewards need special handling for three scenarios:
+1. Admin adds new reward to existing tier → Existing users miss out (unfair)
+2. User demoted to lower tier → Sees rewards they shouldn't (UX bug)
+3. User re-promoted to higher tier → Creates duplicate records (data bloat)
+
+**Solution:** Combined backfill job + soft delete pattern with reactivation logic.
+
+**Schema Requirements:**
+
+```sql
+-- Add soft delete columns to redemptions table
+ALTER TABLE redemptions ADD COLUMN deleted_at TIMESTAMP;
+ALTER TABLE redemptions ADD COLUMN deleted_reason VARCHAR(100);
+
+-- Index for efficient queries (only active rewards)
+CREATE INDEX idx_redemptions_active ON redemptions(user_id, status, deleted_at)
+  WHERE deleted_at IS NULL;
+```
+
+**Three Lifecycle Scenarios:**
+
+**Scenario 1: Admin Adds New Reward to Gold Tier**
+
+```typescript
+// Backfill Job: When admin creates reward
+async function onRewardCreated(rewardId: string, tierEligibility: string) {
+  // Find all users currently in that tier
+  const eligibleUsers = await db.users.findMany({
+    where: { current_tier: tierEligibility }
+  });
+
+  console.log(`Backfilling reward ${rewardId} to ${eligibleUsers.length} ${tierEligibility} users...`);
+
+  // Create claimable redemptions for all (idempotent)
+  for (const user of eligibleUsers) {
+    await db.redemptions.upsert({
+      where: {
+        unique_user_reward: {
+          user_id: user.id,
+          reward_id: rewardId
+        }
+      },
+      create: {
+        user_id: user.id,
+        reward_id: rewardId,
+        status: 'claimable',
+        client_id: user.client_id,
+        tier_at_claim: tierEligibility,
+        created_at: new Date()
+      },
+      update: {} // If exists, skip
+    });
+  }
+
+  console.log(`✅ Backfill complete: ${eligibleUsers.length} users granted access`);
+}
+```
+
+**Why Backfill:**
+- Fairness: All existing tier users get new rewards immediately
+- No manual admin work: Automatic when reward created
+- Idempotent: Safe to run multiple times
+
+---
+
+**Scenario 2 & 3: User Tier Changes (Demotion + Re-promotion)**
+
+```typescript
+// Tier Change Handler: Soft delete old tier rewards, reactivate new tier rewards
+async function onUserTierChanged(
+  userId: string,
+  oldTier: string,
+  newTier: string
+) {
+  return await db.transaction(async (trx) => {
+    // Step 1: Soft delete old tier claimable rewards
+    await trx.redemptions.updateMany({
+      where: {
+        user_id: userId,
+        status: 'claimable',
+        reward: { tier_eligibility: oldTier },
+        deleted_at: null // Only active ones
+      },
+      data: {
+        deleted_at: new Date(),
+        deleted_reason: `tier_change_${oldTier}_to_${newTier}`
+      }
+    });
+
+    // Step 2: Reactivate new tier rewards (if previously deleted)
+    await trx.redemptions.updateMany({
+      where: {
+        user_id: userId,
+        deleted_at: { not: null },
+        reward: { tier_eligibility: newTier }
+      },
+      data: {
+        deleted_at: null,
+        deleted_reason: null
+      }
+    });
+
+    // Step 3: Create any missing new tier rewards
+    const newTierRewards = await trx.rewards.findMany({
+      where: { tier_eligibility: newTier }
+    });
+
+    for (const reward of newTierRewards) {
+      await trx.redemptions.upsert({
+        where: {
+          unique_user_reward: {
+            user_id: userId,
+            reward_id: reward.id
+          }
+        },
+        create: {
+          user_id: userId,
+          reward_id: reward.id,
+          status: 'claimable',
+          client_id: (await trx.users.findUnique({ where: { id: userId } }))!.client_id,
+          tier_at_claim: newTier
+        },
+        update: {} // Already exists (was reactivated in step 2)
+      });
+    }
+  });
+}
+```
+
+**Why Soft Delete (Not Hard Delete):**
+- Audit trail: Can track user's tier change history
+- Reactivation: Re-promotion reuses existing records (no duplicates)
+- Data integrity: Claimed/fulfilled rewards preserved (only claimable rewards hidden)
+
+---
+
+**Application Query Pattern:**
+
+```typescript
+// Always filter out soft-deleted records in queries
+async function getClaimableRewards(userId: string) {
+  return await db.redemptions.findMany({
+    where: {
+      user_id: userId,
+      status: 'claimable',
+      deleted_at: null // Only active rewards
+    }
+  });
+}
+```
+
+**Benefits:**
+- ✅ Fairness: Existing tier users get newly added rewards immediately
+- ✅ Clean UX: Users only see rewards for their current tier
+- ✅ Audit trail: Can track tier promotions/demotions via `deleted_reason`
+- ✅ No data bloat: Soft delete is reversible (no orphaned records)
+- ✅ No duplicates: Re-promotion reuses existing redemption records
+- ✅ Transactional safety: All tier change operations atomic
+
+**Where to Apply:**
+- Flow 1, Step 5: Daily tier calculations (tier promotion/demotion handler)
+- Admin panel: "Create Reward" action (backfill job)
+- Manual tier adjustments (admin override)
+
+---
+
+### Pattern 7: Commission Boost State History (Audit Trail)
+
+**Problem:** Commission Boost has a complex 6-state workflow with financial implications. Without audit trail:
+- Debugging payment issues requires manual log analysis
+- User disputes ("Why wasn't I paid?") hard to resolve definitively
+- Financial compliance may require proof of state changes for PayPal/Venmo
+- Can't measure transition times or identify bottlenecks
+
+**Solution:** Dedicated audit table that automatically logs all Commission Boost state transitions via database trigger.
+
+**Schema:**
+
+```sql
+CREATE TABLE commission_boost_state_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  boost_redemption_id UUID NOT NULL REFERENCES commission_boost_redemptions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
+  from_status VARCHAR(50),  -- NULL for initial creation
+  to_status VARCHAR(50),
+  transitioned_at TIMESTAMP DEFAULT NOW(),
+  transitioned_by UUID REFERENCES users(id),  -- NULL if automated (cron)
+  transition_type VARCHAR(50),  -- 'manual', 'cron', 'api'
+  notes TEXT,  -- Admin notes, error messages
+  metadata JSONB  -- Extra context (payment amount, error messages, etc.)
+);
+
+CREATE INDEX idx_boost_history_redemption
+  ON commission_boost_state_history(boost_redemption_id, transitioned_at);
+
+CREATE INDEX idx_boost_history_transitioned_by
+  ON commission_boost_state_history(transitioned_by)
+  WHERE transitioned_by IS NOT NULL;
+```
+
+---
+
+**Database Trigger (Automatic Logging):**
+
+```sql
+-- Trigger to automatically log all transitions
+CREATE OR REPLACE FUNCTION log_boost_transition()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only log if status actually changed
+  IF OLD.boost_status IS DISTINCT FROM NEW.boost_status THEN
+    INSERT INTO commission_boost_state_history (
+      boost_redemption_id,
+      from_status,
+      to_status,
+      transitioned_by,
+      transition_type
+    )
+    VALUES (
+      NEW.id,
+      OLD.boost_status,
+      NEW.boost_status,
+      NULLIF(current_setting('app.current_user_id', true), '')::UUID,  -- Set by application
+      CASE
+        WHEN current_setting('app.current_user_id', true) = '' THEN 'cron'
+        ELSE 'manual'
+      END
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER track_boost_transitions
+  AFTER UPDATE ON commission_boost_redemptions
+  FOR EACH ROW
+  EXECUTE FUNCTION log_boost_transition();
+```
+
+**How It Works:**
+1. Trigger fires AFTER every UPDATE on `commission_boost_redemptions`
+2. Checks if `boost_status` actually changed (skips if same)
+3. Inserts audit record with old status, new status, timestamp
+4. Detects who made the change (admin vs cron) based on session variable
+5. Returns NEW (doesn't block the update)
+
+---
+
+**Application Integration:**
+
+```typescript
+// Set user context before updates (for audit trail)
+async function updateBoostStatus(
+  boostId: string,
+  newStatus: string,
+  userId?: string,
+  notes?: string
+) {
+  // Set session variable so trigger knows who made the change
+  if (userId) {
+    await db.$executeRaw`SET LOCAL app.current_user_id = ${userId}`;
+  }
+
+  // Update boost status (trigger logs automatically)
+  await db.commission_boost_redemptions.update({
+    where: { id: boostId },
+    data: { boost_status: newStatus }
+  });
+
+  // Optionally add notes to most recent history record
+  if (notes) {
+    await db.commission_boost_state_history.updateMany({
+      where: {
+        boost_redemption_id: boostId,
+        to_status: newStatus
+      },
+      orderBy: { transitioned_at: 'desc' },
+      take: 1,
+      data: { notes }
+    });
+  }
+}
+
+// Query transition history for debugging/disputes
+async function getBoostHistory(boostRedemptionId: string) {
+  return await db.commission_boost_state_history.findMany({
+    where: { boost_redemption_id: boostRedemptionId },
+    orderBy: { transitioned_at: 'asc' },
+    include: {
+      transitioned_by: {
+        select: { name: true, email: true }
+      }
+    }
+  });
+}
+
+// Example: Show user their boost timeline
+async function showBoostTimeline(boostId: string) {
+  const history = await getBoostHistory(boostId);
+
+  console.log('Commission Boost Timeline:');
+  for (const event of history) {
+    const actor = event.transitioned_by
+      ? `${event.transitioned_by.name} (admin)`
+      : 'System (automated)';
+
+    console.log(`${event.transitioned_at}: ${event.from_status} → ${event.to_status} by ${actor}`);
+    if (event.notes) {
+      console.log(`  Notes: ${event.notes}`);
+    }
+  }
+}
+```
+
+**Example Output:**
+```
+Commission Boost Timeline:
+2025-01-15 15:00:00: scheduled → active by System (automated)
+2025-02-14 23:59:59: active → expired by System (automated)
+2025-02-15 10:30:12: expired → pending_info by System (automated)
+2025-02-15 14:22:45: pending_info → pending_payout by Creator (@sarahjohnson)
+  Notes: PayPal: sarah@example.com
+2025-02-16 09:15:33: pending_payout → paid by Admin (John Smith)
+  Notes: Sent $28.75 via PayPal, txn: 1A2B3C4D5E
+```
+
+---
+
+**Benefits:**
+
+- ✅ **Financial Compliance:** Complete audit trail for PayPal/Venmo transactions
+- ✅ **Debugging Efficiency:** Trace exact state flow in 30 seconds (vs hours in logs)
+- ✅ **User Dispute Resolution:** Definitive proof of transitions ("You moved to pending_payout on Feb 15")
+- ✅ **Analytics-Ready:** Measure transition times, identify bottlenecks (e.g., "pending_info → pending_payout takes 2 days avg")
+- ✅ **Automatic Logging:** Developers can't forget (trigger fires always)
+- ✅ **Low Overhead:** Only logs on status change (not every UPDATE)
+
+**Where to Apply:**
+- All commission boost status updates (cron activation, expiration, payment)
+- Admin payout actions (pending_payout → paid)
+- User payment info submission (pending_info → pending_payout)
+
+**When to Query:**
+- User asks "Why wasn't I paid?"
+- Admin debugging: "Why is this boost stuck in pending_info?"
+- Compliance audit: "Show all payouts in Q1 2025"
+- Analytics: "Average time from expiration to payout"
+
+---
+
+### Implementation Checklist
+
+**Before implementing any state-changing flow:**
+
+- [ ] Wrap multi-step operations in database transactions
+- [ ] Use upsert pattern for idempotent operations
+- [ ] Verify uniqueness constraints exist for the table
+- [ ] Check valid state transitions in trigger functions
+- [ ] Test retry scenarios (simulate network failure)
+- [ ] Verify auto-sync triggers fire correctly (for commission boosts)
+- [ ] Confirm status validation constraints are in place
+- [ ] Filter out soft-deleted records in queries (deleted_at IS NULL)
+- [ ] Implement backfill job when creating VIP tier rewards
+
+**Testing Requirements:**
+
+1. **Transaction Rollback Test:** Simulate crash mid-transaction, verify no partial updates
+2. **Duplicate Prevention Test:** Submit same operation twice rapidly, verify only 1 record created
+3. **Invalid Transition Test:** Attempt invalid state change, verify database rejects with error
+4. **Auto-Sync Test:** Update boost status, verify parent redemption updates automatically
+5. **VIP Lifecycle Test:** Create reward for tier with existing users, verify backfill. Demote user, verify soft delete. Re-promote user, verify reactivation (not duplication).
+6. **Audit Trail Test:** Update commission boost through multiple states, query history table, verify all transitions logged with correct timestamps and actors.
 
 ---
 
@@ -560,7 +1981,7 @@ FOR INSERT WITH CHECK (
 
 ### Flow 6: Daily Tier Calculation (Automated)
 
-**Trigger:** Runs immediately after metrics sync completes (part of single cron job at midnight UTC)
+**Trigger:** Runs immediately after data sync completes (part of single cron job at 3:00 PM EST / 7:00 PM UTC)
 
 **Steps:**
 
@@ -570,21 +1991,40 @@ Before tier calculations, apply any pending manual sales adjustments created by 
 
 **0a. Calculate and apply adjustments:**
 ```sql
--- Update both total_sales and manual_adjustments_total atomically
+-- Sales mode: Update sales adjustments
 UPDATE users u
 SET
   total_sales = total_sales + (
     SELECT COALESCE(SUM(amount), 0)
     FROM sales_adjustments
-    WHERE user_id = u.id AND applied_at IS NULL
+    WHERE user_id = u.id AND applied_at IS NULL AND amount IS NOT NULL
   ),
   manual_adjustments_total = manual_adjustments_total + (
     SELECT COALESCE(SUM(amount), 0)
     FROM sales_adjustments
-    WHERE user_id = u.id AND applied_at IS NULL
+    WHERE user_id = u.id AND applied_at IS NULL AND amount IS NOT NULL
   )
 WHERE id IN (
-  SELECT DISTINCT user_id FROM sales_adjustments WHERE applied_at IS NULL
+  SELECT DISTINCT user_id FROM sales_adjustments
+  WHERE applied_at IS NULL AND amount IS NOT NULL
+);
+
+-- Units mode: Update units adjustments
+UPDATE users u
+SET
+  total_units = total_units + (
+    SELECT COALESCE(SUM(amount_units), 0)
+    FROM sales_adjustments
+    WHERE user_id = u.id AND applied_at IS NULL AND amount_units IS NOT NULL
+  ),
+  manual_adjustments_units = manual_adjustments_units + (
+    SELECT COALESCE(SUM(amount_units), 0)
+    FROM sales_adjustments
+    WHERE user_id = u.id AND applied_at IS NULL AND amount_units IS NOT NULL
+  )
+WHERE id IN (
+  SELECT DISTINCT user_id FROM sales_adjustments
+  WHERE applied_at IS NULL AND amount_units IS NOT NULL
 );
 ```
 
@@ -603,8 +2043,8 @@ WHERE applied_at IS NULL;
 - Adjustments are permanent (cannot be reversed, only corrected with opposite adjustment)
 
 **Checkpoint Period Sales:**
-- Adjustments do NOT create metrics entries
-- Checkpoint calculations use: `SUM(metrics.tiktok_sales) + users.manual_adjustments_total`
+- Adjustments do NOT create video entries
+- Checkpoint calculations use: `users.checkpoint_sales_current + users.manual_adjustments_total`
 - This allows offline sales/bonuses to help creators maintain their tier
 - Refund corrections can prevent unfair demotion
 
@@ -616,12 +2056,12 @@ WHERE applied_at IS NULL;
 - Daily sync applies adjustment:
   - `total_sales`: $5,000 → $5,300
   - `manual_adjustments_total`: $0 → $300
-- Checkpoint calculation: $1,800 (metrics) + $300 (adjustments) = $2,100 ✅ Maintains Gold
+- Checkpoint calculation: $1,800 (checkpoint_sales_current) + $300 (adjustments) = $2,100 ✅ Maintains Gold
 
 *Scenario 2: Refund Correction*
 - Creator had $2,500 in sales but $200 refunded (not reflected in Cruva)
 - Admin adds -$200 adjustment
-- Checkpoint calculation: $2,500 (metrics) - $200 (adjustments) = $2,300
+- Checkpoint calculation: $2,500 (checkpoint_sales_current) - $200 (adjustments) = $2,300
 - Accurate tier evaluation
 
 *Scenario 3: Offline Event Sales*
@@ -631,21 +2071,62 @@ WHERE applied_at IS NULL;
 
 ---
 
+**IMPORTANT:** Checkpoints are **PER-USER**, not calendar-based.
+Each user's checkpoint is calculated from their individual `tier_achieved_at` date.
+The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixed calendar period.
+
+**Example:**
+- User A reaches Gold on Jan 15 → checkpoint on May 15 (Jan 15 + 4 months)
+- User B reaches Gold on Feb 3 → checkpoint on Jun 3 (Feb 3 + 4 months)
+- Daily cron checks: "Is today >= any user's next_checkpoint_at?"
+
 1. **Query users due for checkpoint:**
-   - `SELECT * FROM users WHERE next_checkpoint_at <= TODAY AND current_tier != 'tier_1'`
-   - Bronze tier (tier_1) has no checkpoints (lifetime tier)
+   ```sql
+   SELECT u.*, c.vip_metric, c.checkpoint_months
+   FROM users u
+   JOIN clients c ON u.client_id = c.id
+   WHERE u.next_checkpoint_at <= TODAY
+     AND u.current_tier != 'tier_1';  -- Bronze tier has no checkpoints
+   ```
    - Returns ~10-50 users/day (not all 1000 creators)
 
-2. **For each user, calculate sales during checkpoint period:**
-   - Period start: `user.tier_achieved_at` (when they reached current tier)
-   - Period end: Today
-   - Query metrics: `SUM(tiktok_sales) WHERE period BETWEEN start AND end`
-   - Add manual adjustments: `+ user.manual_adjustments_total`
-   - Total checkpoint sales = TikTok metrics + manual adjustments
+2. **For each user, calculate checkpoint performance (metric-aware):**
+   ```typescript
+   const client = await getClient(user.client_id);
 
-3. **Compare to tier threshold:**
-   - Query tiers table: `SELECT * FROM tiers WHERE client_id = X ORDER BY tier_order DESC`
-   - Loop through tiers to find which threshold the sales meet
+   let checkpointValue;
+   if (client.vip_metric === 'units') {
+     // Units mode: checkpoint units + manual adjustments
+     checkpointValue = user.checkpoint_units_current + user.manual_adjustments_units;
+   } else {
+     // Sales mode: checkpoint sales + manual adjustments
+     checkpointValue = user.checkpoint_sales_current + user.manual_adjustments_total;
+   }
+   ```
+   - Period: `user.tier_achieved_at` → Today
+   - Includes manual adjustments (offline sales, refunds, bonuses)
+   - Total = Precomputed checkpoint value + Manual adjustments
+
+3. **Compare to tier threshold (metric-aware):**
+   ```typescript
+   const tiers = await db
+     .from('tiers')
+     .select('*')
+     .eq('client_id', user.client_id)
+     .order(client.vip_metric === 'units' ? 'units_threshold' : 'sales_threshold', { ascending: false });
+
+   let newTier = null;
+   for (const tier of tiers) {
+     const threshold = client.vip_metric === 'units'
+       ? tier.units_threshold
+       : tier.sales_threshold;
+
+     if (checkpointValue >= threshold) {
+       newTier = tier;
+       break;
+     }
+   }
+   ```
    - Example tier thresholds (admin-configurable via tiers table):
      - tier_1: $0 (Bronze - entry tier)
      - tier_2: $1,000 (Silver)
@@ -653,26 +2134,61 @@ WHERE applied_at IS NULL;
      - tier_4: $3,000 (Platinum)
 
 4. **Determine outcome:**
-   - **Promoted:** Sales exceed next tier threshold (e.g., Silver → Gold)
-   - **Maintained:** Sales meet/exceed current tier threshold
-   - **Demoted:** Sales below current tier threshold (e.g., Gold → Silver)
+   - **Promoted:** Performance exceeds next tier threshold (e.g., Silver → Gold)
+   - **Maintained:** Performance meets/exceeds current tier threshold
+   - **Demoted:** Performance below current tier threshold (e.g., Gold → Silver)
 
-5. **Update user record:**
-   - `current_tier` = new tier
-   - `tier_achieved_at` = TODAY
-   - `next_checkpoint_at` = TODAY + checkpoint_months (e.g., 4 months for all non-Bronze tiers)
-   - `checkpoint_sales_target` = new tier threshold
+5. **Update user record (reset checkpoint totals):**
+   ```typescript
+   await db.from('users').update({
+     current_tier: newTier.tier_id,
+     tier_achieved_at: NOW(),
+     next_checkpoint_at: addMonths(NOW(), client.checkpoint_months),
 
-6. **Log to audit table:**
-   - Insert to `tier_checkpoints` table
-   - Record: sales_in_period, sales_required, tier_before, tier_after, status
+     // Set target based on client mode
+     checkpoint_sales_target: client.vip_metric === 'sales' ? newTier.sales_threshold : null,
+     checkpoint_units_target: client.vip_metric === 'units' ? newTier.units_threshold : null,
+
+     // Reset BOTH checkpoint totals (Issue 4: Option A)
+     checkpoint_sales_current: 0,
+     checkpoint_units_current: 0
+   }).eq('id', user.id);
+   ```
+
+6. **Log to tier_checkpoints audit table:**
+   ```typescript
+   if (client.vip_metric === 'units') {
+     await db.from('tier_checkpoints').insert({
+       user_id: user.id,
+       checkpoint_date: NOW(),
+       period_start_date: user.tier_achieved_at,
+       period_end_date: NOW(),
+       units_in_period: checkpointValue,  // Includes manual_adjustments_units
+       units_required: currentTier.units_threshold,
+       tier_before: user.current_tier,
+       tier_after: newTier.tier_id,
+       status: determineStatus(user.current_tier, newTier.tier_id)
+     });
+   } else {
+     await db.from('tier_checkpoints').insert({
+       user_id: user.id,
+       checkpoint_date: NOW(),
+       period_start_date: user.tier_achieved_at,
+       period_end_date: NOW(),
+       sales_in_period: checkpointValue,  // Includes manual_adjustments_total
+       sales_required: currentTier.sales_threshold,
+       tier_before: user.current_tier,
+       tier_after: newTier.tier_id,
+       status: determineStatus(user.current_tier, newTier.tier_id)
+     });
+   }
+   ```
 
 7. **Handle mission tier changes (Mode 3, if tier changed):**
    - Old tier missions persist (do NOT cancel) - Creator continues working on them
    - In-progress, completed, and claimed missions remain active
    - After fulfillment → new tier's Mission order=1 appears automatically
    - If new tier lacks that mission type → no replacement appears
-   - See Pseudocode.md Section 4.2 for implementation details
 
 **Performance:**
 - Only checks users due for checkpoint (fast: ~5 seconds for 50 users)
@@ -713,7 +2229,7 @@ WHERE applied_at IS NULL;
    - Creator activates account via Flow 3 (Creator First Login)
 
 **Conflict resolution:**
-- If creator later appears in Cruva CSV, daily sync updates metrics but preserves manually-set tier
+- If creator later appears in Cruva CSV, daily sync updates user data but preserves manually-set tier
 - Tier only changes during checkpoint evaluation (Flow 6)
 - No duplicate accounts created (tiktok_handle is unique)
 
@@ -739,7 +2255,7 @@ WHERE applied_at IS NULL;
 
 ---
 
-#### Flow 8A: Instant Claim (Gift Card, Commission Boost, Spark Ads)
+#### Flow 8A: Instant Claim (Gift Card, Spark Ads, Physical Gift, Experience)
 
 **Steps:**
 1. **Creator browses rewards:**
@@ -760,7 +2276,7 @@ WHERE applied_at IS NULL;
      ```
      user_id = creator.id
      reward_id = reward.id
-     status = 'pending'
+     status = 'claimed'
      redemption_type = 'instant'
      tier_at_claim = creator.current_tier (locked)
      claimed_at = NOW()
@@ -768,7 +2284,7 @@ WHERE applied_at IS NULL;
 
 4. **Show success feedback:**
    - Toast notification: "Success! You will receive your reward in up to 24 hours"
-   - Reward shows "Pending" badge on Rewards screen
+   - Reward shows "Claimed" badge on Rewards screen
    - Claim appears in creator's Claims section
 
 5. **Admin notification:**
@@ -782,7 +2298,7 @@ WHERE applied_at IS NULL;
 
 ---
 
-#### Flow 8B: Scheduled Claim (TikTok Discount)
+#### Flow 8B: Scheduled Claim (Commission Boost, Discount)
 
 **Steps:**
 1. **Creator browses rewards:**
@@ -805,17 +2321,21 @@ WHERE applied_at IS NULL;
    - Not in the past ✓
    - Creator hasn't scheduled another activation already ✓
 
-5. **Convert timezone:**
-   - Creator's selection: Jan 12, 2:00 PM EST (UTC-5)
-   - Converts to Brazil time: Jan 12, 4:00 PM Brazil (UTC-3)
-   - Stores as: `scheduled_activation_at = 2025-01-12 16:00:00 America/Sao_Paulo`
+5. **Store scheduling fields (always in EST):**
+   - Creator's selection: Jan 12, 2:00 PM EST
+   - Stores as:
+     - `scheduled_activation_date = '2025-01-12'` (DATE)
+     - `scheduled_activation_time = '14:00:00'` (TIME in EST)
+   - Note: Always stored in EST. Application converts to creator's local timezone for display only.
 
 6. **Create Google Calendar event:**
    - Create event in admin's Google Calendar:
      - Title: "Activate TikTok Discount - @creatorhandle"
-     - Description: "Activate 10% discount in TikTok Seller Center"
-        - Description has to be Variable to the actual discount of the reward
-     - Time: Jan 12, 4:00 PM Brazil time
+     - Description: "Activate {reward.value_data.percent}% discount in TikTok Seller Center"
+        - Note: Description must be variable - use reward.value_data.percent from rewards table
+        - Example: If reward.value_data = {"percent": 15}, description = "Activate 15% discount..."
+     - DateTime: `{scheduled_activation_date}T{scheduled_activation_time}` (e.g., "2025-01-12T14:00:00")
+     - TimeZone: "America/New_York" (EST)
      - Duration: 15 minutes
      - Reminders: 15 minutes before (popup), 1 hour before (email)
    - Store event ID: `google_calendar_event_id = event.id`
@@ -825,9 +2345,10 @@ WHERE applied_at IS NULL;
      ```
      user_id = creator.id
      reward_id = reward.id
-     status = 'pending'
+     status = 'claimed'
      redemption_type = 'scheduled'
-     scheduled_activation_at = Brazil time (Jan 12, 4:00 PM)
+     scheduled_activation_date = '2025-01-12' (DATE)
+     scheduled_activation_time = '14:00:00' (TIME in EST)
      google_calendar_event_id = calendar_event_id
      tier_at_claim = creator.current_tier (locked)
      claimed_at = NOW()
@@ -907,15 +2428,17 @@ WHERE applied_at IS NULL;
 
 2. **Admin completes operational task:**
    - **Gift Card:** Purchase on Amazon, email code to creator
-   - **Commission Boost:** Activate in TikTok Seller Center for creator's account
    - **Spark Ads:** Set up Spark Ads campaign for creator's content
+   - **Physical Gift:** Collect shipping info, order/ship item
+   - **Experience:** Coordinate event details with creator
 
 3. **Admin clicks "Mark as Fulfilled":**
    - Modal appears: "Add fulfillment notes (optional)"
    - Input field examples:
      - "Gift card code: ABCD-EFGH-IJKL, sent to creator@email.com"
-     - "Commission boost activated, expires Feb 15"
      - "Spark Ads campaign created, $100 budget"
+     - "Physical gift shipped, tracking: 1Z999AA1"
+     - "VIP event confirmed for Jan 20, sent details via email"
    - Clicks "Confirm"
 
 4. **Update redemption record:**
@@ -927,13 +2450,21 @@ WHERE applied_at IS NULL;
      fulfillment_notes = admin_notes
      ```
 
-5. **Remove from queue:**
-   - Redemption disappears from pending queue
-   - Moves to fulfillment history (optional admin view)
+5. **Mark as concluded (optional, for complete closure):**
+   - After fulfillment verified, admin can finalize:
+     ```
+     status = 'concluded'
+     concluded_at = NOW()
+     ```
+   - This moves the redemption to permanent history
 
-6. **Creator sees status update:**
-   - This will be seen in Rewards tab, when the redemption is fulfilled the reward goes Redemption History tab
-   - Status changes from "Pending" to "Fulfilled ✅"
+6. **Remove from queue:**
+   - Redemption disappears from active fulfillment queue
+   - Moves to completed redemptions history
+
+7. **Creator sees status update:**
+   - Reward moves to Redemption History tab
+   - Status progression: "Claimed" → "Fulfilled ✅" → "Concluded"
 
 **SLA tracking:**
 - Overdue (>24h): Red badge, shown first
@@ -948,29 +2479,44 @@ WHERE applied_at IS NULL;
 **Steps:**
 1. **Admin receives calendar notification:**
    - Google Calendar sends reminder 15 minutes before scheduled time
-   - Example: "Activate TikTok Discount - @creator3" at 3:45 PM Brazil time
+   - Example (Discount): "Activate TikTok Discount - @creator3" at 3:45 PM Brazil time
+   - Example (Commission Boost): "Activate Commission Boost - @creator5" at 2:45 PM EST
 
 2. **Admin reviews scheduled queue:**
    - Navigate to Admin Panel → Fulfillment Queue → Scheduled tab
    - Queue sorted by scheduled time
-   - Example display:
+   - Example display (Discount):
      ```
      🔔 TODAY at 4:00 PM (in 15 minutes) - Brazil Time
-     @creator3 - TikTok Discount 10%
+     @creator3 - TikTok Discount {reward.value_data.percent}%
      Scheduled: Jan 5, 4:00 PM Brazil (2:00 PM EST)
      Claimed: Jan 2, 3:00 PM
      📅 View in Google Calendar
-     Task: Activate 10% discount in TikTok Seller Center
+     Task: Activate {reward.value_data.percent}% discount in TikTok Seller Center
      [Mark as Fulfilled]
      ```
+   - Example display (Commission Boost):
+     ```
+     🔔 TODAY at 3:00 PM (in 15 minutes) - EST
+     @creator5 - Pay Boost: {reward.value_data.percent}% for {reward.value_data.duration_days} days
+     Scheduled: Jan 6, 3:00 PM EST
+     Claimed: Jan 3, 11:00 AM
+     📅 View in Google Calendar
+     Task: Activate {reward.value_data.percent}% commission boost in TikTok Seller Center
+     [Mark as Fulfilled]
+     ```
+     Note: Percentages and durations are dynamic from reward.value_data
 
 3. **Admin completes operational task:**
-   - At scheduled time (or shortly before), admin activates discount in TikTok Seller Center
-   - Sets discount parameters, activation time, duration
+   - **Discount:** At scheduled time (or shortly before), admin activates discount in TikTok Seller Center
+   - **Commission Boost:** At scheduled time, admin activates commission boost in TikTok Seller Center for creator's account
+   - Sets parameters, activation time, duration as specified in reward.value_data
 
 4. **Admin clicks "Mark as Fulfilled":**
    - Modal appears: "Add fulfillment notes"
-   - Input field: "Discount activated at 4:00 PM, valid for 24 hours"
+   - Input field examples:
+     - "Discount activated at 4:00 PM, valid for 24 hours"
+     - "Commission boost activated at 3:00 PM, 5% for 30 days, expires Feb 5"
    - Clicks "Confirm"
 
 5. **Update redemption record:**
@@ -982,13 +2528,21 @@ WHERE applied_at IS NULL;
      fulfillment_notes = admin_notes
      ```
 
-6. **Remove from queue:**
+6. **Mark as concluded (optional, for complete closure):**
+   - After activation verified, admin can finalize:
+     ```
+     status = 'concluded'
+     concluded_at = NOW()
+     ```
+   - This moves the redemption to permanent history
+
+7. **Remove from queue:**
    - Redemption disappears from scheduled queue
    - Google Calendar event marked as completed (optional)
 
-7. **Creator sees status update:**
-   - This will be seen in Rewards tab, when the redemption is fulfilled the reward goes Redemption History tab
-   - Status changes from "Pending" to "Fulfilled ✅"
+8. **Creator sees status update:**
+   - Reward moves to Redemption History tab
+   - Status progression: "Claimed" → "Fulfilled ✅" → "Concluded"
 
 **Scheduling accuracy:**
 - No strict SLA (must activate at scheduled time, not within 24 hours)
@@ -1005,7 +2559,6 @@ WHERE applied_at IS NULL;
 ---
 
 ## Core Features
-
 
 ### Automation Monitoring & Reliability
 
@@ -1134,10 +2687,14 @@ WHERE applied_at IS NULL;
 - Strict thresholds - no margin of error (must meet exact threshold)
 
 **Checkpoint Configuration (Admin-Configurable):**
-- **ONE global checkpoint period** applies to all tiers (e.g., 4 months)
+- **Checkpoint DURATION is the same for all tiers** (e.g., 4 months)
+- **BUT each user's checkpoint is INDIVIDUAL** (based on when THEY reached the tier)
 - Bronze tier has no checkpoints (entry tier, never demoted)
-- Silver, Gold, Platinum use same checkpoint period
-- Example: 4-month period means all tiers evaluate every 4 months after achievement
+- Example: Admin sets 4-month duration
+  - User A reaches Gold on Jan 15 → checkpoint on May 15
+  - User B reaches Gold on Feb 3 → checkpoint on Jun 3
+  - User C reaches Gold on Mar 10 → checkpoint on Jul 10
+- **NOT calendar-based** (no "reset on 1st of month" - each user has rolling checkpoint dates)
 
 **Tier Thresholds (Admin-Configurable):**
 Stored in `tiers` table, supports 3-6 tiers. Example 4-tier configuration:
@@ -1198,32 +2755,33 @@ Note: Actual tier count, names, and thresholds are customizable per client via `
 - All data fetched in single server-side query (Next.js Server Components)
 - Estimated load time: ~700-1100ms ✅
 
-**Precomputed Fields (11 additional columns in users table):**
+**Precomputed Fields (16 additional columns in users table):**
 
-*Leaderboard Data:*
+*Leaderboard Data:* (5 fields)
 - `leaderboard_rank` - Position among all creators (updated daily)
-- `total_sales` - Lifetime sales for sorting (updated daily)
+- `total_sales` - Lifetime sales for sorting in sales mode (updated daily)
+- `total_units` - Lifetime units for sorting in units mode (updated daily)
+- `manual_adjustments_total` - Sum of manual sales adjustments
+- `manual_adjustments_units` - Sum of manual unit adjustments
 
-*Checkpoint Progress:*
-- `checkpoint_sales_current` - Sales in current checkpoint period
-- `checkpoint_sales_target` - Sales needed to maintain tier
-- `projected_tier_at_checkpoint` - What tier sales would result in
-- `checkpoint_status` - 'on_track', 'at_risk', 'will_advance', 'will_demote'
+*Checkpoint Progress:* (3 fields - current values)
+- `checkpoint_sales_current` - Sales in current checkpoint period (sales mode)
+- `checkpoint_units_current` - Units in current checkpoint period (units mode)
+- `projected_tier_at_checkpoint` - What tier current performance would result in
 
-*Engagement Metrics (Checkpoint Period):*
+*Engagement Metrics (Checkpoint Period):* (4 fields)
 - `checkpoint_videos_posted` - Videos posted since tier achievement
 - `checkpoint_total_views` - Total views across all checkpoint period videos
 - `checkpoint_total_likes` - Total likes across all checkpoint period videos
 - `checkpoint_total_comments` - Total comments across all checkpoint period videos
 
-*Next Tier Information:*
+*Next Tier Information:* (3 fields)
 - `next_tier_name` - Name of next tier (e.g., "Platinum")
-- `next_tier_threshold` - Sales needed to reach next tier
+- `next_tier_threshold` - Sales threshold for next tier (sales mode)
+- `next_tier_threshold_units` - Units threshold for next tier (units mode)
 
-*Historical Data:*
-- `last_checkpoint_status` - Result of last checkpoint ('maintained', 'promoted', 'demoted')
-- `last_checkpoint_date` - When last checkpoint occurred
-- `last_checkpoint_tier_change` - Description (e.g., "Gold → Platinum")
+*Historical:* (1 field)
+- `checkpoint_progress_updated_at` - Timestamp of last update
 
 **Update Frequency:** All fields updated once daily during midnight UTC sync
 
@@ -1234,59 +2792,14 @@ Note: Actual tier count, names, and thresholds are customizable per client via `
 
 **Data Freshness Trade-off:**
 - Dashboard shows data from last midnight sync (up to 24 hours old)
-- Acceptable for MVP (consistent with daily metrics sync from Issue 4)
+- Acceptable for MVP (consistent with daily data sync from Issue 4)
 - Reduces database load and ensures fast mobile performance
 
 **Implementation:**
 - Next.js Server Components fetch all data in parallel on server
 - Single HTML response sent to client (minimizes mobile network round trips)
 - Simple calculations (percentages, date math) done at render time
-- Database indexes on leaderboard_rank, total_sales, checkpoint_status
-
-### Backend
-**Admin Backend - Configuration Management:**
-- **Architecture Note:** Designed for multi-tenant scalability, launching as single-tenant MVP (one client - you)
-
-**Hosting**
-What URL will Affiliates log into? A TumiLabs subdomain?
-.tumilabs.StatesideGrowers?
-
-#### CRM - Emails
-Which domain sends emails? How to format a domain to a client? How to make this dynamic. Depending on client, a part of the URL Changes
-A. Subdomain from Tumilabs? (could be confusing)
-B. Use domain from client? (need cooperation)
-
-Questions:
-- Do we need to warm up the domain? (If so, start now?)
-
-Business Decisions
-1. How many Email Flows should we structure? 
-2. How many CAN we structure? 
-3. Which Domain sends emails? 
-  A. Subdomain from TumiLabs? (Could be confusing) 
-  B. Use domain from client?
-      Leaning more towards A
-    
-4. How to format a domain to a client in an automated way? New client signs up, Domain sending emails is @TL.[clientname].com (TL = TumiLabs)
-
-##### Creative Idea
-If you upgrade your current plan, ($349 USD per month total - from $179 USD) 
-
-You will have **UP TO 7 CONCURRENT AUTOMATIONS**
-- You can create Automations based on RULES Uptk provides, such as UNITS SOLD.
-    - Think of VIP program based on UNITS SOLD.
-        - However, did more investigation and it must be $$$ Sold for CRM automations to work. 
-            - CRM Segmentation = GMV Range 
-            - Raw Data Available = Shop GMV 
-                - Shop GMV matches GMV Range
-                    - UNITS sold is not available as Raw Data. 
-
-**Silver - Gold Automations**
-
-
-**Email Sending Alternatives**
-Lost password, welcome, condition based
-https://dreamlit.ai/
+- Database indexes on leaderboard_rank, total_sales
 
 
 #### Rewards Management System - Dynamic
@@ -1300,7 +2813,7 @@ https://dreamlit.ai/
     3. Creator website automatically displays reward to Gold tier creators
 
 
-### Level Expiry (Checkpoints)
+### Tier Maintenance Checkpoints (Per-User Rolling Windows, Not Calendar-Based)
 **Options**
 - Default Mode: Fixed checkpoint system where creators must maintain performance to keep their tier.
 - Alternative Mode: Lifetime tier calculation (once achieved, never lost) - available as admin toggle but not default.
@@ -1375,600 +2888,6 @@ Check Loyalty\Rumi\Loyalty.md → ## Checkpoint
 - Public read access for login screen display
 - Admin-only write access (RLS policies)
 
-### Extra Notes (From New Session - need to merge)
-
-**UX Essentials:**
-- Loading states (skeletons/spinners during data fetches)
-- Error handling (graceful failures when Uptk automation breaks)
-- Toast notifications for user actions
-
-### 
----
-
-### Multi-Tennant/Backend
-
-#### Architecture
-- Multi-tenant database architecture (single client for MVP)
-- Uptk automation script (daily sync)
-- **Daily checkpoint processor:** Evaluates tier maintenance, handles promotions/demotions
-- Row Level Security (RLS) for data isolation
-- Downgrade notification system (email alerts when tier is lost)
-```sql
--- Clients table (future-proofing for multi-tenant)
-CREATE TABLE clients (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  subdomain VARCHAR(100) UNIQUE, -- For future: 'clientx.loyaltyapp.com'
-
-  -- Branding
-  logo_url TEXT, -- Supabase Storage URL for login screen logo (required for go-live)
-  primary_color VARCHAR(7) DEFAULT '#6366f1', -- Global header color for all screens
-
-  -- Tier calculation settings (future-proofing)
-  tier_calculation_mode VARCHAR(50) DEFAULT 'lifetime',
-    -- Values: 'lifetime' (Phase 1), 'fixed_checkpoint' (Future)
-
-  -- Global checkpoint period (applies to all non-Bronze tiers)
-  checkpoint_months INTEGER DEFAULT 4, -- Single value for Silver/Gold/Platinum
-
-  -- Note: Tier thresholds, names, colors now stored in 'tiers' table (see line 1740)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- MVP: Insert single client row (checkpoint mode enabled by default)
-INSERT INTO clients (name, subdomain, tier_calculation_mode)
-VALUES ('Your Company', 'main', 'fixed_checkpoint');
-
--- Users table (content creators)
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Primary identifier (from Cruva CSV)
-  tiktok_handle VARCHAR(100) NOT NULL,
-
-  -- Authentication (collected on first login)
-  email VARCHAR(255), -- NULLABLE - added when creator first logs in
-  email_verified BOOLEAN DEFAULT false,
-  is_admin BOOLEAN DEFAULT false, -- Admin role flag (security)
-
-  -- Current tier status
-  current_tier VARCHAR(50) DEFAULT 'tier_1',
-
-  -- Checkpoint tracking (for fixed_checkpoint mode)
-  -- NOTE: These fields track the user's CURRENT checkpoint period (updates when tier changes)
-  -- mission_progress table uses SNAPSHOTS of these values (checkpoint_start/checkpoint_end)
-  tier_achieved_at TIMESTAMP, -- When did they reach current tier? (Start of current checkpoint period)
-                              -- mission_progress.checkpoint_start references this value as a snapshot
-  next_checkpoint_at TIMESTAMP, -- When is their next evaluation? (End of current checkpoint period)
-                                -- mission_progress.checkpoint_end references this value as a snapshot
-  checkpoint_sales_target DECIMAL(10, 2), -- Sales needed to maintain tier
-
-  -- Precomputed fields (updated daily during midnight sync for performance)
-  -- Leaderboard
-  leaderboard_rank INTEGER,
-  total_sales DECIMAL(10, 2) DEFAULT 0,
-  manual_adjustments_total DECIMAL(10, 2) DEFAULT 0, -- Sum of manual sales adjustments (for transparency)
-
-  -- Checkpoint progress
-  checkpoint_sales_current DECIMAL(10, 2) DEFAULT 0,
-  projected_tier_at_checkpoint VARCHAR(50),
-  checkpoint_status VARCHAR(50), -- 'on_track', 'at_risk', 'will_advance', 'will_demote'
-
-  -- Checkpoint period engagement metrics
-  checkpoint_videos_posted INTEGER DEFAULT 0,
-  checkpoint_total_views BIGINT DEFAULT 0,
-  checkpoint_total_likes BIGINT DEFAULT 0,
-  checkpoint_total_comments BIGINT DEFAULT 0,
-
-  -- Next tier information
-  next_tier_name VARCHAR(50),
-  next_tier_threshold DECIMAL(10, 2),
-
-  -- Last checkpoint result (historical)
-  last_checkpoint_status VARCHAR(50), -- 'maintained', 'promoted', 'demoted'
-  last_checkpoint_date TIMESTAMP,
-  last_checkpoint_tier_change VARCHAR(100),
-
-  checkpoint_progress_updated_at TIMESTAMP,
-
-  -- Metadata
-  first_video_date TIMESTAMP, -- When first appeared in Cruva
-  last_login_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  UNIQUE(client_id, tiktok_handle), -- Handle unique per client
-  UNIQUE(client_id, email) -- Email unique per client (when provided)
-);
-
-CREATE INDEX idx_users_tiktok_handle ON users(tiktok_handle);
-CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
-CREATE INDEX idx_users_leaderboard_rank ON users(leaderboard_rank) WHERE leaderboard_rank IS NOT NULL;
-CREATE INDEX idx_users_total_sales ON users(total_sales DESC);
-CREATE INDEX idx_users_checkpoint_status ON users(checkpoint_status);
-
--- Metrics table
-CREATE TABLE metrics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  period VARCHAR(7) NOT NULL, -- Format: 'YYYY-MM'
-
-  -- Sales metrics (from affiliates.csv)
-  tiktok_sales DECIMAL(10, 2) DEFAULT 0,
-  videos_posted INTEGER DEFAULT 0,
-  live_posts INTEGER DEFAULT 0,
-
-  -- Engagement metrics (aggregated from videos.csv)
-  total_views INTEGER DEFAULT 0,
-  total_likes INTEGER DEFAULT 0,
-  total_comments INTEGER DEFAULT 0,
-  avg_ctr DECIMAL(5, 2),
-
-  updated_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(user_id, period)
-);
-
--- Videos table (per-video analytics from videos.csv)
-CREATE TABLE videos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  -- Video identifiers
-  video_url TEXT UNIQUE NOT NULL,
-  video_title TEXT,
-  post_date DATE NOT NULL,
-
-  -- Engagement metrics
-  views INTEGER DEFAULT 0,
-  likes INTEGER DEFAULT 0,
-  comments INTEGER DEFAULT 0,
-
-  -- Sales metrics
-  gmv DECIMAL(10, 2) DEFAULT 0, -- GMV per video
-  ctr DECIMAL(5, 2), -- Click-through rate
-  units_sold INTEGER DEFAULT 0,
-
-  -- Sync metadata
-  sync_date TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_videos_user_id ON videos(user_id);
-CREATE INDEX idx_videos_post_date ON videos(post_date);
-CREATE UNIQUE INDEX idx_videos_url ON videos(video_url);
-
--- Rewards table (configurable rewards per client)
-CREATE TABLE rewards (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Reward details
-  type VARCHAR(100) NOT NULL, -- 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
-  name VARCHAR(255), -- Auto-generated from type + value_data (Section 2 decision)
-  description VARCHAR(15), -- User-facing display for physical_gift/experience only (e.g., "VIP Event Access")
-                           -- NULL for other reward types (gift_card, commission_boost, spark_ads, discount)
-                           -- Same length as raffle_prize_name for consistency
-
-  -- Value storage (Section 3: Smart Hybrid approach)
-  value_data JSONB, -- JSON for structured data (percent, amount, duration_days)
-    -- Examples:
-    -- commission_boost: {"percent": 5, "duration_days": 30}
-    -- spark_ads: {"amount": 100}
-    -- gift_card: {"amount": 50}
-    -- discount: {"percent": 10, "duration_days": 7}
-    -- physical_gift/experience: Uses description VARCHAR(15) instead
-
-  -- Tier targeting (Section 8)
-  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6' (exact match)
-
-  -- Visibility controls
-  enabled BOOLEAN DEFAULT false,
-  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: NULL = only eligible tier, 'tier_1' = Bronze+ can preview as locked
-
-  -- Redemption limits (Section 6: Numeric quantities)
-  redemption_frequency VARCHAR(50) DEFAULT 'unlimited', -- 'one-time', 'monthly', 'weekly', 'unlimited'
-  redemption_quantity INTEGER DEFAULT 1, -- How many times claimable per frequency period (1-10)
-    -- Examples:
-    -- {redemption_quantity: 2, redemption_frequency: 'monthly'} = 2 per month
-    -- {redemption_quantity: 1, redemption_frequency: 'one-time'} = once (forever for gift_card/physical_gift/experience, per tier for commission_boost/spark_ads/discount)
-    -- {redemption_quantity: NULL, redemption_frequency: 'unlimited'} = unlimited
-
-  -- Redemption process type (hardcoded per reward type in MVP)
-  redemption_type VARCHAR(50) NOT NULL DEFAULT 'instant', -- 'instant' or 'scheduled'
-    -- instant: gift_card, commission_boost, spark_ads, physical_gift, experience, raffle_entry
-    -- scheduled: discount (creator schedules activation time)
-
-  expires_days INTEGER, -- NULL = no expiration
-  display_order INTEGER, -- For admin UI sorting
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Validation: description required for physical_gift/experience only
-  CHECK (
-    (type IN ('physical_gift', 'experience') AND description IS NOT NULL AND LENGTH(description) <= 15) OR
-    (type NOT IN ('physical_gift', 'experience') AND description IS NULL)
-  )
-
-  -- Constraints
-  CONSTRAINT check_quantity_with_frequency CHECK (
-    (redemption_frequency = 'unlimited' AND redemption_quantity IS NULL) OR
-    (redemption_frequency != 'unlimited' AND redemption_quantity >= 1 AND redemption_quantity <= 10)
-  ),
-  CONSTRAINT check_preview_tier CHECK (
-    preview_from_tier IS NULL OR
-    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  )
-);
-
--- Redemptions table (edge case handling)
-CREATE TABLE redemptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  reward_id UUID REFERENCES rewards(id) ON DELETE CASCADE,
-
-  -- Status tracking (simplified: no approval step, all claims auto-valid)
-  status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'fulfilled', or 'rejected'
-    -- 'pending': Awaiting admin fulfillment
-    -- 'fulfilled': Admin completed fulfillment
-    -- 'rejected': Raffle non-winner (bulk rejected by admin)
-
-  -- Eligibility snapshot (locked at claim time)
-  tier_at_claim VARCHAR(50) NOT NULL, -- tier_1/tier_2/tier_3/tier_4 when creator clicked "Claim"
-  claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
-
-  -- Redemption type (instant vs scheduled)
-  redemption_type VARCHAR(50) NOT NULL, -- 'instant' or 'scheduled'
-
-  -- Scheduling (for TikTok Discount - scheduled type only)
-  scheduled_activation_at TIMESTAMP, -- When to activate (Brazil time UTC-3)
-  google_calendar_event_id VARCHAR(255), -- Google Calendar event ID for admin reminders
-
-  -- Fulfillment tracking
-  fulfilled_at TIMESTAMP, -- When admin marked as fulfilled
-  fulfilled_by UUID REFERENCES users(id), -- Which admin fulfilled
-  fulfillment_notes TEXT, -- Admin's fulfillment details (gift card codes, activation notes, etc.)
-
-  -- Rejection tracking (for raffle non-winners)
-  rejection_reason TEXT, -- Why redemption was rejected (e.g., "Raffle entry - not selected as winner")
-  rejected_at TIMESTAMP, -- When admin rejected
-  rejected_by UUID REFERENCES users(id), -- Which admin rejected
-
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Missions table (Section 4: Mode 3 - Task completion rewards)
-CREATE TABLE missions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Mission details
-  title VARCHAR(255) NOT NULL, -- Admin internal reference only (not shown to creators)
-  description TEXT, -- Admin-only notes (NEVER shown to creators, internal use only)
-                    -- For raffle user-facing text, use raffle_prize_name VARCHAR(15) instead
-
-  -- Mission type & target (Section 7)
-  mission_type VARCHAR(50) NOT NULL, -- 'sales', 'videos', 'views', 'likes', 'raffle'
-  target_value INTEGER NOT NULL, -- 500 (sales), 10 (videos), 0 (raffle - no progress tracking)
-
-  -- Reward
-  reward_id UUID NOT NULL REFERENCES rewards(id), -- What they unlock when complete
-
-  -- Tier eligibility (Section 8)
-  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6', or 'all'
-    -- Controls which tier can participate in mission
-    -- Combined with preview_from_tier, controls visibility
-
-  -- Raffle-specific (Section 4: Mode 4)
-  raffle_end_date TIMESTAMP NULL, -- ONLY for raffles (any reward type)
-    -- Regular missions use checkpoint as deadline
-    -- Raffles use custom end date for winner selection
-    -- Raffles typically use physical_gift/experience but can use any reward type
-  raffle_prize_name VARCHAR(15), -- Dynamic raffle description (max 15 chars, e.g., "iPhone 16 Pro")
-    -- Used to interpolate into hardcoded description: "Enter to win {prize_name}"
-    -- Required for raffle missions, NULL for regular missions
-
-  -- Visibility controls
-  enabled BOOLEAN DEFAULT true,
-  activated BOOLEAN DEFAULT false, -- For raffles only: false = dormant, true = accepting entries
-    -- Regular missions (sales, videos, views, likes): Ignored (always behave as activated)
-    -- Raffle missions: Start dormant (false), admin manually activates to accept entries
-  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: Locked mission visibility
-  display_order INTEGER NOT NULL, -- Sequential unlock position (1, 2, 3...)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CONSTRAINT check_raffle_requirements CHECK (
-    (mission_type != 'raffle') OR
-    (mission_type = 'raffle' AND raffle_end_date IS NOT NULL AND raffle_prize_name IS NOT NULL AND target_value = 0)
-  ),
-  CONSTRAINT check_non_raffle_fields CHECK (
-    (mission_type = 'raffle') OR
-    (mission_type != 'raffle' AND raffle_end_date IS NULL AND raffle_prize_name IS NULL)
-  ),
-  CONSTRAINT check_tier_eligibility CHECK (
-    tier_eligibility = 'all' OR
-    tier_eligibility IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  ),
-  CONSTRAINT check_preview_tier_missions CHECK (
-    preview_from_tier IS NULL OR
-    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  ),
-  -- Enforce unique display order per tier+type (prevents conflicts in sequential unlock)
-  UNIQUE(client_id, tier_eligibility, mission_type, display_order)
-);
-
--- Mission progress tracking
-CREATE TABLE mission_progress (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  mission_id UUID REFERENCES missions(id) ON DELETE CASCADE,
-
-  -- Progress tracking
-  current_value INTEGER DEFAULT 0, -- Current progress (e.g., $350 out of $500)
-  status VARCHAR(50) DEFAULT 'active', -- Database stores: 'active', 'completed', 'claimed', 'fulfilled', 'cancelled', 'processing', 'won', 'lost'
-    -- Database statuses (stored in mission_progress table):
-    --   'active': In progress
-    --   'completed': Target reached, can claim
-    --   'claimed': Creator claimed, pending admin fulfillment
-    --   'fulfilled': Admin marked as fulfilled, moves to Completed Missions tab
-    --   'cancelled': Mission disabled by admin (NOT used for tier changes - missions persist)
-    --   'processing': Raffle entry submitted, awaiting winner selection (raffle-only)
-    --   'won': Raffle winner selected, awaiting admin fulfillment (raffle-only)
-    --   'lost': Raffle non-winner, moves to Mission History (raffle-only)
-    --
-    -- Frontend-computed statuses (NOT stored, computed by API from missions.activated + mission_progress.status):
-    --   'available': Raffle with activated=true and no progress record → Shows [Participate] button
-    --   'dormant': Raffle with activated=false and no progress record → Shows "Raffle starts soon"
-    --   'locked': User's tier doesn't match mission.tier_eligibility → Shows 🔒 tier badge
-
-  -- Status timestamps
-  completed_at TIMESTAMP, -- When they hit target
-  claimed_at TIMESTAMP, -- When they claimed reward
-  fulfilled_at TIMESTAMP, -- When admin fulfilled reward (triggers next mission unlock)
-
-  -- Checkpoint period linkage (Section 4: Missions reset at checkpoint)
-  -- NOTE: These are SNAPSHOTS copied from users table when mission is created
-  -- They NEVER update, even if user's tier changes (preserves original mission deadline)
-  checkpoint_start TIMESTAMP, -- Snapshot of user's tier_achieved_at when mission was created
-  checkpoint_end TIMESTAMP, -- Snapshot of user's next_checkpoint_at when mission was created
-                            -- Used for: mission deadlines, checkpoint resets, historical tracking
-
-  UNIQUE(user_id, mission_id, checkpoint_start) -- One progress record per mission per checkpoint
-);
-
-CREATE INDEX idx_mission_progress_user ON mission_progress(user_id);
-CREATE INDEX idx_mission_progress_status ON mission_progress(status);
-
--- Raffle participants table (Section 4: Mode 4 - Raffle participation tracking)
-CREATE TABLE raffle_participants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  raffle_id UUID REFERENCES missions(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  participated_at TIMESTAMP DEFAULT NOW(),
-  is_winner BOOLEAN DEFAULT false,
-  winner_selected_at TIMESTAMP,
-
-  UNIQUE(raffle_id, user_id)  -- One entry per user per raffle
-);
-
-CREATE INDEX idx_raffle_participants_raffle ON raffle_participants(raffle_id);
-CREATE INDEX idx_raffle_participants_user ON raffle_participants(user_id);
-CREATE INDEX idx_raffle_winners ON raffle_participants(is_winner) WHERE is_winner = true;
-
--- Tiers table (Section 1: Dynamic tier configuration, 3-6 tiers per client)
-CREATE TABLE tiers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Tier identity
-  tier_order INTEGER NOT NULL, -- Display order: 1-6 (supports 3-6 tiers)
-  tier_id VARCHAR(50) NOT NULL, -- Internal ID: 'tier_1' through 'tier_6' (supports 3-6 tiers)
-  tier_name VARCHAR(100) NOT NULL, -- Admin-customizable: 'Bronze', 'Silver', 'Gold', 'Platinum'
-  tier_color VARCHAR(7) NOT NULL, -- Hex color for UI display
-
-  -- Threshold & rewards
-  sales_threshold DECIMAL(10, 2) NOT NULL, -- Minimum sales required to reach this tier
-  commission_rate DECIMAL(5, 2) NOT NULL, -- Commission percentage for this tier
-
-  -- Checkpoint behavior (Section 1: Field 1.8)
-  checkpoint_exempt BOOLEAN DEFAULT false, -- true = no checkpoint evaluations (entry tier only - tier_1/Bronze)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  UNIQUE(client_id, tier_order),
-  UNIQUE(client_id, tier_id)
-);
-
-CREATE INDEX idx_tiers_client ON tiers(client_id);
-
--- Sales adjustments table (Section 1: Field 1.9 - Manual sales corrections)
-CREATE TABLE sales_adjustments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-
-  -- Adjustment details
-  amount DECIMAL(10, 2) NOT NULL, -- Positive or negative adjustment
-  reason TEXT NOT NULL, -- Admin explanation (e.g., "Offline sale from event", "Refund correction")
-  adjustment_type VARCHAR(50) NOT NULL, -- 'manual_sale', 'refund', 'bonus', 'correction'
-
-  -- Audit trail
-  adjusted_by UUID REFERENCES users(id), -- Which admin made the adjustment
-  created_at TIMESTAMP DEFAULT NOW(),
-
-  -- Note: Adjustments apply during next daily sync, not immediately
-  -- Tier recalculation happens in daily cron (Section 1 decision)
-  applied_at TIMESTAMP -- When adjustment was included in tier calculation
-);
-
-CREATE INDEX idx_sales_adjustments_user ON sales_adjustments(user_id);
-CREATE INDEX idx_sales_adjustments_applied ON sales_adjustments(applied_at);
-
--- Tier checkpoints table (tracks tier maintenance evaluations)
-CREATE TABLE tier_checkpoints (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  checkpoint_date TIMESTAMP NOT NULL,
-  period_start_date TIMESTAMP NOT NULL,
-  period_end_date TIMESTAMP NOT NULL,
-  sales_in_period DECIMAL(10, 2) NOT NULL,
-  sales_required DECIMAL(10, 2) NOT NULL,
-  tier_before VARCHAR(50) NOT NULL,
-  tier_after VARCHAR(50) NOT NULL,
-  status VARCHAR(50) NOT NULL, -- 'maintained', 'promoted', 'demoted'
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Handle changes table (audit trail for TikTok handle changes)
-CREATE TABLE handle_changes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  old_handle VARCHAR(100) NOT NULL,
-  new_handle VARCHAR(100) NOT NULL,
-  detected_at TIMESTAMP DEFAULT NOW(),
-  resolved_by UUID, -- Admin who confirmed the change
-  resolved_at TIMESTAMP
-);
-
--- Indexes for performance
-CREATE INDEX idx_users_client ON users(client_id);
-CREATE INDEX idx_users_next_checkpoint ON users(next_checkpoint_at); -- For daily checkpoint checks
-CREATE INDEX idx_metrics_user_period ON metrics(user_id, period);
-CREATE INDEX idx_rewards_client ON rewards(client_id);
-CREATE INDEX idx_rewards_enabled ON rewards(enabled);
-CREATE INDEX idx_redemptions_user ON redemptions(user_id);
-CREATE INDEX idx_redemptions_status ON redemptions(status);
-CREATE INDEX idx_tier_checkpoints_user ON tier_checkpoints(user_id);
-
--- Row Level Security (RLS) policies
--- Security Model: Strict role-based access (Creator/System/Admin)
-
--- Helper functions for role checks
-CREATE OR REPLACE FUNCTION auth.user_role()
-RETURNS TEXT AS $$
-  SELECT COALESCE(auth.jwt() ->> 'role', 'creator');
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION auth.is_admin()
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM users WHERE id = auth.uid() AND is_admin = true
-  );
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION auth.current_client_id()
-RETURNS UUID AS $$
-  SELECT client_id FROM users WHERE id = auth.uid();
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
--- Table: clients
-ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
-CREATE POLICY clients_select ON clients
-  FOR SELECT USING (id = auth.current_client_id() OR auth.is_admin());
-CREATE POLICY clients_insert ON clients
-  FOR INSERT WITH CHECK (auth.is_admin());
-CREATE POLICY clients_update ON clients
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-
--- Table: users
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY users_select ON users
-  FOR SELECT USING (id = auth.uid() OR auth.is_admin());
-CREATE POLICY users_insert ON users
-  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY users_update_creator ON users
-  FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
-CREATE POLICY users_update_system ON users
-  FOR UPDATE USING (auth.user_role() = 'system')
-  WITH CHECK (auth.user_role() = 'system');
-CREATE POLICY users_update_admin ON users
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY users_delete ON users
-  FOR DELETE USING (auth.is_admin());
-
--- Table: metrics
-ALTER TABLE metrics ENABLE ROW LEVEL SECURITY;
-CREATE POLICY metrics_select ON metrics
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY metrics_insert ON metrics
-  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY metrics_update ON metrics
-  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
-  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY metrics_delete ON metrics
-  FOR DELETE USING (auth.is_admin());
-
--- Table: rewards
-ALTER TABLE rewards ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rewards_select ON rewards
-  FOR SELECT USING (
-    (client_id = auth.current_client_id() AND enabled = true) OR auth.is_admin()
-  );
-CREATE POLICY rewards_insert ON rewards
-  FOR INSERT WITH CHECK (auth.is_admin());
-CREATE POLICY rewards_update ON rewards
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY rewards_delete ON rewards
-  FOR DELETE USING (auth.is_admin());
-
--- Table: redemptions
-ALTER TABLE redemptions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY redemptions_select ON redemptions
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY redemptions_insert ON redemptions
-  FOR INSERT WITH CHECK (user_id = auth.uid() AND status = 'pending');
-CREATE POLICY redemptions_update ON redemptions
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY redemptions_delete ON redemptions
-  FOR DELETE USING (auth.is_admin());
-
--- Table: tier_checkpoints (immutable audit log)
-ALTER TABLE tier_checkpoints ENABLE ROW LEVEL SECURITY;
-CREATE POLICY tier_checkpoints_select ON tier_checkpoints
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY tier_checkpoints_insert ON tier_checkpoints
-  FOR INSERT WITH CHECK (auth.user_role() = 'system');
-
--- Table: videos
-ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY videos_select ON videos
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY videos_insert ON videos
-  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY videos_update ON videos
-  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
-  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY videos_delete ON videos
-  FOR DELETE USING (auth.is_admin());
-
--- Table: handle_changes
-ALTER TABLE handle_changes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY handle_changes_select ON handle_changes
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY handle_changes_insert ON handle_changes
-  FOR INSERT WITH CHECK (auth.user_role() = 'system');
-CREATE POLICY handle_changes_update ON handle_changes
-  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
-  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-
--- Role-based access summary:
--- Creator: Read own data, claim rewards
--- System: Write metrics/tiers/videos (automation)
--- Admin: Full access to all tables
-```
-
-
-**MVP Note:** All users will reference the same `client_id`. When scaling to multi-tenant, just add more rows to `clients` table.
-
----
-
 
 ### Database & Data
 - Supabase database queries (native integration)
@@ -2020,15 +2939,15 @@ The admin panel provides comprehensive configuration capabilities across 8 key a
 
 **Branding:**
 - **Client name** - Display name for the client/brand (stored in `clients.name` field)
-- **Brand color** - Primary header color for all screens (stored in `clients.primary_color` field, hex format). See Pseudocode.md Section 1.3 for implementation details.
+- **Brand color** - Primary header color for all screens (stored in `clients.primary_color` field, hex format).
 
 **Tier Configuration:**
-- **Tier names** - Internal tier IDs (`tier_1`, `tier_2`, `tier_3`, `tier_4`) with admin-customizable display names stored in `tiers` table (e.g., "Bronze", "Silver", or custom names like "Rookie", "Pro"). See Pseudocode.md Section 1.1 for implementation details.
-- **Tier colors** - Set hex colors for UI display per tier (stored in `tiers.tier_color` field, injected as CSS variables for dynamic theming). See Pseudocode.md Section 1.2 for implementation details.
+- **Tier names** - Internal tier IDs (`tier_1`, `tier_2`, `tier_3`, `tier_4`) with admin-customizable display names stored in `tiers` table (e.g., "Bronze", "Silver", or custom names like "Rookie", "Pro").
+- **Tier colors** - Set hex colors for UI display per tier (stored in `tiers.tier_color` field, injected as CSS variables for dynamic theming).
 - **Sales thresholds** - Define minimum sales required per tier (stored in `tiers.sales_threshold` field)
 - **Commission rates** - Commission percentage per tier (stored in `tiers.commission_rate` field)
 - **Checkpoint period** - Global checkpoint period in months for all non-Bronze tiers (stored in `clients.checkpoint_months` field)
-- **Dynamic tiers** - Support 3-6 configurable tiers (stored in `tiers` table). See Pseudocode.md Section 1.4 for implementation details.
+- **Dynamic tiers** - Support 3-6 configurable tiers (stored in `tiers` table).
 
 **Manual Adjustments:**
 - **Sales adjustments** - Add/subtract sales for creators (offline sales, refunds, bonuses)
@@ -2051,8 +2970,8 @@ All reward types have hardcoded commercial names for brand consistency:
 | `commission_boost` | Pay Boost | "Pay Boost: 5%" |
 | `spark_ads` | Reach Boost | "Reach Boost: $100" |
 | `discount` | Deal Boost | "Deal Boost: 10%" |
-| `physical_gift` | Gift Drop | "Gift Drop: Luxury headphones" |
-| `experience` | Mystery Trip | "Mystery Trip: VIP event access" |
+| `physical_gift` | Gift Drop | "Gift Drop: Headphones" |
+| `experience` | Mystery Trip | "Mystery Trip: VIP Event" |
 
 **Auto-Generated Naming:**
 - **Category 1 rewards** (gift_card, commission_boost, spark_ads, discount): Auto-generate from commercial name + value
@@ -2061,11 +2980,10 @@ All reward types have hardcoded commercial names for brand consistency:
   - Example: `spark_ads` + `{amount: 100}` → "Reach Boost: $100"
   - Example: `discount` + `{percent: 10}` → "Deal Boost: 10%"
 
-- **Category 2 rewards** (physical_gift, experience): Auto-generate from commercial name + description
-  - Example: `physical_gift` + "Luxury headphones" → "Gift Drop: Luxury headphones"
-  - Example: `experience` + "VIP event access" → "Mystery Trip: VIP event access"
+- **Category 2 rewards** (physical_gift, experience): Auto-generate from commercial name + description (max 15 chars)
+  - Example: `physical_gift` + "Headphones" → "Gift Drop: Headphones"
+  - Example: `experience` + "VIP Event" → "Mystery Trip: VIP Event"
 
-See Pseudocode.md Section 2 for complete implementation details (name generation logic, validation schemas, admin UI mockups, API changes).
 
 **Reward:** Enforces consistency, prevents naming errors, reduces admin burden
 
@@ -2082,11 +3000,9 @@ See Pseudocode.md Section 2 for complete implementation details (name generation
   - `gift_card`: `{"amount": 50}`
   - `discount`: `{"percent": 10}`
 
-- **Freeform text** (Category 2): Use `description` TEXT field
-  - `physical_gift`: "Luxury wireless headphones"
-  - `experience`: "VIP access to Brand event"
-
-See Pseudocode.md Section 3.1 for complete implementation details (admin UI forms, queryability examples, truncation helpers, CHECK constraints).
+- **Short descriptions** (Category 2): Use `description` VARCHAR(15) field
+  - `physical_gift`: "Wireless Phone" (max 15 chars)
+  - `experience`: "VIP Event" (max 15 chars)
 
 **Reward:** Type-safe for numbers, flexible for descriptions, easy admin UI
 
@@ -2102,32 +3018,48 @@ See Pseudocode.md Section 3.1 for complete implementation details (admin UI form
 - Auto-replace on tier change (old tier rewards disappear, new tier appears)
 
 **Mode 3: Missions (Task Completion) - Sequential Unlock System**
-- 5 mission types: Sales, Videos, Views, Likes, Raffle
+- 6 mission types: sales_dollars, sales_units, videos, views, likes, raffle
 - **Reward types:** Missions can be rewarded with any reward type (gift_card, commission_boost, spark_ads, discount, physical_gift, experience)
-- **Deadline for regular missions (Sales, Videos, Views, Likes):** Checkpoint date (resets at checkpoint)
-- **Deadline for Raffles:** Custom end date set by admin (not checkpoint-based)
+- **Deadline for regular missions (sales_dollars, sales_units, videos, views, likes):** Checkpoint date (resets at checkpoint)
+- **Deadline for raffles:** Custom end date set by admin (not checkpoint-based)
 - Daily batch tracking (progress updates once per day)
 - **Sequential unlock per mission type:**
   - Admin creates multiple missions per tier+type, each with unique `display_order`
-  - ONE active mission per type at a time (e.g., only Sales Mission 1 visible)
+  - ONE active mission per type at a time (e.g., only sales_dollars Mission 1 visible)
   - Next mission unlocks after admin fulfills previous mission's reward
   - Example: Gold tier has 3 sales missions (orders 1, 2, 3) → Complete order 1 → Order 2 appears
   - Multiple types can be active simultaneously (1 sales + 1 videos + 1 raffle at once)
 - **Mission tabs:**
-  - Available Missions: In-progress, completed (can claim), claimed (pending fulfillment), processing (raffle entry submitted), won (raffle winner awaiting fulfillment)
-  - Completed Missions: Fulfilled and lost missions (archived, read-only)
+  - **Available Missions Tab:** Shows missions user can currently work on
+    ```sql
+    SELECT mp.* FROM mission_progress mp
+    JOIN redemptions r ON r.mission_progress_id = mp.id
+    WHERE mp.user_id = ?
+      AND mp.status IN ('active', 'dormant', 'completed')
+      AND r.status IN ('claimable', 'claimed')
+      AND mp.checkpoint_start = current_checkpoint
+    ORDER BY mission_type, display_order
+    ```
+  - **Completed Missions Tab:** Shows completed and fulfilled missions
+    ```sql
+    SELECT mp.* FROM mission_progress mp
+    JOIN redemptions r ON r.mission_progress_id = mp.id
+    WHERE mp.user_id = ?
+      AND mp.status = 'completed'
+      AND r.status IN ('fulfilled', 'concluded', 'rejected')
+    ORDER BY r.fulfilled_at DESC
+    ```
 - **Tier change behavior:**
   - In-progress missions from old tier persist (continue until completion/fulfillment)
   - After fulfillment, new tier's Mission 1 appears (if that type exists in new tier)
   - If new tier lacks mission type, no replacement appears
 - Hardcoded display names per mission type (admin title/description for internal reference only):
-  - sales: "Unlock Payday"
+  - sales_dollars: "Unlock Payday"
+  - sales_units: "Unlock Payday"
   - videos: "Lights, Camera, Go!"
   - likes: "Road to Viral"
   - views: "Eyes on You"
-  - raffle: "VIP Raffle"
-
-See Pseudocode.md Section 4.2 for complete implementation details (sequential unlock trigger, next mission finder, tier change handler, raffle winner selection, UI display logic).
+  - raffle: "Lucky Ticket"
 
 **Mode 4: Raffles (Participation Lottery)**
 
@@ -2143,27 +3075,27 @@ See Pseudocode.md Section 4.2 for complete implementation details (sequential un
 - Eligible users see [Participate] button
 - No mission_progress record exists yet
 
-**Phase 2 - Processing (User Entered):**
+**Phase 2 - Participated (User Entered):**
 - User clicks [Participate] → Creates:
-  - `mission_progress` record (status='processing')
-  - `raffle_participants` record
-  - `redemptions` record (status='pending', redemption_type='instant')
+  - `mission_progress` record (status='completed', completed_at set)
+  - `raffle_participations` record (is_winner=NULL)
+  - `redemptions` record (status='claimable', mission_progress_id set)
 - Frontend shows: "[XX] Days till Raffle!" countdown
 
-**Phase 3 - Concluded (Winner Selected):**
+**Phase 3 - Winner Selection (Admin Selects Winner):**
 - Admin manually selects winner via Admin UI
-- **WINNER:** mission_progress → 'won', redemption stays 'pending'
-- **LOSERS:** mission_progress → 'lost', redemptions bulk rejected (status='rejected')
+- **WINNER:** raffle_participations.is_winner=TRUE, redemptions.status='claimable' (stays claimable)
+- **LOSERS:** raffle_participations.is_winner=FALSE, redemptions.status='rejected'
 - Admin downloads CSV with loser emails, sends manual emails (no automation)
 
 **Frontend Behavior:**
-- **LOSERS:** Mission moves to Mission History, shows "Better luck next time"
-- **WINNER:** Mission stays in Available Missions, shows "Coordinating delivery"
-- **WINNER (after fulfillment):** Mission moves to Mission History
+- **LOSERS:** Mission moves to Completed Missions (redemption.status='rejected'), shows "Better luck next time"
+- **WINNER:** Mission stays in Available Missions (redemption.status='claimable'), shows "Coordinating delivery"
+- **WINNER (after fulfillment):** redemptions.status → 'claimed' → 'fulfilled' → 'concluded', then moves to Completed Missions
 
 **Technical Details:**
 - Implemented as missions with `mission_type='raffle'`, `target_value=0`
-- Uses `raffle_participants` table for tracking entries
+- Uses `raffle_participations` table for tracking entries
 - Custom deadline via `raffle_end_date` field (not checkpoint-based)
 - Sequential unlock applies (one raffle at a time per tier)
 
@@ -2171,26 +3103,12 @@ See Pseudocode.md Section 4.2 for complete implementation details (sequential un
 - Use `tier_eligibility='all'` for raffles (entries persist across tier changes, fairer creator experience)
 - Universal raffles avoid confusion when creators get promoted/demoted before winner announcement
 
-**Naming Conventions:**
-- Use raffle emoji in title: 🎟️ (ticket), 🎲 (dice), 🏆 (trophy)
-- Include "Raffle" keyword for clarity (e.g., "🎟️ iPhone Raffle - Enter Now!")
-- Description should explain entry requirement, winner selection date, and prize
-
 **Validation Rules:**
 - `raffle_end_date` REQUIRED for raffles (enforced via CHECK constraint)
 - Must be in the future (not past date)
 - Must be before checkpoint date (missions reset at checkpoint)
 - Only raffle missions can have custom end dates (regular missions use checkpoint)
 
-**Edge Cases:**
-- **0 entries:** If no one participates by raffle_end_date, no winner can be selected (admin sees "0 entries")
-- **Forgotten winner selection:** Entries remain 'processing' until checkpoint reset; after checkpoint, mission resets
-- **Dormant raffles:** Eligible users see announcement message, cannot participate until activated
-
-**Time estimates:**
-- Mode 1: 0 hours (already designed in Sections 1-3)
-- Mode 3: 17-23 hours
-- Mode 4: 6-8 hours
 
 ---
 
@@ -2279,8 +3197,6 @@ Result:
 - ✅ Each client configures their own approach (some show all, some show none)
 
 **Time estimate:** 9-11 hours implementation
-
-See Pseudocode.md Section 5 for complete implementation details (helper functions, visibility queries, admin UI forms, creator UI components, validation schemas).
 
 ---
 
@@ -2449,20 +3365,21 @@ Preview: "Claimable 2 times per month"
 - Enforcement logic: 2-3 hours (window calculation, claim checking)
 - API endpoint updates: 1-2 hours (computed fields)
 
-See Pseudocode.md Section 6 for complete implementation details (enforcement functions, window calculations, API response format, database queries, transaction handling).
-
 ---
 
 ### Section 7: Mission Types
 
-**5 Mission Types (All Supported):**
-1. **Sales** - Track checkpoint sales progress
-2. **Videos** - Count videos posted since checkpoint
-3. **Views** - Sum views on videos since checkpoint
-4. **Likes** - Sum likes on videos since checkpoint
-5. **Raffle** - Participation lottery (no progress tracking)
+**6 Mission Types (All Supported):**
+1. **sales_dollars** - Track checkpoint sales progress (dollar amount)
+2. **sales_units** - Track checkpoint sales progress (units sold)
+3. **videos** - Count videos posted since checkpoint
+4. **views** - Sum views on videos since checkpoint
+5. **likes** - Sum likes on videos since checkpoint
+6. **raffle** - Participation lottery (no progress tracking)
 
-**Implementation:** Daily cron queries existing metrics/videos tables (no new data sources). Raffles use raffle_participants table.
+**Implementation:** Daily cron queries videos table and updates users/mission_progress tables. Raffles use raffle_participations table.
+
+**Note:** Sales missions have two variants (sales_dollars and sales_units) to support different tracking preferences per client.
 
 **Status:** ✅ Covered in Section 4 (Mode 3)
 
@@ -2528,5 +3445,5 @@ See Pseudocode.md Section 6 for complete implementation details (enforcement fun
 - Fast load times on mobile networks
 - Swipe gestures for leaderboard/tier browsing
 - Mobile-optimized modals and forms
-- Pull-to-refresh for metrics updates
+- Pull-to-refresh for data updates
 

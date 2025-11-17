@@ -1,34 +1,39 @@
-"use client"
-    import * as React from "react"
-    import { useState } from "react"
-    import {
-      Trophy,
-      History,
-      ChevronRight,
-      Megaphone,
-      HandCoins,
-      Gift,
-      BadgePercent,
-      Lock,
-      Loader2,
-      Palmtree,
-    } from "lucide-react"
-    import { Button } from "@/components/ui/button"
-    import { PageLayout } from "@/components/pagelayout"
-    import { ScheduleDiscountModal } from "@/components/schedule-discount-modal"
-    import { toast } from "sonner"
-    import { cn } from "@/lib/utils"
-    import Link from "next/link"
+"use client";
+import * as React from "react";
+import { useState } from "react";
+import {
+  Trophy,
+  History,
+  ChevronRight,
+  Megaphone,
+  HandCoins,
+  Gift,
+  BadgePercent,
+  Lock,
+  Loader2,
+  Palmtree,
+  ClockArrowDown,
+  Info,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PageLayout } from "@/components/pagelayout";
+import { ScheduleDiscountModal } from "@/components/schedule-discount-modal";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
 
-    export default function RewardsPage() {
+export default function RewardsPage() {
       // Test scenario state
-      const [activeScenario, setActiveScenario] = useState("scenario-1")
-      const [debugPanelOpen, setDebugPanelOpen] = useState(false)
+      const [activeScenario, setActiveScenario] = useState("scenario-1");
+      const [debugPanelOpen, setDebugPanelOpen] = useState(false);
 
-      const [showScheduleModal, setShowScheduleModal] = useState(false)
-      const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null)
+      const [showScheduleModal, setShowScheduleModal] = useState(false);
+      const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
 
-      const handleRedeemClick = (benefit: any) => {
+      // Track which benefit cards are flipped (for info button)
+      const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
+
+      const handleRedeemClick = async (benefit: any) => {
         console.log("[v0] Redeem clicked for benefit:", benefit.id)
 
         // If discount type, open scheduling modal
@@ -43,8 +48,22 @@
         }
 
         // For other reward types, claim immediately
-        // TODO: POST /api/benefits/:id/claim
-        // Creates redemption record with status='pending'
+        try {
+          // TODO: POST /api/benefits/:id/claim
+          // Backend will update benefit.status to 'claimed'
+          // This will trigger the "Processing..." badge to appear
+          await new Promise(resolve => setTimeout(resolve, 2000))
+
+          toast.success("Reward claimed!", {
+            description: "You'll receive it within 24 hours",
+            duration: 5000,
+          })
+        } catch (error) {
+          toast.error("Failed to claim reward", {
+            description: "Please try again or contact support",
+            duration: 5000,
+          })
+        }
       }
 
       const handleScheduleDiscount = async (scheduledDate: Date) => {
@@ -63,12 +82,12 @@
           const dateStr = scheduledDate.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
-          })
+          });
           const timeStr = scheduledDate.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
             timeZone: "America/New_York",
-          })
+          });
 
           toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, {
             description: "We'll activate your boost at this time",
@@ -103,11 +122,11 @@
   0H4v6a2 2 0 0 0 2 2h3v-8Zm6 0v8h3a2 2 0 0 0 2-2v-6h-5Z"
           />
         </svg>
-      )
+      );
 
       // Map backend benefit types to frontend icons (ALWAYS show benefit icon, never lock)
       const getIconForBenefitType = (type: string) => {
-        const iconClass = "h-6 w-6 text-slate-700"
+        const iconClass = "h-6 w-6 text-slate-700";
 
         switch (type) {
           case "commission_boost":
@@ -125,7 +144,7 @@
           default:
             return <Gift className={iconClass} />
         }
-      }
+      };
 
       // Format benefit description based on type
       const getBenefitDescription = (type: string, description: string, value_data: any): string => {
@@ -139,25 +158,25 @@
           case "gift_card":
             return description // Use backend description
           case "physical_gift":
-            return "Gift Drop" // HARDCODED
+            return description // Use description field from benefit
           case "experience":
-            return "Mystery Trip" // HARDCODED
+            return description // Use description field from benefit
           default:
             return description
         }
-      }
+      };
 
       // Format benefit name based on type
       const getBenefitName = (type: string, name: string, description: string): string => {
         switch (type) {
           case "physical_gift":
-            return description // Show 15-char description from backend (e.g., "Wireless Phones")
+            return name // Use name field (e.g., "Gift Drop: Wireless Headphones")
           case "experience":
-            return description // Show 15-char description from backend (e.g., "VIP Event Access")
+            return name // Use name field (e.g., "Mystery Trip")
           default:
             return name // Use auto-generated name (e.g., "Gift Card: $50")
         }
-      }
+      };
 
       /**
        * TEST SCENARIOS - Discount Scheduling Feature
@@ -394,13 +413,225 @@
             },
           ],
         },
-      }
+        "scenario-6": {
+          name: "TEST: Redeeming Status (All Types)",
+          currentTier: "tier_3",
+          redemptionCount: 5,
+          benefits: [
+            {
+              id: "b1",
+              type: "gift_card",
+              name: "Gift Card: $50",
+              description: "Redeem for Amazon gift card",
+              value_data: { amount: 50 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 2,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+            },
+            {
+              id: "b2",
+              type: "commission_boost",
+              name: "Pay Boost: 5%",
+              description: "Increase commission for 30 days",
+              value_data: { percent: 5, duration_days: 30 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+            },
+            {
+              id: "b3",
+              type: "spark_ads",
+              name: "Reach Boost: $100",
+              description: "$100 USD in Spark Ads budget",
+              value_data: { amount: 100 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 3,
+              used_count: 1,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+            },
+            {
+              id: "b4",
+              type: "physical_gift",
+              name: "Gift Drop: Wireless Headphones",
+              description: "Wireless Headphones",
+              value_data: null,
+              tier_eligibility: "tier_3",
+              redemption_frequency: "one-time",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+            },
+            {
+              id: "b5",
+              type: "experience",
+              name: "Mystery Trip: VIP Event Access",
+              description: "VIP Event",
+              value_data: null,
+              tier_eligibility: "tier_3",
+              redemption_frequency: "one-time",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+            },
+          ],
+        },
+        "scenario-7": {
+          name: "All 6 Reward Types",
+          currentTier: "tier_3",
+          redemptionCount: 8,
+          benefits: [
+            {
+              id: "b1",
+              type: "gift_card",
+              name: "Gift Card: $50",
+              description: "Redeem for Amazon gift card",
+              value_data: { amount: 50 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 2,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+            {
+              id: "b2",
+              type: "commission_boost",
+              name: "Pay Boost: 5%",
+              description: "More commission for 30 days",
+              value_data: { percent: 5, duration_days: 30 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+            {
+              id: "b3",
+              type: "spark_ads",
+              name: "Reach Boost: $100",
+              description: "In Spark Ads for more visibility",
+              value_data: { amount: 100 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 3,
+              used_count: 1,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimed",
+            },
+            {
+              id: "b4",
+              type: "physical_gift",
+              name: "Gift Drop: Wireless Headphones",
+              description: "Claim your Gift!",
+              value_data: null,
+              tier_eligibility: "tier_3",
+              redemption_frequency: "one-time",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+            {
+              id: "b5",
+              type: "discount",
+              name: "Deal Boost: 10%",
+              description: "Earn a discount for your viewers",
+              value_data: { percent: 10, duration_days: 7 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+            {
+              id: "b6",
+              type: "experience",
+              name: "Mystery Trip",
+              description: "Reach Gold to find out!",
+              value_data: null,
+              tier_eligibility: "tier_3",
+              redemption_frequency: "one-time",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+          ],
+        },
+        "scenario-8": {
+          name: "Commission Boost - Clearing",
+          currentTier: "tier_3",
+          redemptionCount: 5,
+          benefits: [
+            {
+              id: "b1",
+              type: "commission_boost",
+              name: "Pay Boost: 5%",
+              description: "More commission for 30 days",
+              value_data: { percent: 5, duration_days: 30 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 1,
+              used_count: 0,
+              can_claim: false,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimed",
+              boost_status: "pending_payout",
+            },
+            {
+              id: "b2",
+              type: "gift_card",
+              name: "Gift Card: $50",
+              description: "Redeem for Amazon gift card",
+              value_data: { amount: 50 },
+              tier_eligibility: "tier_3",
+              redemption_frequency: "monthly",
+              redemption_quantity: 2,
+              used_count: 0,
+              can_claim: true,
+              is_locked: false,
+              preview_from_tier: null,
+              status: "claimable",
+            },
+          ],
+        },
+      };
 
       // Get current scenario data
-      const currentScenario = scenarios[activeScenario as keyof typeof scenarios]
-      const currentTier = currentScenario.currentTier
-      const redemptionCount = currentScenario.redemptionCount
-      const benefits = currentScenario.benefits
+      const currentScenario = scenarios[activeScenario as keyof typeof scenarios];
+      const currentTier = currentScenario.currentTier;
+      const redemptionCount = currentScenario.redemptionCount;
+      const benefits = currentScenario.benefits;
 
       // Tier colors (matches VIP level)
       const tierColors = {
@@ -408,9 +639,9 @@
         tier_2: "#94a3b8", // Silver
         tier_3: "#F59E0B", // Gold
         tier_4: "#818CF8", // Platinum
-      }
+      };
 
-      const currentTierColor = tierColors[currentTier as keyof typeof tierColors]
+      const currentTierColor = tierColors[currentTier as keyof typeof tierColors];
 
       /**
        * All benefits from backend API (GET /api/benefits)
@@ -420,7 +651,7 @@
        * - id: Benefit UUID
        * - type: Backend benefit type (gift_card, commission_boost, spark_ads, discount, physical_gift, experience)
        * - name: Auto-generated display name ("Gift Card: $50", "Pay Boost: 5%")
-       * - description: Benefit details (15 char limit for physical_gift/experience, matches raffle_prize_name)
+       * - description: Benefit details (15 char limit for physical_gift/experience)
        * - value_data: JSONB for structured types ({"amount": 50}, {"percent": 5, "duration_days": 30})
        * - tier_eligibility: Required tier (tier_1, tier_2, tier_3, tier_4) - EXACT match
        * - redemption_frequency: 'one-time', 'monthly', 'weekly', 'unlimited'
@@ -430,92 +661,6 @@
        * - is_locked: Boolean (user's tier < tier_eligibility OR tier != tier_eligibility)
        * - preview_from_tier: Tier that can preview this benefit (NULL = only eligible tier sees it)
        */
-      const benefitsOLD = [
-        {
-          id: "b1",
-          type: "gift_card",
-          name: "Gift Card: $50", // Auto-generated from value_data
-          description: "Redeem for Amazon gift card",
-          value_data: { amount: 50 },
-          tier_eligibility: "tier_3", // Gold only
-          redemption_frequency: "monthly",
-          redemption_quantity: 2,
-          used_count: 0, // This user hasn't claimed yet this month
-          can_claim: true, // User is tier_3, within limits
-          is_locked: false,
-          preview_from_tier: "tier_2", // Silver+ can preview
-        },
-        {
-          id: "b2",
-          type: "commission_boost",
-          name: "Pay Boost: 5%",
-          description: "Increase commission for 30 days",
-          value_data: { percent: 5, duration_days: 30 },
-          tier_eligibility: "tier_3",
-          redemption_frequency: "monthly",
-          redemption_quantity: 1,
-          used_count: 1, // Already claimed once this month
-          can_claim: false, // Limit reached
-          is_locked: false,
-          preview_from_tier: null,
-        },
-        {
-          id: "b3",
-          type: "spark_ads",
-          name: "Reach Boost: $100",
-          description: "$100 USD in Spark Ads budget",
-          value_data: { amount: 100 },
-          tier_eligibility: "tier_3",
-          redemption_frequency: "monthly",
-          redemption_quantity: 3,
-          used_count: 1, // Claimed 1 of 3 this month
-          can_claim: true,
-          is_locked: false,
-          preview_from_tier: null,
-        },
-        {
-          id: "b4",
-          type: "physical_gift",
-          name: "Gift Drop: Wireless Phones",
-          description: "Wireless Phones", // 15 char limit from backend (VARCHAR(15))
-          value_data: null, // Physical gifts use description instead
-          tier_eligibility: "tier_3",
-          redemption_frequency: "one-time",
-          redemption_quantity: 1,
-          used_count: 0,
-          can_claim: true,
-          is_locked: false,
-          preview_from_tier: null,
-        },
-        {
-          id: "b5",
-          type: "discount",
-          name: "Deal Boost: 10%",
-          description: "10% follower discount (scheduled activation)",
-          value_data: { percent: 10 },
-          tier_eligibility: "tier_3",
-          redemption_frequency: "monthly",
-          redemption_quantity: 1,
-          used_count: 0,
-          can_claim: true,
-          is_locked: false,
-          preview_from_tier: null,
-        },
-        {
-          id: "b6",
-          type: "experience",
-          name: "Mystery Trip: VIP Event Access",
-          description: "VIP Event", // 15 char limit from backend (VARCHAR(15))
-          value_data: null,
-          tier_eligibility: "tier_4", // Platinum only
-          redemption_frequency: "one-time",
-          redemption_quantity: 1,
-          used_count: 0,
-          can_claim: false, // User is tier_3 (Gold), needs tier_4 (Platinum)
-          is_locked: true, // LOCKED because user tier < tier_eligibility
-          preview_from_tier: "tier_3", // Gold+ can preview
-        },
-      ]
 
       // Frontend filtering and sorting: Show benefits user can see
       const displayBenefits = benefits
@@ -525,9 +670,9 @@
 
           // OR show if locked but within preview range
           if (benefit.is_locked && benefit.preview_from_tier) {
-            const tierLevels = { tier_1: 1, tier_2: 2, tier_3: 3, tier_4: 4 }
-            const currentLevel = tierLevels[currentTier as keyof typeof tierLevels]
-            const previewLevel = tierLevels[benefit.preview_from_tier as keyof typeof tierLevels]
+            const tierLevels = { tier_1: 1, tier_2: 2, tier_3: 3, tier_4: 4 };
+            const currentLevel = tierLevels[currentTier as keyof typeof tierLevels];
+            const previewLevel = tierLevels[benefit.preview_from_tier as keyof typeof tierLevels];
             return currentLevel >= previewLevel
           }
 
@@ -535,14 +680,14 @@
         })
         .sort((a, b) => {
           // Ineligible = locked OR can't claim (limit reached)
-          const aIsIneligible = a.is_locked || !a.can_claim
-          const bIsIneligible = b.is_locked || !b.can_claim
+          const aIsIneligible = a.is_locked || !a.can_claim;
+          const bIsIneligible = b.is_locked || !b.can_claim;
 
           // Sort: Eligible first, ineligible last
-          if (aIsIneligible && !bIsIneligible) return 1  // a goes after b
-          if (!aIsIneligible && bIsIneligible) return -1 // a goes before b
-          return 0 // Both same status, keep original order
-        })
+          if (aIsIneligible && !bIsIneligible) return 1
+          if (!aIsIneligible && bIsIneligible) return -1
+          return 0
+        });
 
       return (
         <>
@@ -621,65 +766,141 @@
                 benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
                 !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
                 benefit.is_locked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
-              )
+              );
 
               // Get tier display name for locked badge
               const requiredTierName = benefit.tier_eligibility === "tier_1" ? "Bronze"
                 : benefit.tier_eligibility === "tier_2" ? "Silver"
                 : benefit.tier_eligibility === "tier_3" ? "Gold"
-                : "Platinum"
+                : "Platinum";
+
+              // Check if this is a commission boost in clearing status
+              const isClearing = benefit.type === "commission_boost" &&
+                                benefit.status === "claimed" &&
+                                benefit.boost_status === "pending_payout";
 
               return (
-                <div key={benefit.id} className={cardClass}>
-                  <div className="flex items-center gap-3">
-                    {/* ALWAYS show benefit icon (not lock) */}
-                    {getIconForBenefitType(benefit.type)}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-semibold text-slate-900">
-                          {getBenefitName(benefit.type, benefit.name, benefit.description)}
-                        </h4>
-                        {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
-                        {benefit.redemption_quantity && benefit.redemption_quantity > 1 && !benefit.is_locked && (
-                          <span className="text-xs text-slate-500 font-medium">
-                            {benefit.used_count}/{benefit.redemption_quantity}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
-                      </p>
+                <div key={benefit.id} className="relative w-full" style={{ perspective: '1000px' }}>
+                  <div
+                    className="relative w-full transition-transform duration-600 ease-in-out"
+                    style={{
+                      transformStyle: 'preserve-3d',
+                      transform: flippedCards[benefit.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                    }}
+                  >
+                    {/* FRONT SIDE */}
+                    <div style={{ backfaceVisibility: 'hidden' }}>
+                      <div className={cardClass}>
+                        <div className="flex items-center gap-3">
+                          {/* ALWAYS show benefit icon (not lock) */}
+                          {getIconForBenefitType(benefit.type)}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold text-slate-900">
+                                {getBenefitName(benefit.type, benefit.name, benefit.description)}
+                              </h4>
+                              {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
+                              {benefit.redemption_quantity && benefit.redemption_quantity > 1 && !benefit.is_locked && (
+                                <span className="text-xs text-slate-500 font-medium">
+                                  {benefit.used_count}/{benefit.redemption_quantity}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-600">
+                              {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
+                            </p>
 
-                      {!benefit.can_claim && !benefit.is_locked && (
-                        <p className="text-xs text-amber-600 font-medium mt-1">Limit reached</p>
-                      )}
+                            {!benefit.can_claim && !benefit.is_locked && (
+                              <p className="text-xs text-amber-600 font-medium mt-1">Limit reached</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* RIGHT SIDE: Action Buttons & Status Badges */}
+                        <div className="flex items-center gap-2">
+                          {/* INFO ICON: Only for Clearing status */}
+                          {isClearing && (
+                              <button
+                                onClick={() => setFlippedCards(prev => ({ ...prev, [benefit.id]: !prev[benefit.id] }))}
+                                className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-blue-100 transition-colors"
+                                aria-label="More information"
+                              >
+                                <Info className="h-4 w-4 text-blue-500" />
+                              </button>
+                            )}
+
+                            {/* STATUS BADGE: Clearing (Commission Boost Pending Payout) */}
+                            {isClearing && (
+                              <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <ClockArrowDown className="h-4 w-4 text-blue-500" />
+                                Clearing
+                              </div>
+                            )}
+
+                            {/* STATUS BADGE: Redeeming (Processing) */}
+                            {benefit.status === "claimed" && !isClearing && (
+                              <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3 py-2 rounded-lg text-xs font-medium">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Processing...
+                              </div>
+                            )}
+
+                            {/* ACTION BUTTON: Claim or Schedule */}
+                            {benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
+                              <Button
+                                onClick={() => handleRedeemClick(benefit)}
+                                className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-sm px-4 py-2 rounded-lg font-medium"
+                              >
+                                {benefit.type === "discount" ? "Schedule" : "Claim"}
+                              </Button>
+                            )}
+
+                            {/* STATUS BADGE: Limit Reached */}
+                            {!benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
+                              <div className="bg-slate-100 text-slate-500 px-3 py-2 rounded-lg text-xs font-medium">
+                                Limit Reached
+                              </div>
+                            )}
+
+                            {/* STATUS BADGE: Locked (Tier-Locked) */}
+                            {benefit.is_locked && (
+                              <div className="flex flex-col items-center gap-1">
+                                <Lock className="h-4 w-4 text-slate-400" />
+                                <span className="text-xs text-slate-500 font-medium">{requiredTierName}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    {benefit.can_claim && !benefit.is_locked && (
-                      <Button
-                        onClick={() => handleRedeemClick(benefit)}
-                        className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-sm px-4 py-2 rounded-lg font-medium"
+                    {/* BACK SIDE: Info explanation */}
+                    {isClearing && (
+                      <div
+                        className="absolute top-0 left-0 w-full"
+                        style={{
+                          backfaceVisibility: 'hidden',
+                          transform: 'rotateY(180deg)',
+                        }}
                       >
-                        {benefit.type === "discount" ? "Schedule" : "Claim"}
-                      </Button>
-                    )}
-
-                    {!benefit.can_claim && !benefit.is_locked && (
-                      <div className="bg-slate-100 text-slate-500 px-3 py-2 rounded-lg text-xs font-medium">
-                        Limit Reached
-                      </div>
-                    )}
-
-                    {benefit.is_locked && (
-                      <div className="flex flex-col items-center gap-1">
-                        <Lock className="h-4 w-4 text-slate-400" />
-                        <span className="text-xs text-slate-500 font-medium">{requiredTierName}</span>
+                        <div className={cn(cardClass, "flex-col items-start gap-3")}>
+                          <div className="flex items-center justify-between w-full">
+                            <h4 className="text-sm font-semibold text-slate-900">Why is this clearing?</h4>
+                            <button
+                              onClick={() => setFlippedCards(prev => ({ ...prev, [benefit.id]: false }))}
+                              className="flex items-center justify-center w-6 h-6 rounded-full hover:bg-slate-100 transition-colors"
+                              aria-label="Close"
+                            >
+                              <Info className="h-4 w-4 text-slate-500" />
+                            </button>
+                          </div>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
-                </div>
               )
             })}
           </div>

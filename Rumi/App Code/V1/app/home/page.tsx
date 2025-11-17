@@ -34,19 +34,55 @@ export default function Home() {
   // ============================================
   // TEST SCENARIOS - 12 Comprehensive Cases
   // ============================================
+  /**
+   * API CONTRACT MOCK DATA
+   *
+   * Each scenario represents the response shape from GET /api/home
+   *
+   * NEXT CLAIMABLE MISSION:
+   * - Backend determines which mission user is closest to completing
+   * - Could be any mission type: sales, videos, likes, views, raffle
+   * - Reward type determined by mission configuration in database
+   *
+   * Backend Service: HomeService.getNextClaimableMission(userId)
+   * Business Logic:
+   *   1. Get all active missions for user's tier
+   *   2. Calculate progress on each mission
+   *   3. Return mission with highest progressPercentage
+   */
   const scenarios = {
     "scenario-1": {
       name: "Bronze - Sales Mission 25%",
       mockData: {
         user: { id: "1", handle: "newcreator", email: "new@example.com", clientName: "Stateside Growers" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Bronze", color: "#CD7F32", order: 1, checkpoint_exempt: true },
         nextTier: { name: "Silver", threshold: 1000, color: "#94a3b8" },
-        tierProgress: { currentSales: 250, targetSales: 1000, progressPercentage: 25, checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 35000, threshold: 100000, progressPercentage: 35, nextAmount: 25 },
+        tierProgress: { currentValue: 250, targetValue: 1000, progressPercentage: 25, currentFormatted: "$250", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-100k",
+          missionType: "sales_dollars",
+          currentProgress: 35000,
+          targetThreshold: 100000,
+          progressPercentage: 35,
+          currentFormatted: "$35,000",
+          targetFormatted: "$100,000",
+          targetText: "of $100,000 sales",
+          progressText: "$35,000 of $100,000 sales",
+          reward: {
+            id: "reward-gc-25",
+            type: "gift_card",
+            name: "$25 Amazon Gift Card",
+            value_data: { amount: 25 }
+          },
+          canClaim: false,
+          buttonText: "$35K of $100K sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "gift_card", name: "$25 Amazon Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
-        { type: "commission_boost", name: "3% Commission Boost", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "gift_card", name: "$25 Amazon Gift Card", displayText: "$25 Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
+        { type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -54,16 +90,36 @@ export default function Home() {
       name: "Silver - Videos Mission 50%",
       mockData: {
         user: { id: "2", handle: "silverstar", email: "silver@example.com", clientName: "Fizee" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Silver", color: "#94a3b8", order: 2, checkpoint_exempt: false },
         nextTier: { name: "Gold", threshold: 3000, color: "#F59E0B" },
-        tierProgress: { currentSales: 1500, targetSales: 3000, progressPercentage: 50, checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "videos", currentSales: 10, threshold: 20, progressPercentage: 50, nextAmount: 5 },
+        tierProgress: { currentValue: 1500, targetValue: 3000, progressPercentage: 50, currentFormatted: "$1,500", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-videos-20",
+          missionType: "videos",
+          currentProgress: 10,
+          targetThreshold: 20,
+          progressPercentage: 50,
+          currentFormatted: "10",
+          targetFormatted: "20",
+          targetText: "of 20 videos",
+          progressText: "10 of 20 videos",
+          reward: {
+            id: "reward-headphones",
+            type: "physical_gift",
+            name: "Wireless Headphones",
+            value_data: null
+          },
+          canClaim: false,
+          buttonText: "10 of 20 videos",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "physical_gift", name: "Wireless Headphones", value_data: null, redemption_quantity: 1 },
-        { type: "gift_card", name: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
-        { type: "commission_boost", name: "4% Commission Boost", value_data: { percent: 4, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "discount", name: "8% Follower Discount", value_data: { percent: 8, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "physical_gift", name: "Wireless Headphones", displayText: "Win a Wireless Headphones", value_data: null, redemption_quantity: 1 },
+        { type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", value_data: { percent: 4, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "discount", name: "8% Follower Discount", displayText: "+8% Deal Boost for 30 Days", value_data: { percent: 8, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -71,18 +127,38 @@ export default function Home() {
       name: "Gold - Likes Mission 75%",
       mockData: {
         user: { id: "3", handle: "goldpro", email: "gold@example.com", clientName: "BrandCo" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Gold", color: "#F59E0B", order: 3, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 5000, color: "#818CF8" },
-        tierProgress: { currentSales: 3750, targetSales: 5000, progressPercentage: 75, checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "likes", currentSales: 3750, threshold: 5000, progressPercentage: 75, nextAmount: 15 },
+        tierProgress: { currentValue: 3750, targetValue: 5000, progressPercentage: 75, currentFormatted: "$3,750", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-likes-5k",
+          missionType: "likes",
+          currentProgress: 3750,
+          targetThreshold: 5000,
+          progressPercentage: 75,
+          currentFormatted: "3.8K",
+          targetFormatted: "5K",
+          targetText: "of 5K likes",
+          progressText: "3.8K of 5K likes",
+          reward: {
+            id: "reward-cb-5pct",
+            type: "commission_boost",
+            name: "5% Pay Boost",
+            value_data: { percent: 5, duration_days: 30 }
+          },
+          canClaim: false,
+          buttonText: "3.8K of 5K likes",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "experience", name: "VIP Event Access", value_data: null, redemption_quantity: 1 },
-        { type: "physical_gift", name: "iPhone 16 Pro", value_data: null, redemption_quantity: 1 },
-        { type: "gift_card", name: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
-        { type: "commission_boost", name: "5% Pay Boost", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "spark_ads", name: "$100 Ad Boost", value_data: { amount: 100 }, redemption_quantity: 2 },
-        { type: "discount", name: "10% Follower Discount", value_data: { percent: 10, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", value_data: null, redemption_quantity: 1 },
+        { type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", value_data: null, redemption_quantity: 1 },
+        { type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "spark_ads", name: "$100 Ad Boost", displayText: "+$100 Ads Boost", value_data: { amount: 100 }, redemption_quantity: 2 },
+        { type: "discount", name: "10% Follower Discount", displayText: "+10% Deal Boost for 30 Days", value_data: { percent: 10, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -90,18 +166,38 @@ export default function Home() {
       name: "Platinum - Views Mission 99%",
       mockData: {
         user: { id: "4", handle: "platinumstar", email: "plat@example.com", clientName: "Elite Brand" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Platinum", color: "#818CF8", order: 4, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 10000, color: "#818CF8" },
-        tierProgress: { currentSales: 9900, targetSales: 10000, progressPercentage: 99, checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "views", currentSales: 99000, threshold: 100000, progressPercentage: 99, nextAmount: 20 },
+        tierProgress: { currentValue: 9900, targetValue: 10000, progressPercentage: 99, currentFormatted: "$9,900", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-views-100k",
+          missionType: "views",
+          currentProgress: 99000,
+          targetThreshold: 100000,
+          progressPercentage: 99,
+          currentFormatted: "99K",
+          targetFormatted: "100K",
+          targetText: "of 100K views",
+          progressText: "99K of 100K views",
+          reward: {
+            id: "reward-spark-200",
+            type: "spark_ads",
+            name: "$200 Reach Boost",
+            value_data: { amount: 200 }
+          },
+          canClaim: false,
+          buttonText: "99K of 100K views",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "experience", name: "Exclusive Brand Summit", value_data: null, redemption_quantity: 1 },
-        { type: "physical_gift", name: "MacBook Pro", value_data: null, redemption_quantity: 1 },
-        { type: "gift_card", name: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
-        { type: "commission_boost", name: "7% Pay Boost", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
-        { type: "spark_ads", name: "$200 Ad Boost", value_data: { amount: 200 }, redemption_quantity: 3 },
-        { type: "discount", name: "15% Follower Discount", value_data: { percent: 15, duration_days: 30 }, redemption_quantity: 2 },
+        { type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", value_data: null, redemption_quantity: 1 },
+        { type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", value_data: null, redemption_quantity: 1 },
+        { type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
+        { type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
+        { type: "spark_ads", name: "$200 Ad Boost", displayText: "+$200 Ads Boost", value_data: { amount: 200 }, redemption_quantity: 3 },
+        { type: "discount", name: "15% Follower Discount", displayText: "+15% Deal Boost for 30 Days", value_data: { percent: 15, duration_days: 30 }, redemption_quantity: 2 },
       ],
     },
 
@@ -109,15 +205,35 @@ export default function Home() {
       name: "Mission Complete 100%",
       mockData: {
         user: { id: "5", handle: "winner", email: "win@example.com", clientName: "Stateside Growers" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Gold", color: "#F59E0B", order: 3, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 5000, color: "#818CF8" },
-        tierProgress: { currentSales: 4200, targetSales: 5000, progressPercentage: 84, checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 500, threshold: 500, progressPercentage: 100, rewardType: "discount", rewardValue: 8 },
+        tierProgress: { currentValue: 4200, targetValue: 5000, progressPercentage: 84, currentFormatted: "$4,200", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-complete",
+          missionType: "sales_dollars",
+          currentProgress: 500,
+          targetThreshold: 500,
+          progressPercentage: 100,
+          currentFormatted: "$500",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$500 of $500 sales",
+          reward: {
+            id: "reward-discount-8pct",
+            type: "discount",
+            name: "8% Follower Discount",
+            value_data: { percent: 8, duration_days: 30 }
+          },
+          canClaim: true,
+          buttonText: "+8% Deal Boost",
+          buttonAction: "claim"
+        },
       },
       currentTierBenefits: [
-        { type: "gift_card", name: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
-        { type: "commission_boost", name: "5% Commission Boost", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "spark_ads", name: "$100 Ad Boost", value_data: { amount: 100 }, redemption_quantity: 3 },
+        { type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "spark_ads", name: "$100 Ad Boost", displayText: "+$100 Ads Boost", value_data: { amount: 100 }, redemption_quantity: 3 },
       ],
     },
 
@@ -125,14 +241,34 @@ export default function Home() {
       name: "Commission Boost Reward",
       mockData: {
         user: { id: "6", handle: "booster", email: "boost@example.com", clientName: "BrandCo" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Silver", color: "#94a3b8", order: 2, checkpoint_exempt: false },
         nextTier: { name: "Gold", threshold: 3000, color: "#F59E0B" },
-        tierProgress: { currentSales: 1800, targetSales: 3000, progressPercentage: 60, checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 300, threshold: 500, progressPercentage: 60, nextAmount: 5 },
+        tierProgress: { currentValue: 1800, targetValue: 3000, progressPercentage: 60, currentFormatted: "$1,800", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500",
+          missionType: "sales_dollars",
+          currentProgress: 300,
+          targetThreshold: 500,
+          progressPercentage: 60,
+          currentFormatted: "$300",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$300 of $500 sales",
+          reward: {
+            id: "reward-gc-35",
+            type: "gift_card",
+            name: "$35 Gift Card",
+            value_data: { amount: 35 }
+          },
+          canClaim: false,
+          buttonText: "$300 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "commission_boost", name: "5% Commission Boost", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "gift_card", name: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
       ],
     },
 
@@ -140,15 +276,35 @@ export default function Home() {
       name: "Spark Ads Reward",
       mockData: {
         user: { id: "7", handle: "advertiser", email: "ads@example.com", clientName: "Fizee" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Gold", color: "#F59E0B", order: 3, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 5000, color: "#818CF8" },
-        tierProgress: { currentSales: 4000, targetSales: 5000, progressPercentage: 80, checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 400, threshold: 500, progressPercentage: 80, nextAmount: 100 },
+        tierProgress: { currentValue: 4000, targetValue: 5000, progressPercentage: 80, currentFormatted: "$4,000", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-spark",
+          missionType: "sales_dollars",
+          currentProgress: 400,
+          targetThreshold: 500,
+          progressPercentage: 80,
+          currentFormatted: "$400",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$400 of $500 sales",
+          reward: {
+            id: "reward-spark-100",
+            type: "spark_ads",
+            name: "$100 Spark Ads Budget",
+            value_data: { amount: 100 }
+          },
+          canClaim: false,
+          buttonText: "$400 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "spark_ads", name: "$100 Spark Ads Budget", value_data: { amount: 100 }, redemption_quantity: 3 },
-        { type: "gift_card", name: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
-        { type: "commission_boost", name: "5% Pay Boost", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "spark_ads", name: "$100 Spark Ads Budget", displayText: "+$100 Ads Boost", value_data: { amount: 100 }, redemption_quantity: 3 },
+        { type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", value_data: { amount: 50 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", value_data: { percent: 5, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -156,15 +312,35 @@ export default function Home() {
       name: "Follower Discount Reward",
       mockData: {
         user: { id: "8", handle: "discounter", email: "disc@example.com", clientName: "BrandCo" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Silver", color: "#94a3b8", order: 2, checkpoint_exempt: false },
         nextTier: { name: "Gold", threshold: 3000, color: "#F59E0B" },
-        tierProgress: { currentSales: 2100, targetSales: 3000, progressPercentage: 70, checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 350, threshold: 500, progressPercentage: 70, nextAmount: 10 },
+        tierProgress: { currentValue: 2100, targetValue: 3000, progressPercentage: 70, currentFormatted: "$2,100", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-discount",
+          missionType: "sales_dollars",
+          currentProgress: 350,
+          targetThreshold: 500,
+          progressPercentage: 70,
+          currentFormatted: "$350",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$350 of $500 sales",
+          reward: {
+            id: "reward-discount-10pct",
+            type: "discount",
+            name: "10% Follower Discount",
+            value_data: { percent: 10, duration_days: 30 }
+          },
+          canClaim: false,
+          buttonText: "$350 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "discount", name: "10% Follower Discount", value_data: { percent: 10, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "gift_card", name: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
-        { type: "commission_boost", name: "4% Commission Boost", value_data: { percent: 4, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "discount", name: "10% Follower Discount", displayText: "+10% Deal Boost for 30 Days", value_data: { percent: 10, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", value_data: { amount: 35 }, redemption_quantity: 2 },
+        { type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", value_data: { percent: 4, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -172,16 +348,36 @@ export default function Home() {
       name: "Physical Gift Reward",
       mockData: {
         user: { id: "9", handle: "giftwinner", email: "gift@example.com", clientName: "Elite Brand" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Platinum", color: "#818CF8", order: 4, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 10000, color: "#818CF8" },
-        tierProgress: { currentSales: 8500, targetSales: 10000, progressPercentage: 85, checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 425, threshold: 500, progressPercentage: 85, nextAmount: 1 },
+        tierProgress: { currentValue: 8500, targetValue: 10000, progressPercentage: 85, currentFormatted: "$8,500", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-iphone",
+          missionType: "sales_dollars",
+          currentProgress: 425,
+          targetThreshold: 500,
+          progressPercentage: 85,
+          currentFormatted: "$425",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$425 of $500 sales",
+          reward: {
+            id: "reward-iphone-16",
+            type: "physical_gift",
+            name: "iPhone 16 Pro",
+            value_data: null
+          },
+          canClaim: false,
+          buttonText: "$425 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "physical_gift", name: "iPhone 16 Pro", value_data: null, redemption_quantity: 1 },
-        { type: "experience", name: "VIP Event Access", value_data: null, redemption_quantity: 1 },
-        { type: "gift_card", name: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
-        { type: "commission_boost", name: "7% Pay Boost", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
+        { type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", value_data: null, redemption_quantity: 1 },
+        { type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", value_data: null, redemption_quantity: 1 },
+        { type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
+        { type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
       ],
     },
 
@@ -189,14 +385,34 @@ export default function Home() {
       name: "Minimal Benefits (2)",
       mockData: {
         user: { id: "10", handle: "starter", email: "start@example.com", clientName: "Stateside Growers" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Bronze", color: "#CD7F32", order: 1, checkpoint_exempt: true },
         nextTier: { name: "Silver", threshold: 1000, color: "#94a3b8" },
-        tierProgress: { currentSales: 100, targetSales: 1000, progressPercentage: 10, checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 50, threshold: 500, progressPercentage: 10, nextAmount: 25 },
+        tierProgress: { currentValue: 100, targetValue: 1000, progressPercentage: 10, currentFormatted: "$100", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-starter",
+          missionType: "sales_dollars",
+          currentProgress: 50,
+          targetThreshold: 500,
+          progressPercentage: 10,
+          currentFormatted: "$50",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$50 of $500 sales",
+          reward: {
+            id: "reward-gc-25-starter",
+            type: "gift_card",
+            name: "$25 Gift Card",
+            value_data: { amount: 25 }
+          },
+          canClaim: false,
+          buttonText: "$50 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "gift_card", name: "$25 Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
-        { type: "commission_boost", name: "3% Commission Boost", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
+        { type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
       ],
     },
 
@@ -204,15 +420,35 @@ export default function Home() {
       name: "Low Progress 5%",
       mockData: {
         user: { id: "11", handle: "beginner", email: "begin@example.com", clientName: "Fizee" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Bronze", color: "#CD7F32", order: 1, checkpoint_exempt: true },
         nextTier: { name: "Silver", threshold: 1000, color: "#94a3b8" },
-        tierProgress: { currentSales: 50, targetSales: 1000, progressPercentage: 5, checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 25, threshold: 500, progressPercentage: 5, nextAmount: 25 },
+        tierProgress: { currentValue: 50, targetValue: 1000, progressPercentage: 5, currentFormatted: "$50", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-beginner",
+          missionType: "sales_dollars",
+          currentProgress: 25,
+          targetThreshold: 500,
+          progressPercentage: 5,
+          currentFormatted: "$25",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$25 of $500 sales",
+          reward: {
+            id: "reward-gc-25-beginner",
+            type: "gift_card",
+            name: "$25 Gift Card",
+            value_data: { amount: 25 }
+          },
+          canClaim: false,
+          buttonText: "$25 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "gift_card", name: "$25 Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
-        { type: "commission_boost", name: "3% Commission Boost", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
-        { type: "spark_ads", name: "$50 Ad Boost", value_data: { amount: 50 }, redemption_quantity: 1 },
+        { type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", value_data: { amount: 25 }, redemption_quantity: 1 },
+        { type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", value_data: { percent: 3, duration_days: 30 }, redemption_quantity: 1 },
+        { type: "spark_ads", name: "$50 Ad Boost", displayText: "+$50 Ads Boost", value_data: { amount: 50 }, redemption_quantity: 1 },
       ],
     },
 
@@ -220,18 +456,38 @@ export default function Home() {
       name: "🔥 All Reward Types",
       mockData: {
         user: { id: "12", handle: "poweruser", email: "power@example.com", clientName: "Elite Brand" },
+        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
         currentTier: { name: "Platinum", color: "#818CF8", order: 4, checkpoint_exempt: false },
         nextTier: { name: "Platinum", threshold: 10000, color: "#818CF8" },
-        tierProgress: { currentSales: 9000, targetSales: 10000, progressPercentage: 90, checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        giftCard: { missionType: "sales", currentSales: 450, threshold: 500, progressPercentage: 90, nextAmount: 100 },
+        tierProgress: { currentValue: 9000, targetValue: 10000, progressPercentage: 90, currentFormatted: "$9,000", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
+        nextClaimableMission: {
+          missionId: "mission-sales-500-experience",
+          missionType: "sales_dollars",
+          currentProgress: 450,
+          targetThreshold: 500,
+          progressPercentage: 90,
+          currentFormatted: "$450",
+          targetFormatted: "$500",
+          targetText: "of $500 sales",
+          progressText: "$450 of $500 sales",
+          reward: {
+            id: "reward-summit",
+            type: "experience",
+            name: "Exclusive Brand Summit",
+            value_data: null
+          },
+          canClaim: false,
+          buttonText: "$450 of $500 sales",
+          buttonAction: "view_progress"
+        },
       },
       currentTierBenefits: [
-        { type: "experience", name: "Exclusive Brand Summit", value_data: null, redemption_quantity: 1 },
-        { type: "physical_gift", name: "MacBook Pro", value_data: null, redemption_quantity: 1 },
-        { type: "gift_card", name: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
-        { type: "commission_boost", name: "7% Pay Boost", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
-        { type: "spark_ads", name: "$200 Ad Boost", value_data: { amount: 200 }, redemption_quantity: 3 },
-        { type: "discount", name: "15% Follower Discount", value_data: { percent: 15, duration_days: 30 }, redemption_quantity: 2 },
+        { type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", value_data: null, redemption_quantity: 1 },
+        { type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", value_data: null, redemption_quantity: 1 },
+        { type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", value_data: { amount: 100 }, redemption_quantity: 3 },
+        { type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", value_data: { percent: 7, duration_days: 30 }, redemption_quantity: 2 },
+        { type: "spark_ads", name: "$200 Ad Boost", displayText: "+$200 Ads Boost", value_data: { amount: 200 }, redemption_quantity: 3 },
+        { type: "discount", name: "15% Follower Discount", displayText: "+15% Deal Boost for 30 Days", value_data: { percent: 15, duration_days: 30 }, redemption_quantity: 2 },
       ],
     },
   }
@@ -307,87 +563,45 @@ export default function Home() {
   const topBenefits = sortedBenefits.slice(0, 4)
   const hasMoreBenefits = sortedBenefits.length > 4
 
-  // Format benefit display text
-  const formatBenefitText = (type: string, name: string, value_data: any, quantity: number): string => {
-    switch (type) {
-      case "gift_card":
-        // "$50 Gift Card"
-        return `$${value_data?.amount} Gift Card`
-      case "commission_boost":
-        // "+5% Pay boost for 30 Days"
-        return `+${value_data?.percent}% Pay boost for ${value_data?.duration_days || 30} Days`
-      case "discount":
-        // "+10% Deal Boost for 30 Days"
-        return `+${value_data?.percent}% Deal Boost for ${value_data?.duration_days || 30} Days`
-      case "spark_ads":
-        // "+$100 Ads Boost"
-        return `+$${value_data?.amount} Ads Boost`
-      case "physical_gift":
-        // "Win a Wireless Headphones"
-        return `Win a ${name}`
-      case "experience":
-        // "Win a VIP Event Access"
-        return `Win a ${name}`
-      default:
-        return name
-    }
-  }
-
   // TASK 1: Circle color is DYNAMIC from backend (tiers.tier_color)
   // Uses mockData.currentTier.color which comes from database
   const currentTierColor = mockData.currentTier.color
 
-  // Format currency
-  const formatCurrency = (num: number): string => {
-    return `$${num.toLocaleString()}`
-  }
+  // ============================================
+  // FORMATTING NOTE:
+  // ============================================
+  // Backend sends pre-formatted strings for ALL display text:
+  // - Mission progress: currentFormatted, targetText, progressText
+  // - Tier progress: currentFormatted, targetFormatted
+  // - VIP metric label: client.vipMetricLabel
+  // - Reward display: displayText (with + prefix, "Win a", duration)
+  //
+  // Frontend just displays these strings - no manual formatting needed.
+  // This ensures:
+  // ✅ Consistency across all platforms
+  // ✅ i18n support (backend can format for different locales)
+  // ✅ Business logic stays in backend (server authoritative)
+  // ✅ Simpler frontend code
+  //
+  // Removed functions (no longer needed):
+  // ❌ formatCurrency, formatNumber, formatLargeNumber
+  // ❌ formatMissionValue, getMissionUnitLabel
+  // ❌ formatBenefitText
+  // ============================================
 
-  const formatNumber = (num: number): string => {
-    return num.toLocaleString()
-  }
-
-  const formatLargeNumber = (num: number): string => {
-    if (num >= 1000000) {
-      const millions = num / 1000000
-      // Remove decimal if it's a round number (e.g., 1M instead of 1.0M)
-      return millions % 1 === 0 ? `${millions}M` : `${millions.toFixed(1)}M`
+  // Format claim button text based on mission type and reward type
+  const formatClaimButtonText = (missionType: string, rewardType: string, rewardValue: number): string => {
+    // Raffle missions have different button text
+    if (missionType === "raffle") {
+      return "Join Raffle"
     }
-    if (num >= 10000) {
-      const thousands = num / 1000
-      // Remove decimal if it's a round number (e.g., 99K instead of 99.0K)
-      return thousands % 1 === 0 ? `${thousands}K` : `${thousands.toFixed(1)}K`
-    }
-    return num.toLocaleString()
-  }
 
-  // Format mission value dynamically based on mission type
-  const formatMissionValue = (value: number, missionType: string): string => {
-    switch (missionType) {
-      case "sales":
-        return formatCurrency(value) // "$125"
-      case "videos":
-        return formatNumber(value) // "10"
-      case "views":
-        return formatLargeNumber(value) // "99K"
-      case "likes":
-        return formatLargeNumber(value) // "3.8K"
-      default:
-        return formatNumber(value)
-    }
-  }
-
-  // Get mission unit label (sales, videos, views, likes)
-  const getMissionUnitLabel = (missionType: string): string => {
-    return missionType // "sales", "videos", "views", or "likes"
-  }
-
-  // Format claim button text based on reward type
-  const formatClaimButtonText = (rewardType: string, rewardValue: number): string => {
+    // Regular mission claim button text
     switch (rewardType) {
       case "gift_card":
         return `$${rewardValue} Gift Card`
       case "commission_boost":
-        return `${rewardValue}% Pay Boost`
+        return `+${rewardValue}% Pay Boost`  // Added + prefix
       case "spark_ads":
         return `$${rewardValue} Reach Boost`
       case "discount":
@@ -406,24 +620,24 @@ export default function Home() {
   // ============================================
 
   const handleClaimReward = () => {
-    const { rewardType, rewardValue } = mockData.giftCard
+    const { reward } = mockData.nextClaimableMission
 
     // If discount type, open scheduling modal
-    if (rewardType === "discount") {
+    if (reward.type === "discount") {
       setShowScheduleModal(true)
       return
     }
 
     // For other reward types, claim immediately
-    console.log("[v0] Claim reward clicked:", rewardType, rewardValue)
-    // TODO: POST /api/benefits/:id/claim (instant claim)
+    console.log("[v0] Claim reward clicked:", reward.type, reward.value_data)
+    // TODO: POST /api/missions/:id/claim (instant claim)
   }
 
   const handleScheduleDiscount = async (scheduledDate: Date) => {
     console.log("[v0] Schedule discount for:", scheduledDate.toISOString())
 
     try {
-      // TODO: POST /api/benefits/:id/claim
+      // TODO: POST /api/missions/:id/claim
       // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
 
       // Simulate API call
@@ -460,14 +674,14 @@ export default function Home() {
   // Frontend ONLY calculates SVG geometry (circle radius, circumference, stroke offset)
 
   // Mission circular progress - Use backend's calculated percentage
-  const giftCardPercentage = mockData.giftCard.progressPercentage
+  const missionProgressPercentage = mockData.nextClaimableMission.progressPercentage
 
   // SVG circle geometry (UI presentation logic)
   const circleSize = 240
   const strokeWidth = 24
   const radius = (circleSize - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
-  const circleOffset = circumference - (giftCardPercentage / 100) * circumference
+  const circleOffset = circumference - (missionProgressPercentage / 100) * circumference
 
   // Tier progress linear bar - Use backend's calculated percentage
   const tierProgressPercentage = mockData.tierProgress.progressPercentage
@@ -559,31 +773,35 @@ export default function Home() {
             />
           </svg>
 
-          {/* Center text - TASK 2: Sales and Mission targets (dynamic from backend) */}
+          {/* Center text - Mission progress (100% from backend - pre-formatted) */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-3xl font-bold text-slate-900">
-              {formatMissionValue(mockData.giftCard.currentSales, mockData.giftCard.missionType)}
+              {mockData.nextClaimableMission.currentFormatted}
             </span>
             <span className="text-sm text-slate-500 font-medium">
-              of {formatMissionValue(mockData.giftCard.threshold, mockData.giftCard.missionType)} {getMissionUnitLabel(mockData.giftCard.missionType)}
+              {mockData.nextClaimableMission.targetText}
             </span>
           </div>
         </div>
 
-        {/* Subtitle - Reward display (button if 100%, text if in progress) */}
-        {mockData.giftCard.progressPercentage === 100 && mockData.giftCard.rewardType ? (
+        {/* Subtitle - Reward display (button if claimable, reward name if in progress) */}
+        {mockData.nextClaimableMission.canClaim ? (
           <Button
             onClick={handleClaimReward}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-md flex items-center gap-2"
           >
-            {getIconForBenefitType(mockData.giftCard.rewardType)}
-            {formatClaimButtonText(mockData.giftCard.rewardType, mockData.giftCard.rewardValue)}
+            {getIconForBenefitType(mockData.nextClaimableMission.reward.type)}
+            {formatClaimButtonText(
+              mockData.nextClaimableMission.missionType,
+              mockData.nextClaimableMission.reward.type,
+              mockData.nextClaimableMission.reward.value_data?.amount || mockData.nextClaimableMission.reward.value_data?.percent || 0
+            )}
           </Button>
         ) : (
           <p className="text-base text-slate-900 font-semibold">
             Next:{" "}
             <span className="text-slate-600 font-semibold">
-              {mockData.giftCard.nextAmount ? `${formatCurrency(mockData.giftCard.nextAmount)} Gift Card` : "Reward"}
+              {mockData.nextClaimableMission.reward.name}
             </span>
           </p>
         )}
@@ -601,7 +819,7 @@ export default function Home() {
               <li key={index} className="flex items-start gap-3">
                 {getIconForBenefitType(benefit.type)}
                 <span className="text-sm text-slate-700">
-                  {formatBenefitText(benefit.type, benefit.name, benefit.value_data, benefit.redemption_quantity)}
+                  {benefit.displayText}
                 </span>
               </li>
             ))}
@@ -649,13 +867,13 @@ export default function Home() {
                   </h3>
                 </div>
 
-                {/* Sales progress text */}
+                {/* VIP progress text */}
                 <div className="space-y-1">
                   <p className="text-2xl font-bold text-slate-900">
-                    {formatCurrency(mockData.tierProgress.currentSales)} of{" "}
-                    {formatCurrency(mockData.tierProgress.targetSales)}
+                    {mockData.tierProgress.currentFormatted} of{" "}
+                    {mockData.tierProgress.targetFormatted}
                   </p>
-                  <p className="text-sm text-slate-600">sales</p>
+                  <p className="text-sm text-slate-600">{mockData.client.vipMetricLabel}</p>
                 </div>
 
                 {/* Current tier badge + progress bar */}
@@ -741,8 +959,8 @@ export default function Home() {
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
         onConfirm={handleScheduleDiscount}
-        discountPercent={mockData.giftCard.rewardValue || 0}
-        durationDays={30}
+        discountPercent={mockData.nextClaimableMission.reward.value_data?.percent || 0}
+        durationDays={mockData.nextClaimableMission.reward.value_data?.duration_days || 30}
       />
     </>
   )

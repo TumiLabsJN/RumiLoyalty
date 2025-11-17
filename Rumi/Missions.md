@@ -3,8 +3,7 @@
 **Platform:** Rumi Loyalty Platform
 **Audience:** LLMs (Future AI Assistants)
 **Purpose:** Complete reference for mission mechanics and configuration
-**Version:** Sequential Unlock System (Final)
-
+**Version:** Sequential Unlock System (Final) 
 ---
 
 ## TABLE OF CONTENTS
@@ -32,9 +31,9 @@
 
 **Key Characteristics:**
 - **Sequential unlock** - One mission per type active at a time
-- **Fulfillment-triggered** - Next mission appears after admin fulfills reward
-- **Tier-persistent** - Missions continue across tier changes (no cancellation)
-- **Checkpoint-reset** - Progress resets each checkpoint period
+- **Fulfillment-triggered** - Next mission appears after 'completed' status
+- **Not Tier-persistent** - The active mission a user may be in before Level reassignment maintains, until completion. Then the current VIP level missions continue
+- **Checkpoint-reset** - VIP level resets each checkpoint, if at checkpoint reassigned → Progress resets each checkpoint period
 - **Multiple types** - Creator can have sales + videos + raffle active simultaneously
 
 ### 1.2 Mission vs Rewards
@@ -47,30 +46,16 @@
 | **Progress** | Tracked daily (sales, views, etc.) | No progress (instant claim) |
 | **Tier Change** | Persist until fulfillment | Auto-replace |
 
-### 1.3 System Architecture
-
-```
-missions table (templates)
-    ↓ Creates instances
-mission_progress table (user-specific tracking)
-    ↓ Fulfillment triggers
-Sequential unlock (next mission appears)
-```
-
-**3 Tables:**
-1. `missions` - Admin-configured mission blueprints
-2. `mission_progress` - Individual creator progress tracking
-3. `raffle_participants` - Raffle entry tracking (special case)
-
----
-
 ## 2. MISSION TYPES
 
-### 2.1 Progress-Based Missions (4 Types)
+### 2.1 Progress-Based Missions (5 Types)
+
+**Note:** "Commercial Name" is stored in the `missions.display_name` database field.
 
 | Mission Type | Commercial Name | Description | Tracks | Example Target |
 |--------------|----------------|-------------|--------|----------------|
-| **sales** | "Unlock Payday" | "Reach your sales target" | Dollar sales in checkpoint period | $500 |
+| **sales_dollars** | "Unlock Payday" | "Reach your sales target" | Dollar sales amount | $500 |
+| **sales_units** | "Unlock Payday" | "Reach your sales target" | Units sold | 50 units |
 | **videos** | "Lights, Camera, Go!" | "Film and post new clips" | Videos posted since checkpoint | 10 videos |
 | **likes** | "Road to Viral" | "Rack up those likes" | Total likes on videos | 1,000 likes |
 | **views** | "Eyes on You" | "Boost your total views" | Total views on videos | 50,000 views |
@@ -81,37 +66,54 @@ Sequential unlock (next mission appears)
 - When `current_value >= target_value` → Status changes to 'completed'
 
 **Data Sources:**
-- `sales`: `metrics.tiktok_sales` (sum during checkpoint period)
+- `sales_dollars`: Checkpoint sales + manual adjustments (sales mode clients only)
+  - Formula: `metrics.checkpoint_sales + users.manual_adjustments_total`
+  - Used when `client.vip_metric = 'sales'`
+  - Admin validation: Sales missions in sales mode must use `target_unit = 'dollars'`
+- `sales_units`: Checkpoint units + manual adjustments (units mode clients only)
+  - Formula: `metrics.checkpoint_units_sold + users.manual_adjustments_units`
+  - Used when `client.vip_metric = 'units'`
+  - Admin validation: Sales missions in units mode must use `target_unit = 'units'`
 - `videos`: `videos` table count (posted since checkpoint_start)
 - `likes`: `videos.likes` sum (checkpoint period)
 - `views`: `videos.views` sum (checkpoint period)
+- `raffle`: none (participation-based, no progress tracking)
 
-### 2.2 Raffle Mission (Participation-Based)
+**Important - Mission Metric Consistency (Issue 9):**
+- Sales missions MUST match client.vip_metric (NO MIXING allowed)
+- Units mode clients → Sales missions use `target_unit = 'units'`
+- Sales mode clients → Sales missions use `target_unit = 'dollars'`
+- Engagement missions (videos, likes, views) → Always use `target_unit = 'count'` (valid in both modes)
+- Admin panel enforces this validation at mission creation
+
+### 2.2 Raffles
+
+**Note:** "Commercial Name" is stored in the `missions.display_name` database field.
 
 | Mission Type | Commercial Name | Description | Tracks | Example Target |
-|--------------|----------------|-------------|--------|----------------|
-| **raffle** | "VIP Raffle" | "Enter to win {prize_name}" | Participation clicks | 0 (no progress) |
+| **raffle** | "Lucky Ticket" | "Enter to win {prize_name}" | Participation clicks | No requirement |
 
-**Unique Characteristics:**
-- **Prize name is dynamic:** Admin sets via raffle_prize_name field (VARCHAR(15), max 15 chars)
+**Raffles - Unique Characteristics:**
+- **Prize name is dynamic:** Comes from rewards.name field (via reward_id FK)
   - Example: "Enter to win iPhone 16 Pro"
-  - Template: "Enter to win {raffle_prize_name}"
-- **description field:** Admin-only notes (TEXT, not shown to creators)
+  - Template: "Enter to win {reward.name}"
 - **No progress tracking:** Creator clicks "Participate" button (not completion-based)
-- **Separate table:** Uses `raffle_participants` (not `mission_progress` for tracking)
 - **Custom deadline:** `raffle_end_date` field (not checkpoint-based)
 - **Winner selection:** Admin manually selects winner after raffle ends
 
 **Flow:**
-1. **Dormant Phase:** Raffle created but `activated=false` → Eligible users see "Raffle start will be announced soon"
-2. **Activation:** Admin sets `activated=true` → Eligible users see [Participate] button
-3. **Participation:** Creator clicks "Participate" → Creates `mission_progress` (status='processing'), `raffle_participants`, `redemptions`
+1. **Dormant Phase:** Raffle created but `activated=false` → mission_progress.status='dormant' → Eligible users see "Raffle start will be announced soon"
+2. **Activation:** Admin sets `activated=true` → mission_progress.status='active' → Eligible users see [Participate] button
+3. **Participation:** Creator clicks "Participate" → Creates:
+   - `mission_progress` (status='completed', completed_at set)
+   - `raffle_participations` (is_winner=NULL)
+   - `redemptions` (status='claimable', mission_progress_id set)
 4. **Processing:** Raffle stays visible with countdown "[XX] days till raffle!"
 5. **Winner Selection:** Admin selects winner after `raffle_end_date`
-   - Winner: status='won' (stays in Available Missions, awaits admin fulfillment)
-   - Non-winners: status='lost' (move to Mission History immediately)
+   - Winner: raffle_participations.is_winner=TRUE, redemptions.status='claimable' (stays in Available Missions)
+   - Non-winners: raffle_participations.is_winner=FALSE, redemptions.status='rejected' (move to Completed tab)
 6. **Email (Manual):** Admin downloads CSV with loser emails, sends manually (no automation)
-7. **Fulfillment:** Admin fulfills winner's redemption → status='fulfilled' → Next raffle unlocks
+7. **Fulfillment:** Winner claims (redemptions 'claimable' → 'claimed'), Admin fulfills (redemptions 'claimed' → 'fulfilled' → 'concluded') → Next raffle unlocks
 
 ### 2.3 Hardcoded vs Configurable Elements
 
@@ -133,100 +135,19 @@ Sequential unlock (next mission appears)
 
 ---
 
-## 3. CREATOR UI ELEMENTS
+## 3. ADMIN CONFIGURATION
 
-### 3.1 What Creators See
-
-**Mission Card Components:**
-1. **Display Name** - Hardcoded commercial name ("Unlock Payday")
-2. **Description** - Hardcoded description ("Reach your sales target")
-3. **Progress Bar** - Visual indicator (350/500)
-4. **Target Display** - "Target: $500" or "Target: 10 videos"
-5. **Deadline** - Checkpoint date (or raffle end date)
-6. **Status Badge** - "In Progress", "Completed", "Claimed", "Pending Fulfillment"
-7. **Action Button** - "Claim Reward" (when completed) or "Participate" (raffles)
-
-**Example Mission Card (Sales):**
-```
-┌─────────────────────────────────────┐
-│ 🎯 Unlock Payday                    │
-│ Reach your sales target             │
-│                                     │
-│ Progress: $350 / $500               │
-│ [████████░░░░░░] 70%                │
-│                                     │
-│ Deadline: April 30, 2025            │
-│ Status: In Progress                 │
-└─────────────────────────────────────┘
-```
-
-**Example Mission Card (Raffle):**
-```
-┌─────────────────────────────────────┐
-│ 🎉 VIP Raffle                       │
-│ Enter to win iPhone 16 Pro          │
-│                                     │
-│ Deadline: February 15, 2025         │
-│ Status: Waiting for winner          │
-│                                     │
-│ [You've Participated ✓]            │
-└─────────────────────────────────────┘
-```
-
-### 3.2 Mission Tabs
-
-**Available Missions Tab:**
-- Shows missions with status: `active`, `completed`, `claimed`, `processing` (raffle), `won` (raffle winner)
-- Creators can interact (view progress, claim rewards, participate in raffles)
-- Real-time updates (daily sync)
-
-**Completed Missions Tab:**
-- Shows missions with status: `fulfilled`, `lost` (raffle non-winners)
-- Read-only archive
-- Sorted by fulfillment date (newest first)
-- Creators CANNOT claim from this tab
-
-### 3.3 Multiple Missions Display
-
-Creators can see multiple missions simultaneously (one per type):
-
-```
-Available Missions:
-┌─────────────────────────┐
-│ 🎯 Unlock Payday        │  ← Sales Mission 1
-│ Progress: 350/500       │
-│ [Claim Reward]          │
-└─────────────────────────┘
-
-┌─────────────────────────┐
-│ 🎬 Lights, Camera, Go!  │  ← Videos Mission 1
-│ Progress: 7/10          │
-│ Status: In Progress     │
-└─────────────────────────┘
-
-┌─────────────────────────┐
-│ 🎉 VIP Raffle           │  ← Raffle Mission 1
-│ Enter to win MacBook    │
-│ [Participated ✓]        │
-└─────────────────────────┘
-```
-
-**Key:** Each type progresses independently through its own sequence.
-
----
-
-## 4. ADMIN CONFIGURATION
-
-### 4.1 Creating a Mission
+### 3.1 Creating a Mission
 
 **Admin Workflow:**
 
 **Step 1: Mission Type**
-- Select: Sales, Videos, Views, Likes, or Raffle
+- Select: Sales_dollars, Sales_units, Videos, Views, Likes, or Raffle
 - (Display name and description are auto-assigned based on type)
 
 **Step 2: Target Value**
-- Sales: Dollar amount (e.g., 500 = $500)
+- Sales Dollars: Dollar amount (e.g., 500 = $500)
+- Sales Units: Unit amount (e.g., 10, 50)
 - Videos: Number of videos (e.g., 10)
 - Views: Total views (e.g., 50000)
 - Likes: Total likes (e.g., 1000)
@@ -239,7 +160,8 @@ Available Missions:
 
 **Step 4: Tier Eligibility**
 - Select which tier can participate
-- Options: tier_1 (Bronze), tier_2 (Silver), tier_3 (Gold), tier_4 (Platinum), or 'all'
+- Options: tier_1, tier_2, tier_3, tier_4, tier_5, tier_6, or 'all'
+- Tier names (Bronze, Silver, Gold, etc.) are configured separately in the tiers system
 
 **Step 5: Display Order**
 - Set sequential position (1, 2, 3...)
@@ -263,24 +185,27 @@ Available Missions:
 - Toggle enabled/disabled
 - Disabled missions hidden from creators
 
-### 4.2 Modifiable Fields Summary
+### 3.2 Modifiable Fields Summary
 
 | Field | Required | Type | Purpose |
 |-------|----------|------|---------|
-| mission_type | Yes | Dropdown | Sales, Videos, Views, Likes, Raffle |
+| id | System | UUID | Primary key (auto-generated) |
+| client_id | System | UUID | Multi-tenant isolation (auto-assigned) |
+| title | No | String (255 max) | Internal admin reference (NOT shown to creators) |
+| display_name | Yes | String (255 max) | User-facing mission name (e.g., "Unlock Payday", "Lights, Camera, Go!") |
+| description | No | Text | Admin notes |
+| mission_type | Yes | Dropdown | Sales_dollars, Sales_units, Videos, Views, Likes, Raffle |
 | target_value | Yes | Integer | 500, 10, 50000, 1000, 0 (raffle) |
 | reward_id | Yes | Dropdown | Reward when completed |
-| tier_eligibility | Yes | Dropdown | tier_1, tier_2, tier_3, tier_4, all |
+| tier_eligibility | Yes | Dropdown | tier_1, tier_2, tier_3, tier_4, tier_5, tier_6, all |
 | display_order | Yes | Integer | 1, 2, 3... (sequential unlock) |
-| preview_from_tier | No | Dropdown | NULL, tier_1, tier_2, tier_3, tier_4 |
+| preview_from_tier | No | Dropdown | NULL, tier_1, tier_2, tier_3, tier_4, tier_5, tier_6 |
 | enabled | Yes | Boolean | Toggle on/off (hides mission from all users) |
 | activated | Raffle only | Boolean | Raffle entry toggle: true=accepting entries, false=dormant (ignored for regular missions) |
-| raffle_end_date | Raffle only | Date | Winner selection deadline |
-| raffle_prize_name | Raffle only | String (15 max) | Dynamic description |
-| title | No | String | Admin reference (not shown) |
-| description | No | Text | Admin notes (not shown) |
+| raffle_end_date | Raffle only | Timestamp | Winner selection deadline (ONLY for raffle type) |
+| created_at | System | Timestamp | Audit trail (auto-generated) |
 
-### 4.3 Editing & Disabling Missions
+### 3.3 Editing & Disabling Missions
 
 **Editing:**
 - Admin can edit any field before mission is active
@@ -289,8 +214,10 @@ Available Missions:
 **Disabling:**
 - Set `enabled = false`
 - Mission disappears from creator UI
-- Active `mission_progress` records set to status='cancelled'
+- Active `mission_progress` records remain with their current status (mission just becomes hidden)
 - Use case: Temporarily remove mission from rotation
+
+**Note:** There is no 'cancelled' status in mission_progress. Disabled missions simply become invisible to creators but progress persists.
 
 **Deleting:**
 - Not recommended if any creator has progress
@@ -298,24 +225,22 @@ Available Missions:
 
 ---
 
-## 5. REWARDS ASSIGNMENT
+## 4. REWARDS ASSIGNMENT
 
-### 5.1 Reward Types Available for Missions
+### 4.1 Reward Types Available for Missions
 
 Missions can assign any reward type as a reward:
 
 | Reward Type | Example | Description | Redemption |
 |--------------|---------|-------------|------------|
 | **gift_card** | "$50 Amazon Gift Card" | Monetary reward | Instant |
-| **commission_boost** | "5% Commission Boost (30 days)" | Increased commission rate | Instant |
+| **commission_boost** | "5% Commission Boost (30 days)" | Increased commission rate | Scheduled |
 | **discount** | "10% TikTok Follower Discount" | Discount code activation | Scheduled |
 | **spark_ads** | "$100 Spark Ads Budget" | Advertising budget | Instant |
 | **physical_gift** | "Wireless Headphones" | Physical product shipment | Instant |
 | **experience** | "VIP Event Access" | Event/experience access | Instant |
 
-**Note:** Raffles typically use `physical_gift` or `experience` (high-value prizes).
-
-### 5.2 How Rewards Link to Missions
+### 4.2 How Rewards Link to Missions
 
 **Database Relationship:**
 ```
@@ -344,20 +269,16 @@ Mission 2: Sales $1000 → Rewards B2 ($50)
 Mission 3: Sales $2000 → Rewards B3 ($100)
 ```
 
-### 5.3 Redemption Flow
+### 4.3 Redemption Flow
 
 **After Creator Completes Mission:**
-1. Creator clicks "Claim Reward"
-2. System creates entry in `redemptions` table
-   - `reward_id` = mission's reward_id
-   - `status` = 'pending'
-   - `tier_at_claim` = creator's current tier (locked)
-3. Redemption appears in Admin Fulfillment Queue
-4. Admin fulfills reward (see Flow 9 in Loyalty.md)
-5. Redemption status = 'fulfilled'
-6. **TRIGGER:** Next mission unlocks (if available)
+1. mission_progress.status = `completed` & System creates entry in redemptions table with:
+  - status = `claimable`
+  - reward_id = mission's reward_id
+  - mission_progress_id = links to the completed mission
+  - tier_at_claim = creator's current tier (locked)
 
-### 5.4 Reward Availability vs Mission Rewards
+### 4.4 Reward Availability vs Mission Rewards
 
 **Key Difference:**
 
@@ -378,9 +299,9 @@ Mission 3: Sales $2000 → Rewards B3 ($100)
 
 ---
 
-## 6. SEQUENTIAL UNLOCK MECHANICS
+## 5. SEQUENTIAL UNLOCK MECHANICS
 
-### 6.1 Core Concept
+### 5.1 Core Concept
 
 **Rule:** ONE active mission per mission_type per user at any time.
 
@@ -390,10 +311,10 @@ Mission 3: Sales $2000 → Rewards B3 ($100)
 3. After completion + fulfillment → Next mission (order + 1) unlocks
 4. Each `mission_type` has independent sequence
 
-### 6.2 Unlock Trigger
+### 5.2 Unlock Trigger
 
 **What triggers next mission:**
-- Admin marks redemption as `fulfilled` (NOT the claim action)
+- Admin marks mission as `completed`
 
 **Query Logic:**
 ```sql
@@ -409,7 +330,7 @@ LIMIT 1
 
 **Critical:** Uses **current tier**, not original mission's tier (handles tier changes).
 
-### 6.3 Sequential Progression Example
+### 5.3 Sequential Progression Example
 
 **Setup:**
 - Gold tier has 3 sales missions (orders 1, 2, 3)
@@ -431,7 +352,7 @@ Day 45: Completes $2000 → Claims → Fulfills
         Query finds no more sales missions (sequence complete)
 ```
 
-### 6.4 Multiple Types Simultaneously
+### 5.4 Multiple Types Simultaneously
 
 **Each type has independent sequence:**
 
@@ -449,7 +370,7 @@ After Sales Mission 1 fulfilled:
 
 **Key:** Each `mission_type` progresses independently.
 
-### 6.5 Gaps in display_order
+### 5.5 Gaps in display_order
 
 **Allowed:** Display orders don't need to be sequential (1, 2, 3...)
 
@@ -469,9 +390,9 @@ Order 5 fulfilled → Query finds order 10 (skips gap)
 
 ---
 
-## 7. TIER & VISIBILITY RULES
+## 6. TIER & VISIBILITY RULES
 
-### 7.1 Tier Eligibility
+### 6.1 Tier Eligibility
 
 **Field:** `missions.tier_eligibility`
 
@@ -480,13 +401,12 @@ Order 5 fulfilled → Query finds order 10 (skips gap)
 - `tier_eligibility = 'all'` → All tiers can participate
 
 **Tier Values:**
-- `tier_1` = Bronze
-- `tier_2` = Silver
-- `tier_3` = Gold
-- `tier_4` = Platinum
+- `tier_1` through `tier_6` - Individual tier levels
 - `all` = Universal (all tiers)
 
-### 7.2 Preview Visibility
+**Note:** Tier names (Bronze, Silver, Gold, Platinum, etc.) are configured in the tiers system and may vary by client
+
+### 6.2 Preview Visibility
 
 **Field:** `missions.preview_from_tier`
 
@@ -494,22 +414,24 @@ Order 5 fulfilled → Query finds order 10 (skips gap)
 
 **Values:**
 - `NULL` → Only eligible tier sees mission
-- `tier_1` → Bronze+ can see (locked if below tier_eligibility)
-- `tier_2` → Silver+ can see (locked if below tier_eligibility)
-- `tier_3` → Gold+ can see (locked if below tier_eligibility)
-- `tier_4` → Platinum+ can see (locked if below tier_eligibility)
+- `tier_1` → tier_1+ can see (locked if below tier_eligibility)
+- `tier_2` → tier_2+ can see (locked if below tier_eligibility)
+- `tier_3` → tier_3+ can see (locked if below tier_eligibility)
+- `tier_4` → tier_4+ can see (locked if below tier_eligibility)
+- `tier_5` → tier_5+ can see (locked if below tier_eligibility)
+- `tier_6` → tier_6+ can see (locked if below tier_eligibility)
 
 **Example:**
 ```
-Mission: tier_eligibility='tier_3' (Gold), preview_from_tier='tier_1' (Bronze)
+Mission: tier_eligibility='tier_3', preview_from_tier='tier_1'
 
-Bronze creator: Sees 🔒 "Upgrade to Gold to unlock"
-Silver creator: Sees 🔒 "Upgrade to Gold to unlock"
-Gold creator: Sees unlocked (can participate)
-Platinum creator: Does NOT see (higher tiers don't see lower missions)
+tier_1 creator: Sees 🔒 "Upgrade to tier_3 to unlock"
+tier_2 creator: Sees 🔒 "Upgrade to tier_3 to unlock"
+tier_3 creator: Sees unlocked (can participate)
+tier_4/5/6 creator: Does NOT see (higher tiers don't see lower missions)
 ```
 
-### 7.3 Visibility Direction
+### 6.3 Visibility Direction
 
 **Rule:** Lower tiers see higher tier missions (locked). Higher tiers do NOT see lower tier missions.
 
@@ -517,7 +439,7 @@ Platinum creator: Does NOT see (higher tiers don't see lower missions)
 - Silver creators seeing Gold missions = Motivates upgrade
 - Gold creators seeing Silver missions = Confusing (why show lower tier content?)
 
-### 7.4 Sequential Lock vs Preview Lock
+### 6.4 Sequential Lock vs Preview Lock
 
 **Scenario:** Gold creator on Sales Mission 1, Mission 3 exists with preview settings
 
@@ -529,7 +451,7 @@ Platinum creator: Does NOT see (higher tiers don't see lower missions)
 
 **Rule:** `preview_from_tier` can override sequential lock if same tier is in range.
 
-### 7.5 Tier Change Behavior
+### 6.5 Tier Change Behavior
 
 **Rule:** ALL missions persist across tier changes (no cancellation).
 
@@ -557,21 +479,42 @@ Creator now on Gold mission sequence
 
 ---
 
-## 8. STATUS FLOW & TABS
+## 7. STATUS FLOW & TABS
 
-### 8.1 Status State Machine
+### 7.1 Two Separate Lifecycles
 
+The mission system uses **TWO separate database tables** with distinct lifecycles:
+
+#### **Lifecycle 1: Mission Completion** (mission_progress table)
+Tracks whether creator achieved the mission goal:
 ```
-active → completed → claimed → fulfilled
-   ↓
-cancelled (only if admin disables mission)
+dormant → active → completed
 ```
+- **dormant**: Mission visible but not yet active (raffle with activated=false)
+- **active**: Creator working toward goal
+- **completed**: Goal achieved (TERMINAL state)
 
-### 8.2 Mission Visibility & State Controls
+#### **Lifecycle 2: Reward Claiming** (redemptions table)
+Tracks reward claiming and fulfillment (only created AFTER mission completed):
+```
+claimable → claimed → fulfilled → concluded
+```
+- **claimable**: Mission completed, reward ready to claim
+- **claimed**: Creator clicked "Claim", waiting for admin
+- **fulfilled**: Admin delivered reward
+- **concluded**: Reward lifecycle complete (TERMINAL state)
+- **rejected**: Reward denied (raffle losers, fraud, etc.) (TERMINAL state)
+
+**Key Concept:**
+- mission_progress reaches 'completed' → System creates redemptions record with status='claimable'
+- Creator then interacts with the redemptions table to claim and receive their reward
+- The two tables work together but track different parts of the process
+
+### 7.2 Mission Visibility & State Controls
 
 The mission system uses **two separate control mechanisms** working together:
 
-#### 8.2.1 Template-Level Controls (missions table)
+#### 7.2.1 Template-Level Controls (missions table)
 
 **Field: `enabled`**
 - **Purpose:** Master visibility switch for entire mission
@@ -602,23 +545,88 @@ enabled=true, activated=true  → Raffle open for participation
 - **Temporarily pause entries:** Set `activated=false` to close entries while keeping raffle visible
 - **Remove mission entirely:** Set `enabled=false` to hide from all users
 
-#### 8.2.2 Progress-Level States (mission_progress table)
+#### 7.2.2 Progress-Level States (mission_progress table)
 
 **Field: `status`**
 - **Purpose:** Tracks individual user's progress on a mission
 - **Scope:** User-specific (each creator has own status)
-- **Database Values:**
+- **Database Values (mission_progress table only):**
 
-| Status | Meaning | Mission Type | User Action | Next State |
-|--------|---------|--------------|-------------|------------|
-| `active` | In progress | Regular | Work toward goal | `completed` |
-| `completed` | Goal reached | Regular | Click [Claim Reward] | `claimed` |
-| `claimed` | Reward claimed | Regular | Wait for admin | `fulfilled` |
-| `fulfilled` | Admin delivered | All | None (moves to history) | N/A |
-| `processing` | Entered raffle | Raffle | Wait for draw | `won` or `lost` |
-| `won` | Raffle winner | Raffle | Wait for admin | `fulfilled` |
-| `lost` | Raffle loser | Raffle | None (moves to history) | N/A |
-| `cancelled` | Admin voided | All | None (mission removed) | N/A |
+| Status | Meaning | When Set | Next State |
+|--------|---------|----------|------------|
+| `dormant` | Mission visible but not active | Raffle with activated=false, OR regular mission before checkpoint | `active` |
+| `active` | In progress | Daily cron creates/activates mission | `completed` |
+| `completed` | Goal reached | Daily cron detects current_value >= target_value | N/A (terminal) |
+
+**Note:** After mission_progress.status='completed', the system creates a redemptions record with status='claimable'. The reward claiming lifecycle is tracked in the redemptions table, NOT in mission_progress.
+
+#### 7.2.3 Reward Claimability Filtering (Issue 10)
+
+**Problem:** Missions can repeat per checkpoint period, but some rewards are one-time forever (physical_gift, experience, gift_card).
+
+**Solution (Option C):** Only show missions if the reward is claimable.
+
+**Visibility Rules:**
+Missions are shown to creators only if:
+1. ✅ `enabled = true`
+2. ✅ Tier eligibility matches (exact match or preview mode)
+3. ✅ **Reward is claimable** (new rule):
+
+**Reward Claimability Check:**
+```sql
+-- Unlimited/repeatable rewards (always show)
+r.redemption_frequency IN ('monthly', 'weekly', 'unlimited')
+
+OR
+
+-- One-time per tier (show if not claimed in current tier achievement period)
+(
+  r.redemption_frequency = 'one-time'
+  AND r.type IN ('commission_boost', 'spark_ads', 'discount')
+  AND NOT EXISTS (
+    SELECT 1 FROM redemptions
+    WHERE user_id = ?
+      AND reward_id = r.id
+      AND tier_at_claim = user.current_tier
+      AND claimed_at >= user.tier_achieved_at
+  )
+)
+
+OR
+
+-- One-time forever (show if NEVER claimed)
+(
+  r.redemption_frequency = 'one-time'
+  AND r.type IN ('physical_gift', 'experience', 'gift_card')
+  AND NOT EXISTS (
+    SELECT 1 FROM redemptions
+    WHERE user_id = ?
+      AND reward_id = r.id
+  )
+)
+```
+
+**Example:**
+```
+Mission: "Sell $5,000" → Reward: Wireless Headphones (one-time forever)
+
+1st time GOLD: Mission visible ✅
+Claims headphones ✅
+Demoted to SILVER → Promoted back to GOLD (2nd time)
+Mission HIDDEN ❌ (headphones already claimed forever)
+
+Mission: "Sell $2,000" → Reward: 5% Commission Boost (one-time per tier)
+
+1st time GOLD: Mission visible ✅
+Claims boost ✅
+Demoted to SILVER → Promoted back to GOLD (2nd time, new tier_achieved_at)
+Mission visible again ✅ (new tier achievement period)
+```
+
+**Rationale:**
+- Prevents confusing UX where mission appears but reward is grayed out
+- Consistent with reward auto-replace logic (irrelevant rewards disappear on tier change)
+- VIP reward logic: 1st time tier achievement gets physical_gift/experience, 2nd+ time doesn't
 
 **Frontend-Computed States (not stored in database):**
 
@@ -632,121 +640,116 @@ The backend API computes these "virtual" statuses from database fields:
 
 **Status Flow Examples:**
 
-**Regular Mission:**
+**Regular Mission (mission_progress only):**
 ```
-(no record) → active → completed → claimed → fulfilled
+(no record) → active → completed
 ```
+Then redemptions created with status='claimable' → 'claimed' → 'fulfilled' → 'concluded'
 
-**Raffle Mission:**
+**Raffle Mission (mission_progress only):**
 ```
-dormant (activated=false)
-  → available (admin sets activated=true)
-  → processing (user clicks Participate)
-  → won/lost (admin selects winner)
-  → fulfilled (admin delivers prize to winner)
+dormant (activated=false) → active (admin sets activated=true) → completed (user clicks Participate)
 ```
+Then redemptions created with status='claimable', and raffle_participations tracks winner selection
 
-### 8.3 Status Definitions (Database Values)
+### 7.3 mission_progress Status Definitions
 
-| Status | Meaning | Tab | Trigger | Creator Action |
-|--------|---------|-----|---------|----------------|
-| **active** | In progress | Available | Mission created/unlocked | View progress |
-| **completed** | Target reached | Available | current_value >= target | Click "Claim" |
-| **claimed** | Reward claimed | Available | Creator clicks "Claim" | Wait for fulfillment |
-| **fulfilled** | Admin fulfilled | Completed | Admin marks fulfilled | View in history |
-| **cancelled** | Mission disabled | Removed | Admin disables mission | None |
-| **processing** | Raffle entry submitted (raffle-only) | Available | Creator clicks "Participate" | Wait for winner selection |
-| **won** | Raffle winner (raffle-only) | Available | Admin selects winner | Wait for fulfillment |
-| **lost** | Raffle non-winner (raffle-only) | Completed | Admin selects winner | View in history |
+| Status | Meaning | When Set | Creator Sees |
+|--------|---------|----------|--------------|
+| **dormant** | Mission exists but not yet active | Raffle with activated=false | "Raffle start will be announced soon" |
+| **active** | In progress | Daily cron creates/activates mission | Progress bar showing current_value/target_value |
+| **completed** | Target reached | Daily cron detects current_value >= target_value | Mission stays visible; redemptions table handles claiming |
 
-### 8.4 Tab Placement Logic
+**Reward Claiming:** After mission_progress.status='completed', a redemptions record is created. The claiming/fulfillment flow is tracked in the redemptions table with statuses: 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
+
+### 7.4 Tab Placement Logic
 
 **Available Missions Tab:**
+Shows missions user can currently work on:
 ```sql
-SELECT * FROM mission_progress
-WHERE user_id = ?
-  AND status IN ('active', 'completed', 'claimed', 'processing', 'won')
-  AND checkpoint_start = current_checkpoint
+SELECT mp.* FROM mission_progress mp
+JOIN redemptions r ON r.mission_progress_id = mp.id
+WHERE mp.user_id = ?
+  AND mp.status IN ('active', 'dormant', 'completed')
+  AND r.status IN ('claimable', 'claimed')
+  AND mp.checkpoint_start = current_checkpoint
 ORDER BY mission_type, display_order
 ```
 
 **Completed Missions Tab:**
+Shows completed and fulfilled missions:
 ```sql
-SELECT * FROM mission_progress
-WHERE user_id = ?
-  AND status IN ('fulfilled', 'lost')
-ORDER BY fulfilled_at DESC
+SELECT mp.* FROM mission_progress mp
+JOIN redemptions r ON r.mission_progress_id = mp.id
+WHERE mp.user_id = ?
+  AND mp.status = 'completed'
+  AND r.status IN ('fulfilled', 'concluded', 'rejected')
+ORDER BY r.fulfilled_at DESC
 ```
 
-### 8.5 Status Transition Details
+### 7.5 mission_progress Transition Details
+
+**dormant → active:**
+- **Trigger (Raffle):** Admin sets `missions.activated=true`
+- **Trigger (Regular):** Daily cron activates mission based on checkpoint period
+- **Action:** Update `status='active'`
+- **UI Change:** Mission becomes interactive (progress bar or participate button visible)
 
 **active → completed:**
 - **Trigger:** Daily cron detects `current_value >= target_value`
-- **Action:** Update `status='completed'`, `completed_at=NOW()`
+- **Action:** Update `status='completed'`, `completed_at=NOW()`, create redemptions record with `status='claimable'`
 - **Notification:** Send email/push "Mission Complete! Claim your reward"
+- **UI:** Mission shows in Available tab; redemptions table handles claiming flow
 
-**completed → claimed:**
-- **Trigger:** Creator clicks "Claim Reward" button
-- **Action:** Create `redemptions` record, update `status='claimed'`, `claimed_at=NOW()`
-- **UI Change:** Button changes to "Pending Fulfillment" badge
+**Note on Claiming/Fulfillment:**
+After mission_progress reaches 'completed', the redemptions table manages the reward lifecycle:
+- Creator claims: `redemptions.status` = 'claimable' → 'claimed'
+- Admin fulfills: `redemptions.status` = 'claimed' → 'fulfilled' → 'concluded'
+- This unlocks next mission in sequence (if available)
 
-**claimed → fulfilled:**
-- **Trigger:** Admin clicks "Mark as Fulfilled" in admin panel
-- **Action:** Update `redemption.status='fulfilled'`, `mission_progress.status='fulfilled'`, `fulfilled_at=NOW()`
-- **Side Effect:** Unlock next mission in sequence (if available)
+### 7.6 Raffle Lifecycle
 
-**active → cancelled:**
-- **Trigger:** Admin sets `missions.enabled=false`
-- **Action:** Update all active progress records to `status='cancelled'`
-- **UI Change:** Mission disappears from Available Missions
+**Raffle Phases:**
 
-### 8.6 Raffle Status Special Case
+**Phase 0 (Dormant):**
+- `missions.activated=false`
+- `mission_progress.status='dormant'`
+- UI: "Raffle start will be announced soon"
 
-**Raffle uses 3 unique status values:**
+**Phase 1 (Active/Accepting Entries):**
+- Admin sets `missions.activated=true`
+- `mission_progress.status='active'`
+- UI: [Participate] button visible
 
-| Status | Raffle Meaning | Trigger |
-|--------|----------------|---------|
-| **processing** | Entry submitted, awaiting winner selection | Creator clicks "Participate" |
-| **won** | Selected as winner, awaiting admin fulfillment | Admin selects this creator as winner |
-| **lost** | Not selected, moved to history | Admin selects different creator as winner |
+**Phase 2 (Participated):**
+- Creator clicks "Participate"
+- `mission_progress.status='completed'`, `completed_at` set
+- `raffle_participations` entry created with `is_winner=NULL`
+- `redemptions` entry created with `status='claimable'`, `mission_progress_id` set
+- UI: "[X] days till raffle!"
 
-**Raffle Lifecycle:**
-```
-Phase 0 (Dormant):
-  activated=false → Show "Raffle start will be announced soon"
-↓
-Phase 1 (Active):
-  Admin sets activated=true → Show [Participate] button
-↓
-Phase 2 (Processing):
-  Creator participates → mission_progress.status='processing'
-                       → raffle_participants entry created
-                       → redemptions entry created (status='pending')
-                       → Show "[15] days till raffle!"
-↓
-Phase 3 (Concluded):
-  Admin selects winner → Winner: status='won' (stays in Available Missions)
-                       → Non-winners: status='lost' (move to Completed Missions)
-                       → Admin downloads CSV with loser emails
-                       → Redemptions: Winner stays 'pending', losers bulk rejected
-↓
-Phase 4 (Fulfillment - Winner Only):
-  Admin fulfills winner → mission_progress.status='fulfilled'
-                       → redemptions.status='fulfilled'
-                       → Next raffle unlocks (if exists)
-```
+**Phase 3 (Winner Selection):**
+- Admin selects winner after raffle_end_date
+- **Winner:** `raffle_participations.is_winner=TRUE`, `redemptions.status='claimable'` (stays)
+- **Losers:** `raffle_participations.is_winner=FALSE`, `redemptions.status='rejected'`
+- UI: Winner sees "You Won! Claim your prize", Losers see "Better luck next time"
+
+**Phase 4 (Fulfillment - Winner Only):**
+- Winner claims: `redemptions.status` = 'claimable' → 'claimed'
+- Admin fulfills: `redemptions.status` = 'claimed' → 'fulfilled' → 'concluded'
+- Next raffle unlocks (if exists)
 
 **Critical Differences from Regular Missions:**
-- No progress tracking (target_value=0)
-- Creates redemption at participation (not at claim)
-- Non-winners never reach 'fulfilled' status (they get 'lost')
-- Uses 3 raffle-specific statuses: processing, won, lost
+- No progress tracking (target_value=0, current_value not used)
+- Participation immediately sets status='completed' (not gradual progress)
+- Winner selection uses raffle_participations.is_winner field
+- Non-winners get redemptions.status='rejected'
 
 ---
 
-## 9. DATABASE SCHEMA
+## 8. DATABASE SCHEMA
 
-### 9.1 missions Table (Templates)
+### 8.1 missions Table (Templates)
 
 **Purpose:** Admin-configured mission blueprints
 
@@ -757,25 +760,26 @@ CREATE TABLE missions (
 
   -- Internal admin reference (NOT shown to creators)
   title VARCHAR(255) NOT NULL, -- "Q1 Gold Sales Push"
+  display_name VARCHAR(255) NOT NULL, -- "Unlock Payday" (user-facing commercial name)
   description TEXT, -- Admin notes
 
   -- Mission configuration
-  mission_type VARCHAR(50) NOT NULL, -- 'sales', 'videos', 'views', 'likes', 'raffle'
-  target_value INTEGER NOT NULL, -- 500, 10, 50000, 1000, 0 (raffle)
+  mission_type VARCHAR(50) NOT NULL, -- 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
+  target_value INTEGER NOT NULL, -- 500, 50, 10, 50000, 1000, 0 (raffle)
 
   -- Reward assignment
   reward_id UUID NOT NULL REFERENCES rewards(id), -- What they unlock when complete
 
   -- Tier & visibility
   tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6', or 'all'
-  preview_from_tier VARCHAR(50) NULL, -- NULL, 'tier_1', 'tier_2', 'tier_3', 'tier_4'
+  preview_from_tier VARCHAR(50) NULL, -- NULL or 'tier_1' through 'tier_6'
 
   -- Sequential unlock
   display_order INTEGER NOT NULL, -- 1, 2, 3... (sequential unlock position)
 
   -- Raffle-specific fields
   raffle_end_date TIMESTAMP NULL, -- Winner selection deadline (ONLY for raffles)
-  raffle_prize_name VARCHAR(15), -- Dynamic description (max 15 chars)
+    -- Prize name comes from rewards.name via reward_id FK
 
   -- Controls
   enabled BOOLEAN DEFAULT true,
@@ -787,11 +791,11 @@ CREATE TABLE missions (
   -- Constraints
   CONSTRAINT check_raffle_requirements CHECK (
     (mission_type != 'raffle') OR
-    (mission_type = 'raffle' AND raffle_end_date IS NOT NULL AND raffle_prize_name IS NOT NULL AND target_value = 0)
+    (mission_type = 'raffle' AND raffle_end_date IS NOT NULL AND target_value = 0)
   ),
   CONSTRAINT check_non_raffle_fields CHECK (
     (mission_type = 'raffle') OR
-    (mission_type != 'raffle' AND raffle_end_date IS NULL AND raffle_prize_name IS NULL)
+    (mission_type != 'raffle' AND raffle_end_date IS NULL)
   ),
   CONSTRAINT check_tier_eligibility CHECK (
     tier_eligibility = 'all' OR
@@ -809,32 +813,28 @@ CREATE TABLE missions (
 - `UNIQUE(client_id, tier_eligibility, mission_type, display_order)` → Prevents duplicate orders per tier+type
 - `CHECK` raffle requirements → Ensures raffles have end_date and target=0
 
-### 9.2 mission_progress Table (User Instances)
+### 8.2 mission_progress Table (User Instances)
 
-**Purpose:** Tracks individual creator progress on missions. Mission Status
+**Purpose:** Tracks individual creator progress on missions
 
 ```sql
 CREATE TABLE mission_progress (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   mission_id UUID REFERENCES missions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
 
   -- Progress tracking
   current_value INTEGER DEFAULT 0, -- 350/500, 7/10, 45000/50000
-  status VARCHAR(50) DEFAULT 'active', -- 'active', 'completed', 'claimed', 'fulfilled', 'cancelled', 'processing', 'won', 'lost'
+  status VARCHAR(50) DEFAULT 'active', -- Options: 'active', 'dormant', 'completed'
+    -- 'dormant': Mission visible but not yet active (raffle with activated=false)
     -- 'active': In progress
-    -- 'completed': Target reached, can claim
-    -- 'claimed': Creator claimed, pending admin fulfillment
-    -- 'fulfilled': Admin marked as fulfilled, moves to Completed Missions tab
-    -- 'cancelled': Mission disabled by admin (NOT used for tier changes)
-    -- 'processing': Raffle entry submitted, awaiting winner selection (raffle-only)
-    -- 'won': Raffle winner selected, awaiting admin fulfillment (raffle-only)
-    -- 'lost': Raffle non-winner, moves to Mission History (raffle-only)
+    -- 'completed': Target reached (reward claiming handled by redemptions table)
 
   -- Status timestamps
   completed_at TIMESTAMP, -- When hit target
-  claimed_at TIMESTAMP, -- When creator claimed
-  fulfilled_at TIMESTAMP, -- When admin fulfilled (triggers next mission unlock)
+  created_at TIMESTAMP DEFAULT NOW(), -- Audit trail
+  updated_at TIMESTAMP DEFAULT NOW(), -- Audit trail
 
   -- Checkpoint period linkage (missions reset at checkpoint)
   -- NOTE: These are SNAPSHOTS from users.tier_achieved_at and users.next_checkpoint_at
@@ -848,43 +848,62 @@ CREATE TABLE mission_progress (
 
 CREATE INDEX idx_mission_progress_user ON mission_progress(user_id);
 CREATE INDEX idx_mission_progress_status ON mission_progress(status);
+CREATE INDEX idx_mission_progress_tenant ON mission_progress(client_id, user_id, status);
 ```
 
 **Key Constraints:**
 - `UNIQUE(user_id, mission_id, checkpoint_start)` → One progress record per mission per checkpoint period
 
-### 9.3 raffle_participants Table (Raffle Tracking)
+### 8.3 raffle_participations Table (Raffle Tracking)
 
-**Purpose:** Separate tracking for raffle participation
+**Purpose:** Tracks raffle participation and winner selection
 
 ```sql
-CREATE TABLE raffle_participants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  raffle_id UUID REFERENCES missions(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+CREATE TABLE raffle_participations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  mission_id UUID NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- Which user participated
+  mission_progress_id UUID NOT NULL REFERENCES mission_progress(id) ON DELETE CASCADE,
+  redemption_id UUID NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
 
-  participated_at TIMESTAMP DEFAULT NOW(),
-  is_winner BOOLEAN DEFAULT false,
+  participated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  is_winner BOOLEAN, -- NULL = not yet selected, TRUE = won, FALSE = lost
   winner_selected_at TIMESTAMP,
+  selected_by UUID REFERENCES users(id), -- Which admin selected winner
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
 
-  UNIQUE(raffle_id, user_id) -- One entry per user per raffle
+  -- Constraints
+  UNIQUE(mission_id, user_id), -- One entry per user per raffle
+  CHECK (
+    (is_winner IS NULL AND winner_selected_at IS NULL) OR
+    (is_winner IS NOT NULL AND winner_selected_at IS NOT NULL)
+  )
 );
 
-CREATE INDEX idx_raffle_participants_raffle ON raffle_participants(raffle_id);
-CREATE INDEX idx_raffle_participants_user ON raffle_participants(user_id);
-CREATE INDEX idx_raffle_winners ON raffle_participants(is_winner) WHERE is_winner = true;
+CREATE INDEX idx_raffle_mission ON raffle_participations(mission_id, is_winner);
+CREATE INDEX idx_raffle_user ON raffle_participations(user_id, mission_id);
+CREATE INDEX idx_raffle_winner ON raffle_participations(is_winner, winner_selected_at) WHERE is_winner = true;
+CREATE INDEX idx_raffle_redemption ON raffle_participations(redemption_id);
 ```
 
 **Why Separate Table:**
-- Raffles are participation-based (not progress-based)
-- Need to track all participants for winner selection
-- Different data model than mission_progress
+- Tracks all participants for admin winner selection
+- Links raffle participation to mission_progress and redemptions
+- is_winner field determines redemptions.status outcome (rejected for losers)
+- Has user_id for direct queries and UNIQUE constraint (unlike reward sub-states which are ONE-TO-ONE)
+
+**Why raffle_participations HAS user_id (unlike reward sub-states):**
+- Reward sub-states (commission_boost, physical_gift) extend `redemptions` (ONE-TO-ONE, user_id redundant)
+- Mission sub-states (raffle_participations) extend `missions` (ONE-TO-MANY, user_id required)
+- UNIQUE(mission_id, user_id) prevents duplicate participation
 
 ---
 
-## 10. EDGE CASES
+## 9. EDGE CASES
 
-### 10.1 Gap in display_order
+### 9.1 Gap in display_order
 
 **Scenario:**
 ```
@@ -898,7 +917,7 @@ Gold Sales Missions:
 - Gaps automatically skipped
 - No blocking or errors
 
-### 10.2 Mission Disabled Mid-Sequence
+### 9.2 Mission Disabled Mid-Sequence
 
 **Scenario:**
 ```
@@ -912,7 +931,7 @@ Admin disables order=2 (enabled=false)
 - Creator sees order=3 next
 - Disabled mission hidden
 
-### 10.3 New Tier Lacks Mission Type
+### 9.3 New Tier Lacks Mission Type
 
 **Scenario:**
 ```
@@ -930,7 +949,7 @@ Gets upgraded to Gold
 - No replacement appears
 - Creator sees only Gold's mission types going forward
 
-### 10.4 Tier Change During Active Mission
+### 9.4 Tier Change During Active Mission
 
 **Scenario:**
 ```
@@ -946,7 +965,7 @@ Gets demoted to Silver
 
 **Key:** Old tier mission completes first, THEN switches to new tier sequence.
 
-### 10.5 Checkpoint Reset
+### 9.5 Checkpoint Reset
 
 **Scenario:**
 ```
@@ -964,7 +983,7 @@ New checkpoint starts (May 1)
 
 **Key:** Mission sequence resets each checkpoint period.
 
-### 10.6 Same Mission, Different Checkpoints
+### 9.6 Same Mission, Different Checkpoints
 
 **Scenario:**
 ```
@@ -980,9 +999,9 @@ Checkpoint 2: Same Sales Mission 1 appears again
 
 ---
 
-## 11. EXAMPLE SCENARIOS
+## 10. EXAMPLE SCENARIOS
 
-### 11.1 Normal Sequential Progression
+### 10.1 Normal Sequential Progression
 
 **Setup:** Gold creator, 3 sales missions (orders 1, 2, 3)
 
@@ -996,7 +1015,7 @@ Day 25: $1000 reached → Claims → Fulfills → Mission 3 unlocks
 Day 45: Completes all 3 missions
 ```
 
-### 11.2 Tier Demotion Mid-Mission
+### 10.2 Tier Demotion Mid-Mission
 
 **Setup:** Gold creator on Sales Mission 1 (300/500), gets demoted to Silver
 
@@ -1010,7 +1029,7 @@ Day 41: Claims → Fulfills
 Day 42: Silver Sales Mission order=1 appears (new tier sequence)
 ```
 
-### 11.3 Multiple Types Simultaneously
+### 10.3 Multiple Types Simultaneously
 
 **Setup:** Gold creator with Sales, Videos, Raffle active
 
@@ -1025,83 +1044,74 @@ Day 21: Active: Sales Mission 2 (0/1000), Videos (5/15), Raffle (waiting)
 
 **Key:** Each type progresses independently.
 
-### 11.4 Raffle Winner Selection
+### 10.4 Raffle Winner Selection
 
 **Setup:** 50 creators participate in Platinum raffle
 
 **Timeline:**
 ```
 Jan 15: Raffle created (activated=false)
-        Eligible creators see: "Raffle start will be announced soon"
+        mission_progress.status='dormant' for eligible creators
+        UI: "Raffle start will be announced soon"
 
 Jan 16: Admin activates raffle (activated=true)
-        Eligible creators see: [Participate] button
+        mission_progress.status='active' for eligible creators
+        UI: [Participate] button
 
 Jan 20: 50 creators click "Participate"
-        All 50: mission_progress.status='processing'
-        All 50: raffle_participants entries created
-        All 50: redemptions entries created (status='pending')
-        UI shows: "[12] days till raffle!"
+        All 50: mission_progress.status='completed', completed_at set
+        All 50: raffle_participations entries created (is_winner=NULL)
+        All 50: redemptions entries created (status='claimable', mission_progress_id set)
+        UI: "[12] days till raffle!"
 
 Feb 1:  Raffle end date passes
 
 Feb 2:  Admin selects Creator #23 as winner
 
-Creator #23: status='won' (stays in Available Missions)
-            redemption stays 'pending' (awaits fulfillment)
-            UI shows: "🎉 You Won! Coordinating Delivery"
+Creator #23: raffle_participations.is_winner=TRUE
+            redemptions.status='claimable' (stays in Available tab)
+            UI: "🎉 You Won! Claim your prize"
 
-Creators #1-22, #24-50: status='lost' (move to Mission History immediately)
-                        redemptions bulk rejected (status='rejected')
-                        UI shows: "Better Luck Next Time"
+Creators #1-22, #24-50: raffle_participations.is_winner=FALSE
+                        redemptions.status='rejected' (move to Completed tab)
+                        UI: "Better Luck Next Time"
 
 Admin downloads CSV with 49 loser emails, sends manual emails
 
-Feb 3:  Creator #23 waits for admin fulfillment
-Feb 5:  Admin fulfills winner → status='fulfilled' → Raffle 2 unlocks (if exists)
+Feb 3:  Creator #23 claims prize (redemptions 'claimable' → 'claimed')
+Feb 5:  Admin fulfills winner (redemptions 'claimed' → 'fulfilled' → 'concluded')
+        Next raffle unlocks (if exists)
 ```
 
 ---
 
-## 12. CRITICAL RULES
+## 11. CRITICAL RULES
 
-### 12.1 Implementation Rules
+### 11.1 Implementation Rules
 
 1. **Sequential Unlock Query:** Always use `WHERE tier_eligibility = current_tier` (NOT original tier)
-2. **Status Transitions:** Never skip states (active → completed → claimed → fulfilled)
-3. **Tab Placement:** Status='fulfilled' is ONLY trigger to move to Completed Missions
-4. **Raffle Separation:** NEVER use mission_progress for raffle participation (use raffle_participants)
-5. **Tier Change:** NEVER set status='cancelled' on tier change (missions persist)
+2. **Status Transitions:**
+   - mission_progress: Never skip states (dormant → active → completed)
+   - redemptions: Never skip states (claimable → claimed → fulfilled → concluded)
+3. **Tab Placement:** Use BOTH tables - mission_progress.status='completed' AND redemptions.status for tab assignment
+4. **Raffle Separation:** NEVER use mission_progress for raffle participation (use raffle_participations)
+5. **Tier Change:** Missions persist across tier changes (progress continues uninterrupted)
 6. **display_order Uniqueness:** Enforce `UNIQUE(client_id, tier_eligibility, mission_type, display_order)`
 7. **Checkpoint Isolation:** Use checkpoint_start in UNIQUE constraint for reset behavior
 8. **Fulfillment Trigger:** Next mission unlock happens when redemption.status='fulfilled'
 9. **Preview Direction:** Lower tiers see higher (locked), NOT vice versa
 10. **Type Independence:** Each mission_type has its own sequential progression (don't mix)
 
-### 12.2 Common Misconceptions
 
-| ❌ WRONG | ✅ CORRECT |
-|---------|-----------|
-| Missions cancel on tier change | Missions persist across tier changes |
-| Raffles track progress like sales | Raffles are participation-based (click button, status='processing') |
-| Raffles use status='active' when waiting | Raffles use status='processing' (unique raffle status) |
-| Raffle winners get status='completed' | Raffle winners get status='won' (unique raffle status) |
-| Raffle losers get status='fulfilled' | Raffle losers get status='lost' (unique raffle status) |
-| Next unlocks when creator claims | Next unlocks when admin fulfills |
-| tier_eligibility shows to all tiers | Only lower tiers see higher (with preview_from_tier) |
-| Multiple sales missions active | ONE mission per type at a time |
-| display_order must be 1,2,3 (no gaps) | Gaps allowed (1,3,5), auto-skipped |
-| Completed missions stay in Available forever | Move to Completed when status='fulfilled' or 'lost' |
-
-### 12.3 Data Integrity Rules
+### 11.3 Data Integrity Rules
 
 1. **Every mission MUST have:** mission_type, target_value, reward_id, tier_eligibility, display_order
-2. **Raffle missions MUST have:** raffle_end_date, raffle_prize_name, target_value=0
-3. **Non-raffle missions MUST have:** raffle_end_date=NULL, raffle_prize_name=NULL
+2. **Raffle missions MUST have:** raffle_end_date, target_value=0
+3. **Non-raffle missions MUST have:** raffle_end_date=NULL
 4. **display_order MUST be unique** per (client, tier, type) combination
 5. **mission_progress MUST link** to valid checkpoint_start
 6. **Status transitions MUST follow** state machine (no skipping)
-7. **Raffle participation MUST use** raffle_participants table (not mission_progress current_value)
+7. **Raffle participation MUST use** raffle_participations table (not mission_progress current_value)
 
 ---
 
@@ -1111,22 +1121,18 @@ Feb 5:  Admin fulfills winner → status='fulfilled' → Raffle 2 unlocks (if ex
 
 | Type | Name | Description | Target Example |
 |------|------|-------------|----------------|
-| sales | Unlock Payday | Reach your sales target | $500 |
+| sales_dollars | Unlock Payday | Reach your sales target | $500 |
+| sales_units | Unlock Payday | Reach your sales target | 50 units |
 | videos | Lights, Camera, Go! | Film and post new clips | 10 |
 | likes | Road to Viral | Rack up those likes | 1,000 |
 | views | Eyes on You | Boost your total views | 50,000 |
 | raffle | VIP Raffle | Enter to win {prize_name} | 0 |
 
-### Status Flow
-
-```
-active → completed → claimed → fulfilled
-```
 
 ### Tab Placement
 
-- **Available:** active, completed, claimed, processing (raffle), won (raffle)
-- **Completed:** fulfilled, lost (raffle)
+- **Available:** mission_progress.status IN ('active', 'dormant', 'completed') AND redemptions.status IN ('claimable', 'claimed')
+- **Completed:** mission_progress.status = 'completed' AND redemptions.status IN ('fulfilled', 'concluded', 'rejected')
 
 ### Unlock Trigger
 

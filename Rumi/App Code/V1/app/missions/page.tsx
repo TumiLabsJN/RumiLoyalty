@@ -7,7 +7,7 @@
       Video,
       Heart,
       Eye,
-      Ticket,
+      Clover,
       Lock,
       Loader2,
     } from "lucide-react"
@@ -49,7 +49,7 @@
           missions: [
             {
               id: "1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "First Steps",
               description: "Make your first sales",
               current_progress: 50,
@@ -62,7 +62,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -82,7 +81,6 @@
               status: "locked" as const,
               checkpoint_end: null,
               required_tier: "Silver",
-              raffle_prize_name: "Starter Pack",
               raffle_end_date: null,
               activated: false,
               enabled: true,
@@ -102,7 +100,6 @@
               status: "dormant" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "iPad Pro",
               raffle_end_date: "2025-04-01T23:59:59Z",
               activated: false,
               enabled: true,
@@ -118,7 +115,7 @@
           missions: [
             {
               id: "1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Reach your sales target",
               current_progress: 1500,
@@ -131,7 +128,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -151,7 +147,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -171,7 +166,6 @@
               status: "completed" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -191,7 +185,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "iPhone 16 Pro",
               raffle_end_date: "2025-02-15T23:59:59Z",
               activated: true,
               enabled: true,
@@ -207,7 +200,7 @@
           missions: [
             {
               id: "1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Reached sales target!",
               current_progress: 500,
@@ -220,7 +213,6 @@
               status: "completed" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -240,7 +232,6 @@
               status: "completed" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -260,7 +251,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -276,7 +266,7 @@
           missions: [
             {
               id: "1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Prize claimed, waiting for delivery",
               current_progress: 2000,
@@ -289,7 +279,6 @@
               status: "claimed" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -309,7 +298,6 @@
               status: "claimed" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -329,7 +317,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-20T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -358,7 +345,6 @@
               status: "won" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "iPhone 16 Pro",
               raffle_end_date: null,
               activated: true,
               enabled: true,
@@ -378,7 +364,6 @@
               status: "processing" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "AirPods Pro",
               raffle_end_date: "2025-03-01T23:59:59Z",
               activated: true,
               enabled: true,
@@ -398,14 +383,13 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "VIP Event Pass",
               raffle_end_date: "2025-02-20T23:59:59Z",
               activated: true,
               enabled: true,
             },
             {
               id: "4",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Keep selling!",
               current_progress: 1800,
@@ -418,7 +402,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -447,7 +430,6 @@
               status: "processing" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "MacBook Pro",
               raffle_end_date: "2025-02-25T23:59:59Z",
               activated: true,
               enabled: true,
@@ -467,7 +449,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "Wireless Headphones",
               raffle_end_date: "2025-03-05T23:59:59Z",
               activated: true,
               enabled: true,
@@ -487,7 +468,6 @@
               status: "dormant" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "Beach Getaway",
               raffle_end_date: "2025-04-01T23:59:59Z",
               activated: false,
               enabled: true,
@@ -503,7 +483,7 @@
           missions: [
             {
               id: "cancelled-1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday (CANCELLED)",
               description: "This mission was disabled by admin",
               current_progress: 800,
@@ -516,7 +496,6 @@
               status: "cancelled" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: false, // Admin disabled it
@@ -536,7 +515,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -552,7 +530,7 @@
           missions: [
             {
               id: "disabled-1",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Hidden Mission (enabled=false)",
               description: "This should NOT be visible",
               current_progress: 500,
@@ -565,7 +543,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: false, // Should be filtered out
@@ -585,7 +562,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "Should Not Show",
               raffle_end_date: "2025-03-05T23:59:59Z",
               activated: true, // activated=true but...
               enabled: false, // ...enabled=false wins!
@@ -605,7 +581,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true, // This one shows
@@ -621,7 +596,7 @@
           missions: [
             {
               id: "tier-locked",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "VIP Payday (Tier Locked)",
               description: "Requires Gold tier",
               current_progress: 0,
@@ -634,7 +609,6 @@
               status: "locked" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: "Gold",
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -654,7 +628,6 @@
               status: "locked" as const,
               checkpoint_end: null,
               required_tier: "Platinum",
-              raffle_prize_name: "Platinum Prize",
               raffle_end_date: null,
               activated: false,
               enabled: true,
@@ -674,7 +647,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -690,7 +662,7 @@
           missions: [
             {
               id: "progress-0",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Just Started (0%)",
               description: "Brand new mission",
               current_progress: 0,
@@ -703,7 +675,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -723,7 +694,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -743,7 +713,6 @@
               status: "active" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -763,14 +732,13 @@
               status: "active" as const,
               checkpoint_end: "2025-03-20T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
             },
             {
               id: "progress-100",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Complete! (100%)",
               description: "Ready to claim",
               current_progress: 1000,
@@ -783,7 +751,6 @@
               status: "completed" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -799,7 +766,7 @@
           missions: [
             {
               id: "reward-giftcard",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Gift card reward",
               current_progress: 1500,
@@ -812,7 +779,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -832,7 +798,6 @@
               status: "active" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -852,7 +817,6 @@
               status: "active" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -872,7 +836,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "AirPods Pro",
               raffle_end_date: "2025-02-15T23:59:59Z",
               activated: true,
               enabled: true,
@@ -892,7 +855,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "VIP Event Pass",
               raffle_end_date: "2025-03-01T23:59:59Z",
               activated: true,
               enabled: true,
@@ -922,7 +884,6 @@
               status: "won" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "iPhone 16 Pro",
               raffle_end_date: null,
               activated: true,
               enabled: true,
@@ -930,7 +891,7 @@
             // completed (priority 2)
             {
               id: "state-completed",
-              mission_type: "sales" as const,
+              mission_type: "sales_dollars" as const,
               display_name: "Unlock Payday",
               description: "Ready to claim",
               current_progress: 2000,
@@ -943,7 +904,6 @@
               status: "completed" as const,
               checkpoint_end: "2025-03-15T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -964,7 +924,6 @@
               status: "claimed" as const,
               checkpoint_end: "2025-03-10T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -985,7 +944,6 @@
               status: "processing" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "MacBook Pro",
               raffle_end_date: "2025-03-01T23:59:59Z",
               activated: true,
               enabled: true,
@@ -1006,7 +964,6 @@
               status: "active" as const,
               checkpoint_end: "2025-02-28T23:59:59Z",
               required_tier: null,
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -1027,7 +984,6 @@
               status: "available" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "VIP Event Pass",
               raffle_end_date: "2025-02-20T23:59:59Z",
               activated: true,
               enabled: true,
@@ -1048,7 +1004,6 @@
               status: "dormant" as const,
               checkpoint_end: null,
               required_tier: null,
-              raffle_prize_name: "Wireless Headphones",
               raffle_end_date: "2025-04-01T23:59:59Z",
               activated: false,
               enabled: true,
@@ -1069,7 +1024,6 @@
               status: "locked" as const,
               checkpoint_end: "2025-03-20T23:59:59Z",
               required_tier: "Elite",
-              raffle_prize_name: null,
               raffle_end_date: null,
               activated: null,
               enabled: true,
@@ -1167,7 +1121,8 @@
 
         // Backend mission_type → Frontend icon mapping
         switch (missionType) {
-          case "sales":
+          case "sales_dollars":
+          case "sales_units":
             return <TrendingUp className={iconClass} />
           case "videos":
             return <Video className={iconClass} />
@@ -1176,7 +1131,7 @@
           case "views":
             return <Eye className={iconClass} />
           case "raffle":
-            return <Ticket className={iconClass} />
+            return <Clover className={iconClass} />
           default:
             return <TrendingUp className={iconClass} />
         }
@@ -1190,11 +1145,12 @@
       // Format remaining amount text based on mission type
       const getRemainingText = (missionType: string, remainingValue: number): string => {
         switch (missionType) {
-          case "sales":
+          case "sales_dollars":
             return `$${remainingValue.toLocaleString()} more to sell!`
+          case "sales_units":
+            return `${remainingValue.toLocaleString()} more units to sell!`
           case "videos":
-            return `${remainingValue} more ${remainingValue === 1 ? 'video' : 'videos'} to
-  post!`
+            return `${remainingValue} more ${remainingValue === 1 ? 'video' : 'videos'} to post!`
           case "likes":
             return `${remainingValue.toLocaleString()} more likes!`
           case "views":
@@ -1347,12 +1303,13 @@
                 // Build reward text
                 let rewardText = ""
                 if (isRaffle) {
-                  // For raffles, use raffle_prize_name
+                  // For raffles, use reward data (reward_custom_text for physical_gift or reward_value for gift_card)
+                  const prizeName = mission.reward_custom_text || `$${mission.reward_value}`
                   if (mission.status === "won") {
-                    rewardText = `You won ${mission.raffle_prize_name}!`
+                    rewardText = `You won ${prizeName}!`
                   } else if (mission.status === "available" || mission.status === "processing") {
                     rewardText = getRewardText(mission.reward_type, mission.reward_value,
-    mission.raffle_prize_name)
+    mission.reward_custom_text)
                   }
                 } else {
                   // For regular missions, use reward fields
@@ -1483,7 +1440,7 @@
                     {isRaffle && mission.status === "processing" && (
                       <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-3
     py-2 rounded-lg text-sm font-medium w-fit">
-                        <Ticket className="h-4 w-4" />
+                        <Clover className="h-4 w-4" />
                         Waiting for Draw
                       </div>
                     )}

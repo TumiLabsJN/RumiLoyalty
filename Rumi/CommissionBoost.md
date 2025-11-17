@@ -1,59 +1,10 @@
 # Commission Boost - Scheduled Reward System
 
-**Status:** In Progress - 61% Complete (17/28 questions resolved)
+**Status:** COMPLETE - 100% (28/28 questions resolved)
 **Created:** 2025-01-11
 **Last Updated:** 2025-01-11
 **Purpose:** Document the new scheduled commission boost system with payment tracking and payout workflow
 
----
-
-## 📊 Progress Tracker
-
-### ✅ Completed (17/28 - 61%)
-
-**Section 1: Database Schema Changes** ✅ COMPLETE
-- ✅ Q1.1: Database Schema - `commission_boost_payouts` table design
-- ✅ Q1.2: Benefits Configuration - payout config storage (system constants)
-- ✅ Q1.3: Tier Commission Rates - lock rate at claim time
-
-**Section 2: Scraping & Sales Tracking Logic** ✅ COMPLETE
-- ✅ Q2.1: Cron Schedule - single cron at 3 PM EST
-- ✅ Q2.2: Baseline Sales Capture (D0) - query metrics after scraping
-- ✅ Q2.3: Expiration Sales Capture (DX) - GMV delta method
-- ✅ Q2.4: Multi-Day Scraping Failures - GMV delta resilient + alerts
-
-**Section 3: Payment Processing Workflow** ✅ COMPLETE
-- ✅ Q3.1: Payment Info Collection UI/UX - multi-step modal + banner
-- ✅ Q3.2: Payment Info Validation - double-entry + format checks
-- ✅ Q3.3: Payment Method Storage - per-user with reuse (plain text)
-- ✅ Q3.4: Payout Email Notifications - comprehensive emails (full transparency)
-
-**Section 4: API Endpoints** ✅ COMPLETE
-- ✅ Q4.1: New API Endpoints - 6 endpoints (5.5 hours)
-- ✅ Q4.2: Scheduling Configuration Response - backend logic (30 min)
-
-**Section 5: UI/UX Changes** ✅ COMPLETE
-- ✅ Q5.1: ScheduleRewardModal Component Updates - single component with conditional (1h)
-- ✅ Q5.2: Active Boost Indicator - badge + Home card (1h)
-- ✅ Q5.3: Payment Info Collection Modal - multi-step modal (1.5h)
-- ✅ Q5.4: Scheduled Boost Status Display - rewards page + disabled button (30min)
-
-### ⏳ Pending (11/28 - 39%)
-
-**Section 6: Admin Workflow** (3 questions)
-- ⏳ Q6.1: Admin Panel - Scheduled Activations Queue
-- ⏳ Q6.2: Admin Panel - Payout Queue
-- ⏳ Q6.3: Admin Panel - Commission Boost Reports
-
-**Section 7: Edge Cases & Error Handling** (8 questions)
-- ⏳ Q7.1: Creator Tier Changes During Boost
-- ⏳ Q7.2: Benefit Value Changes During Boost
-- ⏳ Q7.3: Benefit Disabled After Scheduling
-- ⏳ Q7.4: User Deleted/Suspended During Boost
-- ⏳ Q7.5: Payment Method No Longer Valid
-- ⏳ Q7.6: Duplicate Scraping (Race Condition)
-- ⏳ Q7.7: Sales Discrepancies and Disputes
-- ⏳ Q7.8: Negative Sales During Boost
 
 ---
 
@@ -150,66 +101,6 @@
 
 **🚨 CRITICAL CLARIFICATION:**
 **We ONLY pay the boost commission. TikTok pays tier commission directly to creators.**
-
-**Schema Design:**
-
-```sql
--- commission_boost_payouts table (NEW)
-CREATE TABLE commission_boost_payouts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  redemption_id UUID REFERENCES redemptions(id) UNIQUE NOT NULL,
-  user_id UUID REFERENCES users(id) NOT NULL,
-
-  -- Sales tracking
-  sales_at_activation DECIMAL(10, 2) NOT NULL,  -- GMV at D0 (baseline)
-  sales_at_expiration DECIMAL(10, 2),           -- GMV at D(X) (end) - NULL until expired
-  sales_during_boost DECIMAL(10, 2),            -- Calculated: D(X) - D0
-
-  -- Commission rates (locked at claim time)
-  tier_commission_rate DECIMAL(5, 2) NOT NULL,  -- % from tier (for display/email accuracy)
-  boost_commission_rate DECIMAL(5, 2) NOT NULL, -- % from benefit value_data
-
-  -- Payout amount (BOOST ONLY - we don't pay tier commission)
-  boost_commission_amount DECIMAL(10, 2),       -- OUR PAYOUT: sales_during_boost * boost_rate
-
-  -- Payment info (collected after expiration)
-  payment_method VARCHAR(20),                   -- 'venmo' or 'paypal'
-  payment_account VARCHAR(255),                 -- Venmo handle/phone OR PayPal email
-  payment_info_collected_at TIMESTAMP,
-
-  -- Payout tracking
-  payout_scheduled_date DATE,                   -- Admin calendar reminder (D+15-20)
-  payout_sent_at TIMESTAMP,                     -- When admin marks as paid
-  payout_sent_by UUID REFERENCES users(id),     -- Admin who processed payment
-  payout_confirmation_email_sent BOOLEAN DEFAULT false,
-
-  -- Timestamps
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Indexes
-  CONSTRAINT fk_redemption FOREIGN KEY (redemption_id) REFERENCES redemptions(id) ON DELETE CASCADE,
-  CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_payouts_user_id ON commission_boost_payouts(user_id);
-CREATE INDEX idx_payouts_payout_sent ON commission_boost_payouts(payout_sent_at) WHERE payout_sent_at IS NULL;
-CREATE INDEX idx_payouts_payment_info ON commission_boost_payouts(payment_info_collected_at) WHERE payment_info_collected_at IS NULL;
-
--- Comments for clarity
-COMMENT ON TABLE commission_boost_payouts IS 'Tracks boost commission payouts (we pay). Tier commission is paid by TikTok separately.';
-COMMENT ON COLUMN commission_boost_payouts.tier_commission_rate IS 'Tier rate locked at claim time (for email display/transparency). TikTok pays this, not us.';
-COMMENT ON COLUMN commission_boost_payouts.boost_commission_amount IS 'Amount WE pay to creator (boost commission only, not tier commission)';
-
--- redemptions table updates (MINIMAL)
--- Add activation/expiration timestamps (applies to commission_boost only)
-ALTER TABLE redemptions ADD COLUMN
-  activated_at TIMESTAMP,  -- When boost went live (D0) - commission_boost only
-  expires_at TIMESTAMP;    -- When boost ends (D(X)) - commission_boost only
-
-COMMENT ON COLUMN redemptions.activated_at IS 'For commission_boost only: When boost activation occurred (D0)';
-COMMENT ON COLUMN redemptions.expires_at IS 'For commission_boost only: When boost expires (D(X))';
-```
 
 **Helper Functions Pattern:**
 
@@ -341,49 +232,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 **Configuration:**
 
-```typescript
-// lib/commission-boost-config.ts
-export const COMMISSION_BOOST_CONFIG = {
-  /** Days after boost expires before admin processes payout */
-  PAYOUT_DELAY_DAYS: 18,
-
-  /** Minimum payout amount in USD (boost commission only) */
-  MIN_PAYOUT_AMOUNT: 3,  // $3 minimum
-
-  /** Allowed payment methods for creators */
-  PAYMENT_METHODS: ['venmo', 'paypal'] as const,
-
-  /** Scheduling time (must align with cron) */
-  ACTIVATION_TIME: {
-    HOUR: 15,  // 3 PM EST (12 PM PST - better for West Coast)
-    TIMEZONE: 'America/New_York', // EST
-  },
-
-  /** Messaging for creators */
-  PAYOUT_NOTE: 'Tier commission is paid by TikTok. We pay only the boost commission.',
-} as const;
-
-// Type helper for autocomplete
-export type PaymentMethod = typeof COMMISSION_BOOST_CONFIG.PAYMENT_METHODS[number]; // 'venmo' | 'paypal'
-
-/**
- * TODO: Post-MVP migration to clients.commission_boost_config JSONB
- * See CommissionBoost.md Q1.2 for rationale
- * Estimated migration time: 4 hours (add column + build admin UI + update code)
- */
-```
-
-**Cron Schedule Update:**
-
-```javascript
-// vercel.json
-{
-  "crons": [{
-    "path": "/api/cron/metrics-sync",
-    "schedule": "0 19 * * *"  // 3 PM EST = 7 PM UTC (19:00)
-  }]
-}
-```
 
 **Timezone Impact:**
 | Timezone | Activation Time |
@@ -405,44 +253,6 @@ export type PaymentMethod = typeof COMMISSION_BOOST_CONFIG.PAYMENT_METHODS[numbe
 - BUT we need tier rates for email transparency ("here's what you earned total")
 - Lock rate at claim time to guarantee email accuracy (even if rates change later)
 
-**Implementation:**
-
-```typescript
-// lib/tier-commission-rates.ts
-export const TIER_COMMISSION_RATES = {
-  tier_1: 8,   // Bronze: 8%
-  tier_2: 10,  // Silver: 10%
-  tier_3: 12,  // Gold: 12%
-  tier_4: 15,  // Platinum: 15%
-  tier_5: 18,  // Diamond: 18%
-  tier_6: 20,  // Elite: 20%
-} as const;
-
-export function getTierCommissionRate(tierId: string): number {
-  return TIER_COMMISSION_RATES[tierId as keyof typeof TIER_COMMISSION_RATES] || 0;
-}
-```
-
-**Usage at Activation Time:**
-
-```typescript
-// When boost activates (cron job at 3 PM EST)
-const user = await getUser(userId);
-const benefit = await getBenefit(benefitId);
-
-// Lock BOTH rates at claim time
-const tierRate = getTierCommissionRate(user.current_tier);  // e.g., 10% for Silver
-const boostRate = benefit.value_data.percent;  // e.g., 5% from benefit config
-
-await createCommissionBoostPayout({
-  redemptionId,
-  userId,
-  salesAtActivation: user.tiktok_sales,
-  tierCommissionRate: tierRate,   // Lock 10% (even if changed to 12% later)
-  boostCommissionRate: boostRate, // Lock 5%
-});
-```
-
 **Why Lock Tier Rate:**
 - **Accuracy:** Email shows exactly what TikTok paid (rates at that time)
 - **Audit trail:** Historical record of commission structure
@@ -457,97 +267,6 @@ ALTER TABLE tiers ADD COLUMN base_commission_rate DECIMAL(5,2) DEFAULT 10.0;
 
 ---
 
-### 2. Scraping & Sales Tracking Logic
-
-#### Q2.1: Changing Cron Schedule from Midnight UTC to 3 PM EST ✅ RESOLVED
-
-**Decision:** Option A - Single cron at 3 PM EST (replace midnight UTC)
-
-**Rationale:**
-- **Simplicity:** One cron job, one scrape per day, no code duplication
-- **Lower cost:** Single scrape = less Vercel function execution time (~$1.20/year vs $2.40/year)
-- **Aligned timing:** Commission boost activations happen when data is fresh
-- **Acceptable tradeoffs:** Tier update delays are acceptable for MVP (users check in afternoon anyway)
-
-**New Schedule:**
-
-```javascript
-// vercel.json
-{
-  "crons": [{
-    "path": "/api/cron/metrics-sync",
-    "schedule": "0 19 * * *"  // 7 PM UTC = 3 PM EST
-  }]
-}
-```
-
-**What Runs at 3 PM EST:**
-1. ✅ Scrape Cruda CSV files (My Affiliate + My Videos)
-2. ✅ Update metrics (tiktok_sales, videos_posted, engagement)
-3. ✅ Calculate tier promotions/demotions
-4. ✅ Update mission progress
-5. ✅ **Activate scheduled commission_boosts** (new)
-6. ✅ **Expire commission_boosts** (new)
-
-**Updated Cron Function:**
-
-```typescript
-// app/api/cron/metrics-sync/route.ts
-export async function POST(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    // 1. Scrape Cruda (existing)
-    await scrapeAndUpdateMetrics();
-
-    // 2. Calculate tiers (existing)
-    await calculateTierPromotions();
-
-    // 3. Update mission progress (existing)
-    await updateMissionProgress();
-
-    // 4. NEW: Activate pending commission_boosts scheduled for 3 PM today
-    await activateScheduledCommissionBoosts();
-
-    // 5. NEW: Expire commission_boosts that ended today
-    await expireCommissionBoosts();
-
-    return Response.json({ success: true });
-  } catch (error) {
-    await sendAlertEmail('Metrics Sync Failed', error);
-    return Response.json({ error: 'Failed' }, { status: 500 });
-  }
-}
-```
-
-**Impact Analysis:**
-
-| Impact Area | Before (Midnight UTC) | After (3 PM EST) | Acceptable? |
-|-------------|----------------------|------------------|-------------|
-| **Tier updates** | 7 PM EST (previous day) | 3 PM EST (same day) | ✅ Yes - users check in afternoon |
-| **Mission progress** | Updates overnight | Updates at 3 PM | ✅ Yes - creators active in afternoon |
-| **"Last updated" message** | "10 hours ago" at 10 AM | "19 hours ago" at 10 AM | ⚠️ Longer, but acceptable for MVP |
-| **Commission boost timing** | N/A (didn't exist) | Perfect alignment | ✅ Yes - activates when scheduled |
-
-**Timezone Impact:**
-- **East Coast:** 3:00 PM ✅
-- **Central:** 2:00 PM ✅
-- **Mountain:** 1:00 PM ✅
-- **West Coast:** 12:00 PM (noon) ✅
-
-**Migration Notes:**
-- Update Loyalty.md lines 77-78 to reflect new cron time
-- Update "Last updated" UI copy to set expectations
-- Consider adding "Updates daily at 3 PM ET" tooltip
-
-**Post-MVP Optimization:**
-If "Last updated" delays become a UX issue (>10% support tickets), upgrade to Option B (two cron jobs) for $1.20/year extra cost.
-
----
-
 #### Q2.2: Baseline Sales Capture (D0) ✅ RESOLVED
 
 **Decision:** Option A - Query `metrics.tiktok_sales` after scraping completes
@@ -558,73 +277,6 @@ If "Last updated" delays become a UX issue (>10% support tickets), upgrade to Op
 - **Good enough timing:** Even if scraping finishes at 3:02 PM, data is only 2-3 minutes old (negligible for 30-day boost)
 - **Handles failures gracefully:** If scraping fails, don't activate boosts (don't use stale data)
 
-**Implementation:**
-
-```typescript
-// Called at 3 PM EST after scraping completes
-async function activateScheduledCommissionBoosts() {
-  // 1. Get all pending activations scheduled for today
-  const { data: pendingBoosts } = await supabase
-    .from('redemptions')
-    .select(`
-      *,
-      user:users(id, tiktok_handle, current_tier),
-      benefit:benefits(id, value_data)
-    `)
-    .eq('redemption_type', 'scheduled')
-    .eq('status', 'pending')
-    .lte('scheduled_activation_at', new Date())
-    .is('activated_at', null);
-
-  for (const redemption of pendingBoosts) {
-    try {
-      // 2. Get CURRENT GMV from metrics (just scraped at 3 PM)
-      const { data: metrics, error } = await supabase
-        .from('metrics')
-        .select('tiktok_sales')
-        .eq('user_id', redemption.user_id)
-        .single();
-
-      if (error || !metrics) {
-        await sendAlertEmail(`Missing metrics for ${redemption.user.tiktok_handle}`);
-        continue;  // Skip this boost, try next one
-      }
-
-      // 3. Handle $0 baseline (new creators or no sales yet)
-      const baselineSales = metrics.tiktok_sales || 0;
-
-      // 4. Get commission rates (locked at activation time)
-      const tierRate = getTierCommissionRate(redemption.user.current_tier);
-      const boostRate = redemption.benefit.value_data.percent;
-      const durationDays = redemption.benefit.value_data.duration_days || 30;
-
-      // 5. Create payout record with D0 baseline
-      await createCommissionBoostPayout({
-        redemptionId: redemption.id,
-        userId: redemption.user_id,
-        salesAtActivation: baselineSales,  // D0 baseline from fresh scrape
-        tierCommissionRate: tierRate,
-        boostCommissionRate: boostRate,
-      });
-
-      // 6. Mark redemption as activated
-      const expiresAt = addDays(new Date(), durationDays);
-      await supabase
-        .from('redemptions')
-        .update({
-          activated_at: new Date(),
-          expires_at: expiresAt,
-          status: 'active'
-        })
-        .eq('id', redemption.id);
-
-      console.log(`✅ Activated boost for ${redemption.user.tiktok_handle}, baseline: $${baselineSales}`);
-    } catch (error) {
-      await sendAlertEmail(`Failed to activate boost for ${redemption.user.tiktok_handle}`, error);
-    }
-  }
-}
-```
 
 **Edge Case Handling:**
 
@@ -672,87 +324,6 @@ try {
 - **Resilient:** If scraping fails on some days during boost, doesn't matter (only care about endpoints)
 - **Matches TikTok data model:** GMV is cumulative lifetime sales, delta is natural calculation
 
-**Implementation:**
-
-```typescript
-async function expireCommissionBoosts() {
-  // 1. Get all boosts expiring today
-  const { data: expiringBoosts } = await supabase
-    .from('redemptions')
-    .select(`
-      *,
-      payout:commission_boost_payouts(*),
-      user:users(id, tiktok_handle)
-    `)
-    .eq('status', 'active')
-    .lte('expires_at', new Date())
-    .is('payout.sales_at_expiration', null);
-
-  for (const redemption of expiringBoosts) {
-    try {
-      // 2. Get CURRENT GMV from metrics (just scraped at 3 PM)
-      const { data: metrics, error } = await supabase
-        .from('metrics')
-        .select('tiktok_sales')
-        .eq('user_id', redemption.user_id)
-        .single();
-
-      if (error || !metrics) {
-        await sendAlertEmail(`Missing metrics for ${redemption.user.tiktok_handle} on expiration`);
-        continue;  // Skip, will retry tomorrow
-      }
-
-      // 3. Calculate delta
-      const salesAtExpiration = metrics.tiktok_sales || 0;
-      const salesAtActivation = redemption.payout.sales_at_activation;
-      const salesDuringBoost = salesAtExpiration - salesAtActivation;
-
-      // 4. Handle negative sales (refunds/chargebacks)
-      if (salesDuringBoost < 0) {
-        await sendAlertEmail(
-          `Negative sales for ${redemption.user.tiktok_handle}`,
-          `D0: $${salesAtActivation}, DX: $${salesAtExpiration}, Delta: $${salesDuringBoost}`
-        );
-      }
-
-      // 5. Calculate boost commission (floor at $0)
-      const effectiveSales = Math.max(0, salesDuringBoost);
-      const boostCommission = effectiveSales * (redemption.payout.boost_commission_rate / 100);
-      const boostCommissionRounded = Math.round(boostCommission * 100) / 100;  // Round to cents
-
-      // 6. Check minimum payout
-      if (boostCommissionRounded < COMMISSION_BOOST_CONFIG.MIN_PAYOUT_AMOUNT) {
-        await sendAlertEmail(
-          `Below minimum payout for ${redemption.user.tiktok_handle}`,
-          `Boost commission: $${boostCommissionRounded}, minimum: $${COMMISSION_BOOST_CONFIG.MIN_PAYOUT_AMOUNT}`
-        );
-      }
-
-      // 7. Update payout record
-      await supabase
-        .from('commission_boost_payouts')
-        .update({
-          sales_at_expiration: salesAtExpiration,
-          sales_during_boost: salesDuringBoost,  // Store actual (can be negative)
-          boost_commission_amount: boostCommissionRounded,
-          payout_scheduled_date: addDays(new Date(), COMMISSION_BOOST_CONFIG.PAYOUT_DELAY_DAYS)
-        })
-        .eq('redemption_id', redemption.id);
-
-      // 8. Mark redemption as completed
-      await supabase
-        .from('redemptions')
-        .update({ status: 'completed' })
-        .eq('id', redemption.id);
-
-      console.log(`✅ Expired boost for ${redemption.user.tiktok_handle}, sales: $${salesDuringBoost}, payout: $${boostCommissionRounded}`);
-    } catch (error) {
-      await sendAlertEmail(`Failed to expire boost for ${redemption.user.tiktok_handle}`, error);
-    }
-  }
-}
-```
-
 **Edge Case Handling:**
 
 | Scenario | Solution | Rationale |
@@ -763,27 +334,6 @@ async function expireCommissionBoosts() {
 | **Massive spike** | Flag for admin review | Could be legit (viral video) or suspicious |
 
 **Error Recovery:**
-
-```typescript
-try {
-  await scrapeAndUpdateMetrics();
-  await expireCommissionBoosts();
-} catch (error) {
-  // If scraping fails, boosts are NOT expired
-  await sendAlertEmail('Scraping failed, boosts NOT expired today', error);
-  // Will retry tomorrow (boost extended by 1 day)
-}
-```
-
-**Why Not Option B (Sum videos GMV)?**
-- ❌ Incomplete: Misses sales from OLD videos during boost period
-- ❌ Complex: More queries, harder to maintain
-- ❌ TikTok data model issue: Video GMV might be cumulative, not incremental
-
-**Why Not Option C (Daily snapshots)?**
-- ❌ Over-engineering for MVP: Extra table, extra queries
-- ❌ Doesn't solve core problem: Still uses GMV delta, just with more data points
-- ✅ Can add later if disputes become common (but unlikely)
 
 ---
 
@@ -1021,7 +571,7 @@ If payment failure rate exceeds 5%, add API verification:
 
 **Decision:** Option B - Per-User Storage with Reuse (Plain Text)
 
-**Rationale:**
+**Rationale:**  
 - **Better UX:** Enter once, reuse for all future boosts (massive improvement for monthly claimers)
 - **Reasonable complexity:** ~2 hours for schema + prefill logic
 - **Matches user expectations:** Most payment platforms save default method
@@ -1828,834 +1378,9 @@ Authorization: Bearer <admin-token>
 - **Fixed requirement:** 3 PM EST for commission_boost unlikely to change
 - **Easy upgrade path:** Can migrate to database JSONB post-MVP if needed (1 hour)
 
-**Implementation:**
-
-```typescript
-// lib/scheduling-config.ts
-
-export function getSchedulingConfig(rewardType: string) {
-  if (rewardType === 'commission_boost') {
-    return {
-      is_schedulable: true,
-      advance_window_days: 7,
-      allow_same_day: false,
-      available_times: ['15:00'], // 3 PM EST only
-      timezone: 'America/New_York',
-      time_slot_interval_minutes: null // N/A - only one slot
-    };
-  }
-
-  if (rewardType === 'discount') {
-    return {
-      is_schedulable: true,
-      advance_window_days: 7,
-      allow_same_day: false,
-      available_times: generateTimeSlots('10:00', '18:30', 30), // 10 AM - 6:30 PM, 30-min intervals
-      timezone: 'America/New_York',
-      time_slot_interval_minutes: 30
-    };
-  }
-
-  // gift_card, spark_ads, physical_gift, experience are not schedulable
-  return {
-    is_schedulable: false
-  };
-}
-
-// Helper function for discount time slots
-function generateTimeSlots(start: string, end: string, intervalMinutes: number): string[] {
-  const slots: string[] = [];
-  const [startHour, startMin] = start.split(':').map(Number);
-  const [endHour, endMin] = end.split(':').map(Number);
-
-  let currentHour = startHour;
-  let currentMin = startMin;
-
-  while (currentHour < endHour || (currentHour === endHour && currentMin <= endMin)) {
-    slots.push(`${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`);
-    currentMin += intervalMinutes;
-    if (currentMin >= 60) {
-      currentMin -= 60;
-      currentHour += 1;
-    }
-  }
-
-  return slots;
-}
-```
-
-**GET /api/rewards Response Format:**
-
-```typescript
-// Backend adds scheduling_config to each reward
-{
-  "rewards": [
-    {
-      "id": "uuid",
-      "type": "commission_boost",
-      "name": "Pay Boost: 5%",
-      "description": "Get 5% extra commission for 30 days",
-      "tier_eligibility": "tier_2",
-      "value_data": {
-        "percent": 5,
-        "duration_days": 30
-      },
-      "redemption_limits": {
-        "frequency": "once_per_tier",
-        "quantity": 1
-      },
-
-      // Backend computes this from type
-      "scheduling_config": {
-        "is_schedulable": true,
-        "available_times": ["15:00"], // 3 PM EST
-        "advance_window_days": 7,
-        "allow_same_day": false,
-        "timezone": "America/New_York"
-      }
-    },
-    {
-      "id": "uuid",
-      "type": "discount",
-      "name": "50% Off Deal",
-      "tier_eligibility": "tier_3",
-      "value_data": {
-        "percent": 50,
-        "duration_days": 7
-      },
-
-      "scheduling_config": {
-        "is_schedulable": true,
-        "available_times": ["10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30"],
-        "advance_window_days": 7,
-        "allow_same_day": false,
-        "timezone": "America/New_York",
-        "time_slot_interval_minutes": 30
-      }
-    },
-    {
-      "id": "uuid",
-      "type": "gift_card",
-      "name": "$50 Amazon Gift Card",
-      "tier_eligibility": "tier_2",
-      "value_data": {
-        "amount": 50
-      },
-
-      "scheduling_config": {
-        "is_schedulable": false
-      }
-    }
-  ]
-}
-```
-
-**How Frontend Uses This:**
-
-```typescript
-// components/schedule-reward-modal.tsx
-
-export function ScheduleRewardModal({ reward }: { reward: Reward }) {
-  const config = reward.scheduling_config;
-
-  if (!config.is_schedulable) {
-    // Show instant claim button only
-    return <InstantClaimButton rewardId={reward.id} />;
-  }
-
-  // Schedulable rewards
-  if (config.available_times.length === 1) {
-    // Commission boost: Single time slot
-    return (
-      <div>
-        <p>Select activation date:</p>
-        <DatePicker minDate={tomorrow} maxDate={sevenDaysAhead} />
-        <p>Activation time: {config.available_times[0]} EST (fixed)</p>
-        <Button>Schedule for {selectedDate} at 3 PM EST</Button>
-      </div>
-    );
-  } else {
-    // Discount: Multiple time slots
-    return (
-      <div>
-        <p>Select activation date and time:</p>
-        <DatePicker minDate={tomorrow} maxDate={sevenDaysAhead} />
-        <TimePicker options={config.available_times} interval={config.time_slot_interval_minutes} />
-        <Button>Schedule</Button>
-      </div>
-    );
-  }
-}
-```
-
-**Frontend Logic:**
-- `config.available_times.length === 1` → Show single time button
-- `config.available_times.length > 1` → Show time picker with intervals
-- `config.is_schedulable === false` → Hide scheduling UI, show instant claim
-
-**Post-MVP Upgrade Path:**
-
-If per-client customization needed:
-
-1. Add `scheduling_config` JSONB field to `rewards` table (~15 min)
-2. Update backend to check DB first, fall back to defaults (~15 min)
-3. Build admin UI to edit config (~3-4 hours)
-4. Total upgrade effort: ~4 hours
-
-**Implementation Time:** ~30 minutes
-- Add `getSchedulingConfig()` helper
-- Inject into GET /api/rewards response
-- No database changes
-- No migration needed
 
 ---
 
-### 5. UI/UX Changes
-
-#### Q5.1: ScheduleRewardModal Component Updates ✅ RESOLVED
-
-**Decision:** Option A - Single Component with Conditional Rendering
-
-**Rationale:**
-- **Q4.2 synergy:** `scheduling_config` in API response makes conditional rendering trivial
-- **DRY principle:** Don't duplicate date picker, validation, modal structure
-- **Scalable:** Future reward types automatically supported (no new components needed)
-- **Maintenance:** Single source of truth for scheduling UI
-- **Simple conditional:** Just check `available_times.length === 1`
-
-**Implementation:**
-
-```typescript
-// components/schedule-reward-modal.tsx
-// Renamed from ScheduleDiscountModal → ScheduleRewardModal (generic)
-
-interface ScheduleRewardModalProps {
-  reward: Reward; // Includes scheduling_config from API (see Q4.2)
-  onSchedule: (date: Date, time: string) => void;
-  onClose: () => void;
-}
-
-export function ScheduleRewardModal({ reward, onSchedule, onClose }: ScheduleRewardModalProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-
-  const config = reward.scheduling_config;
-
-  // Defensive check (should never reach here, but safe)
-  if (!config.is_schedulable) {
-    return null;
-  }
-
-  const isSingleTimeSlot = config.available_times.length === 1;
-  const minDate = addDays(new Date(), 1); // Tomorrow
-  const maxDate = addDays(new Date(), config.advance_window_days); // +7 days
-
-  // Auto-select time if only one option
-  useEffect(() => {
-    if (isSingleTimeSlot) {
-      setSelectedTime(config.available_times[0]);
-    }
-  }, [isSingleTimeSlot, config.available_times]);
-
-  return (
-    <Modal open onClose={onClose}>
-      <div className="p-6">
-        {/* Header */}
-        <h2 className="text-2xl font-bold mb-4">
-          Schedule {reward.name}
-        </h2>
-
-        {/* Date Picker - Same for all rewards */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">
-            Select activation date:
-          </label>
-          <DatePicker
-            selected={selectedDate}
-            onChange={setSelectedDate}
-            minDate={minDate}
-            maxDate={maxDate}
-            inline
-            className="w-full"
-          />
-        </div>
-
-        {/* Time Selection - Conditional UI */}
-        {isSingleTimeSlot ? (
-          // Commission boost: Fixed time (3 PM EST)
-          <div className="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4">
-            <p className="text-sm font-medium text-blue-900">
-              Activation time: <strong>{formatTime(config.available_times[0])} EST</strong> (fixed)
-            </p>
-            <p className="text-xs text-blue-700 mt-1">
-              💡 This time aligns with our daily sales tracking system.
-            </p>
-          </div>
-        ) : (
-          // Discount: Time picker with multiple slots
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">
-              Select activation time (EST):
-            </label>
-            <select
-              value={selectedTime || ''}
-              onChange={(e) => setSelectedTime(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Choose a time...</option>
-              {config.available_times.map(time => (
-                <option key={time} value={time}>
-                  {formatTime(time)} EST
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Available times: {formatTime(config.available_times[0])} - {formatTime(config.available_times[config.available_times.length - 1])} EST
-            </p>
-          </div>
-        )}
-
-        {/* Summary Preview */}
-        {selectedDate && (
-          <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4">
-            <p className="text-sm font-medium text-green-900">
-              📅 Scheduled for: <strong>{formatDate(selectedDate)}</strong> at{' '}
-              <strong>
-                {isSingleTimeSlot
-                  ? formatTime(config.available_times[0])
-                  : selectedTime ? formatTime(selectedTime) : '(select time)'
-                } EST
-              </strong>
-            </p>
-            <p className="text-xs text-green-700 mt-1">
-              {reward.type === 'commission_boost'
-                ? `Your Pay Boost will activate and track sales for ${reward.value_data.duration_days} days.`
-                : `Your discount will be available to customers for ${reward.value_data.duration_days} days.`
-              }
-            </p>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              const time = isSingleTimeSlot ? config.available_times[0] : selectedTime;
-              if (selectedDate && time) {
-                onSchedule(selectedDate, time);
-              }
-            }}
-            disabled={!selectedDate || (!isSingleTimeSlot && !selectedTime)}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            Schedule Activation
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-```
-
-**Helper Functions:**
-
-```typescript
-// lib/date-helpers.ts
-
-export function formatTime(time: string): string {
-  // Convert "15:00" → "3:00 PM"
-  const [hours, minutes] = time.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-}
-
-export function formatDate(date: Date): string {
-  // "February 15, 2025"
-  return date.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  });
-}
-
-export function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-```
-
-**Usage Example:**
-
-```typescript
-// components/reward-card.tsx
-
-function RewardCard({ reward }: { reward: Reward }) {
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-
-  const handleSchedule = async (date: Date, time: string) => {
-    // Combine date + time into ISO timestamp
-    const [hours, minutes] = time.split(':').map(Number);
-    const scheduledDateTime = new Date(date);
-    scheduledDateTime.setHours(hours, minutes, 0, 0);
-
-    // Call API
-    const response = await fetch(`/api/rewards/${reward.id}/claim`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scheduled_activation_at: scheduledDateTime.toISOString()
-      })
-    });
-
-    if (response.ok) {
-      toast.success('Reward scheduled successfully!');
-      setShowScheduleModal(false);
-    } else {
-      const error = await response.json();
-      toast.error(error.message);
-    }
-  };
-
-  return (
-    <>
-      <div className="reward-card">
-        <h3>{reward.name}</h3>
-        <p>{reward.description}</p>
-
-        {reward.scheduling_config.is_schedulable ? (
-          <button onClick={() => setShowScheduleModal(true)}>
-            Schedule Activation
-          </button>
-        ) : (
-          <button onClick={() => claimInstantly(reward.id)}>
-            Claim Now
-          </button>
-        )}
-      </div>
-
-      {showScheduleModal && (
-        <ScheduleRewardModal
-          reward={reward}
-          onSchedule={handleSchedule}
-          onClose={() => setShowScheduleModal(false)}
-        />
-      )}
-    </>
-  );
-}
-```
-
-**Visual Difference:**
-
-**Commission Boost UI:**
-```
-┌─────────────────────────────────┐
-│ Schedule Pay Boost: 5%          │
-├─────────────────────────────────┤
-│ Select activation date:         │
-│ ┌───────────────────────────┐   │
-│ │  [Calendar Widget]        │   │
-│ └───────────────────────────┘   │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ Activation time: 3:00 PM    │ │
-│ │ EST (fixed)                 │ │
-│ │ 💡 This aligns with daily   │ │
-│ │    sales tracking.          │ │
-│ └─────────────────────────────┘ │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ 📅 Scheduled for: Feb 15,   │ │
-│ │    2025 at 3:00 PM EST      │ │
-│ └─────────────────────────────┘ │
-│                                 │
-│ [Cancel]  [Schedule Activation] │
-└─────────────────────────────────┘
-```
-
-**Discount UI:**
-```
-┌─────────────────────────────────┐
-│ Schedule 50% Off Deal           │
-├─────────────────────────────────┤
-│ Select activation date:         │
-│ ┌───────────────────────────┐   │
-│ │  [Calendar Widget]        │   │
-│ └───────────────────────────┘   │
-│                                 │
-│ Select activation time (EST):  │
-│ ┌───────────────────────────┐   │
-│ │ Choose a time... ▼        │   │
-│ │ 10:00 AM                  │   │
-│ │ 10:30 AM                  │   │
-│ │ 11:00 AM                  │   │
-│ │ ... (more options)        │   │
-│ └───────────────────────────┘   │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ 📅 Scheduled for: Feb 15,   │ │
-│ │    2025 at 2:30 PM EST      │ │
-│ └─────────────────────────────┘ │
-│                                 │
-│ [Cancel]  [Schedule Activation] │
-└─────────────────────────────────┘
-```
-
-**Key Features:**
-- ✅ Same component structure for both
-- ✅ Conditional time selection UI
-- ✅ Auto-selects time if only one option
-- ✅ Shows helpful context (sales tracking note for commission boost)
-- ✅ Preview summary before scheduling
-- ✅ Disabled state if required fields missing
-
-**Implementation Time:** ~1 hour
-- Rename component
-- Add conditional time slot UI
-- Test with both reward types
-- Update parent components to use generic modal
-
----
-
-#### Q5.2: Active Boost Indicator ✅ RESOLVED
-
-**Decision:** Option B (Badge in Tab Bar) + Detailed Card on Home Page
-
-**Rationale:**
-- **Non-intrusive:** Badge doesn't take content space on all pages
-- **Mobile-friendly:** Fits naturally in bottom navigation
-- **Detailed on Home:** Full info where users land most often
-- **Discoverable:** Badge catches attention, card provides details
-- **Scalable:** Can show multiple active boosts in card
-
-**Implementation:**
-
-**Part 1: Badge in Bottom Tab Bar**
-
-```typescript
-// components/bottom-nav.tsx
-
-export function BottomNav() {
-  const { data: boosts } = useSWR('/api/redemptions/active-boosts', fetcher);
-  const pathname = usePathname();
-
-  const hasActiveOrScheduled =
-    (boosts?.active?.length > 0) || (boosts?.scheduled?.length > 0);
-
-  return (
-    <nav className="fixed bottom-0 w-full bg-white border-t border-gray-200">
-      <div className="flex justify-around">
-        <NavItem href="/home" icon="Home" label="Home" active={pathname === '/home'} />
-
-        <NavItem href="/leaderboard" icon="Trophy" label="Leaderboard" active={pathname === '/leaderboard'} />
-
-        {/* Rewards tab with badge indicator */}
-        <div className="relative">
-          <NavItem
-            href="/rewards"
-            icon="Gift"
-            label="Rewards"
-            active={pathname === '/rewards'}
-          />
-          {hasActiveOrScheduled && (
-            <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          )}
-        </div>
-
-        <NavItem href="/tiers" icon="Star" label="Tiers" active={pathname === '/tiers'} />
-        <NavItem href="/profile" icon="User" label="Profile" active={pathname === '/profile'} />
-      </div>
-    </nav>
-  );
-}
-```
-
-**Part 2: Active Boosts Card on Home Page**
-
-```typescript
-// components/active-boosts-card.tsx
-
-export function ActiveBoostsCard() {
-  const { data: boosts, isLoading } = useSWR('/api/redemptions/active-boosts', fetcher);
-
-  if (isLoading) {
-    return <CardSkeleton />;
-  }
-
-  if (!boosts?.active?.length && !boosts?.scheduled?.length) {
-    return null; // No boosts to show
-  }
-
-  return (
-    <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg shadow-md p-5 mb-6 border-2 border-green-200">
-      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <span className="text-2xl">⚡</span>
-        Active Boosts
-      </h3>
-
-      {/* Active Boosts */}
-      {boosts.active?.map(boost => (
-        <div key={boost.id} className="mb-4 last:mb-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="font-semibold text-green-900 text-base">
-                {boost.reward_name}
-              </p>
-              <p className="text-sm text-gray-700 mt-1">
-                <span className="font-medium">{boost.days_remaining} days</span> remaining
-                {boost.days_remaining <= 7 && (
-                  <span className="text-gray-600"> ({boost.hours_remaining} hours)</span>
-                )}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                Expires: {boost.expires_formatted}
-              </p>
-            </div>
-
-            {/* Status indicator */}
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                Active
-              </span>
-            </div>
-          </div>
-
-          {/* Progress bar (optional - shows time elapsed) */}
-          <div className="mt-3">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all"
-                style={{
-                  width: `${(boost.days_remaining / boost.duration_days) * 100}%`
-                }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1 text-right">
-              {Math.round((boost.days_remaining / boost.duration_days) * 100)}% remaining
-            </p>
-          </div>
-
-          {/* Action: View details */}
-          <button
-            onClick={() => {/* Show boost details modal */}}
-            className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            View Details →
-          </button>
-        </div>
-      ))}
-
-      {/* Scheduled Boosts */}
-      {boosts.scheduled?.map(boost => (
-        <div key={boost.id} className="mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="font-semibold text-blue-900 text-base">
-                {boost.reward_name}
-              </p>
-              <p className="text-sm text-gray-700 mt-1">
-                Activates in <span className="font-medium">{boost.days_until_activation} days</span>
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                Scheduled: {boost.activates_formatted}
-              </p>
-            </div>
-
-            {/* Status indicator */}
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-              Scheduled
-            </span>
-          </div>
-
-          {/* Countdown to activation */}
-          <div className="mt-3 bg-blue-50 rounded p-3 border border-blue-200">
-            <p className="text-sm text-blue-900">
-              📅 Countdown: {boost.days_until_activation}d {boost.hours_until_activation % 24}h until activation
-            </p>
-          </div>
-        </div>
-      ))}
-
-      {/* Multiple boosts note */}
-      {(boosts.active?.length + boosts.scheduled?.length) > 1 && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-600 text-center">
-            You have {boosts.active?.length || 0} active and {boosts.scheduled?.length || 0} scheduled boost(s)
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-**Part 3: Usage on Home Page**
-
-```typescript
-// app/home/page.tsx
-
-export default function HomePage() {
-  return (
-    <div className="pb-20"> {/* Padding for bottom nav */}
-      <Header title="Home" />
-
-      {/* Active Boosts Card - Shows at top of Home */}
-      <div className="px-4 pt-4">
-        <ActiveBoostsCard />
-      </div>
-
-      {/* Rest of home page content */}
-      <div className="px-4">
-        <WelcomeMessage />
-        <CurrentTierCard />
-        <MissionsPreview />
-        {/* ... other cards ... */}
-      </div>
-    </div>
-  );
-}
-```
-
-**Part 4: Boost Details Modal (when clicking "View Details")**
-
-```typescript
-// components/boost-details-modal.tsx
-
-export function BoostDetailsModal({ boost, onClose }) {
-  return (
-    <Modal open onClose={onClose}>
-      <div className="p-6">
-        <h2 className="text-xl font-bold mb-4">{boost.reward_name}</h2>
-
-        <div className="space-y-4">
-          {/* Boost rate */}
-          <div className="flex justify-between">
-            <span className="text-gray-600">Boost Rate:</span>
-            <span className="font-semibold">{boost.boost_rate}% extra</span>
-          </div>
-
-          {/* Duration */}
-          <div className="flex justify-between">
-            <span className="text-gray-600">Duration:</span>
-            <span className="font-semibold">{boost.duration_days} days</span>
-          </div>
-
-          {/* Activated */}
-          <div className="flex justify-between">
-            <span className="text-gray-600">Activated:</span>
-            <span className="font-semibold">
-              {new Date(boost.activated_at).toLocaleDateString()}
-            </span>
-          </div>
-
-          {/* Expires */}
-          <div className="flex justify-between">
-            <span className="text-gray-600">Expires:</span>
-            <span className="font-semibold text-orange-600">
-              {boost.expires_formatted}
-            </span>
-          </div>
-
-          {/* Time remaining */}
-          <div className="bg-blue-50 rounded p-4 border-l-4 border-blue-500">
-            <p className="text-sm font-medium text-blue-900">
-              ⏱️ {boost.days_remaining} days, {boost.hours_remaining % 24} hours remaining
-            </p>
-          </div>
-
-          {/* Progress visualization */}
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Progress:</p>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full"
-                style={{
-                  width: `${(boost.days_remaining / boost.duration_days) * 100}%`
-                }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1 text-right">
-              {Math.round((boost.days_remaining / boost.duration_days) * 100)}% time remaining
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-6 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Got it
-        </button>
-      </div>
-    </Modal>
-  );
-}
-```
-
-**Visual Examples:**
-
-**Bottom Tab Bar with Badge:**
-```
-┌────────────────────────────────────────┐
-│                                        │
-│         [Page Content]                 │
-│                                        │
-└────────────────────────────────────────┘
-┌────────────────────────────────────────┐
-│ [Home] [Trophy] [Gift●] [Star] [User] │ ← Green dot on Rewards
-└────────────────────────────────────────┘
-```
-
-**Home Page Card:**
-```
-┌────────────────────────────────────────┐
-│ ⚡ Active Boosts                        │
-├────────────────────────────────────────┤
-│ Pay Boost: 5%                          │
-│ 28 days remaining (672 hours)      [●] │
-│ Expires: March 3, 2025 at 3 PM EST     │
-│                                        │
-│ [████████████████░░░░░░] 93% remaining │
-│                                        │
-│ View Details →                         │
-├────────────────────────────────────────┤
-│ 50% Off Discount               [Sched] │
-│ Activates in 5 days                    │
-│ Scheduled: Feb 15, 2025 at 2 PM EST    │
-│                                        │
-│ 📅 Countdown: 5d 8h until activation   │
-└────────────────────────────────────────┘
-```
-
-**Handles Multiple Boosts:**
-- Shows ALL active boosts in the card
-- Shows ALL scheduled boosts
-- Separator between active and scheduled
-- Badge appears if ANY boost is active or scheduled
-
-**Badge States:**
-- **Green pulsing dot:** Active boost(s)
-- **Blue dot:** Only scheduled boost(s)
-- **No dot:** No active or scheduled boosts
-
-**Implementation Time:** ~1 hour
-- Add badge to bottom nav with conditional rendering
-- Create ActiveBoostsCard component
-- Create BoostDetailsModal component
-- Add to Home page layout
-- Test with active/scheduled/multiple boosts
-
----
 
 #### Q5.3: Payment Info Collection Modal ✅ RESOLVED
 
@@ -2666,514 +1391,15 @@ export function BoostDetailsModal({ boost, onClose }) {
 - **Dismissible:** Not blocking, allows creator to complete later
 - **Persistent banner:** Ensures eventual collection if dismissed
 - **Good UX:** Clear progression, validates at each step
-
-**Implementation:**
-
-```typescript
-// components/payment-info-modal.tsx
-
-interface PaymentInfoModalProps {
-  redemptionId: string;
-  earnings: {
-    sales_during_boost: number;
-    tier_commission_amount: number;
-    tier_rate: number;
-    boost_commission_amount: number;
-    boost_rate: number;
-  };
-  onComplete: () => void;
-  onDismiss: () => void;
-}
-
-export function PaymentInfoModal({ redemptionId, earnings, onComplete, onDismiss }: PaymentInfoModalProps) {
-  const [step, setStep] = useState(1);
-  const [paymentMethod, setPaymentMethod] = useState<'venmo' | 'paypal' | null>(null);
-  const [paymentAccount, setPaymentAccount] = useState('');
-  const [paymentAccountConfirm, setPaymentAccountConfirm] = useState('');
-  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    setError('');
-
-    const response = await fetch(`/api/redemptions/${redemptionId}/payment-info`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payment_method: paymentMethod,
-        payment_account: paymentAccount,
-        payment_account_confirm: paymentAccountConfirm,
-        confirm_checkbox: confirmCheckbox
-      })
-    });
-
-    if (response.ok) {
-      setStep(4); // Success step
-      setTimeout(() => onComplete(), 2000);
-    } else {
-      const data = await response.json();
-      setError(data.message);
-    }
-
-    setLoading(false);
-  };
-
-  return (
-    <Modal open onClose={onDismiss}>
-      <div className="p-6">
-        {/* Step 1: Show Earnings */}
-        {step === 1 && (
-          <div>
-            <h2 className="text-2xl font-bold mb-4">🎉 Your Pay Boost has ended!</h2>
-
-            <div className="bg-blue-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-600 mb-3">Earnings Breakdown:</p>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Sales during boost:</span>
-                  <span className="font-semibold">${earnings.sales_during_boost.toLocaleString()}</span>
-                </div>
-
-                <div className="border-t border-gray-200 pt-2 mt-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Tier commission ({earnings.tier_rate}%):</span>
-                    <span className="font-semibold">${earnings.tier_commission_amount.toFixed(2)}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">↳ Paid directly by TikTok</p>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span>Boost commission ({earnings.boost_rate}%):</span>
-                  <span className="font-semibold">${earnings.boost_commission_amount.toFixed(2)}</span>
-                </div>
-                <p className="text-xs text-gray-500">↳ Paid by us (bonus incentive)</p>
-              </div>
-
-              <div className="border-t-2 border-blue-300 pt-3 mt-3">
-                <div className="flex justify-between">
-                  <span className="font-bold text-green-900">YOUR PAYOUT FROM US:</span>
-                  <span className="font-bold text-green-900 text-lg">
-                    ${earnings.boost_commission_amount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-6">
-              Let's collect your payment information so we can send your payout within 15-20 days.
-            </p>
-
-            <button
-              onClick={() => setStep(2)}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Next →
-            </button>
-            <button
-              onClick={onDismiss}
-              className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              I'll do this later
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Choose Payment Method */}
-        {step === 2 && (
-          <div>
-            <button onClick={() => setStep(1)} className="text-sm text-gray-600 mb-4">
-              ← Back
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4">Choose Payment Method</h2>
-
-            <div className="space-y-3 mb-6">
-              <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="radio"
-                  name="payment_method"
-                  value="venmo"
-                  checked={paymentMethod === 'venmo'}
-                  onChange={() => setPaymentMethod('venmo')}
-                  className="mr-3"
-                />
-                <div>
-                  <p className="font-semibold">Venmo</p>
-                  <p className="text-sm text-gray-600">We'll send to your Venmo handle or phone</p>
-                </div>
-              </label>
-
-              <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="radio"
-                  name="payment_method"
-                  value="paypal"
-                  checked={paymentMethod === 'paypal'}
-                  onChange={() => setPaymentMethod('paypal')}
-                  className="mr-3"
-                />
-                <div>
-                  <p className="font-semibold">PayPal</p>
-                  <p className="text-sm text-gray-600">We'll send to your PayPal email</p>
-                </div>
-              </label>
-            </div>
-
-            <button
-              onClick={() => setStep(3)}
-              disabled={!paymentMethod}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
-            >
-              Next →
-            </button>
-          </div>
-        )}
-
-        {/* Step 3: Enter Payment Info */}
-        {step === 3 && (
-          <div>
-            <button onClick={() => setStep(2)} className="text-sm text-gray-600 mb-4">
-              ← Back
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4">
-              Enter {paymentMethod === 'venmo' ? 'Venmo' : 'PayPal'} Information
-            </h2>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  {paymentMethod === 'venmo'
-                    ? 'Venmo handle or phone:'
-                    : 'PayPal email:'}
-                </label>
-                <input
-                  type="text"
-                  value={paymentAccount}
-                  onChange={(e) => setPaymentAccount(e.target.value)}
-                  placeholder={paymentMethod === 'venmo' ? '@myhandle or 555-123-4567' : 'you@email.com'}
-                  className="w-full px-3 py-2 border rounded-md"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Confirm {paymentMethod === 'venmo' ? 'Venmo handle or phone' : 'PayPal email'}:
-                </label>
-                <input
-                  type="text"
-                  value={paymentAccountConfirm}
-                  onChange={(e) => setPaymentAccountConfirm(e.target.value)}
-                  placeholder={paymentMethod === 'venmo' ? '@myhandle or 555-123-4567' : 'you@email.com'}
-                  className="w-full px-3 py-2 border rounded-md"
-                />
-              </div>
-
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={confirmCheckbox}
-                  onChange={(e) => setConfirmCheckbox(e.target.checked)}
-                  className="mt-1"
-                />
-                <span className="text-sm">
-                  I confirm this is MY account and the information is correct
-                </span>
-              </label>
-            </div>
-
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={!paymentAccount || !paymentAccountConfirm || !confirmCheckbox || loading}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
-            >
-              {loading ? 'Submitting...' : 'Submit'}
-            </button>
-          </div>
-        )}
-
-        {/* Step 4: Success */}
-        {step === 4 && (
-          <div className="text-center">
-            <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-2xl font-bold mb-4">Payment Info Saved!</h2>
-
-            <div className="bg-green-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-700">
-                You'll receive <strong className="text-green-900">${earnings.boost_commission_amount.toFixed(2)}</strong>
-              </p>
-              <p className="text-sm text-gray-600 mt-2">
-                Expected payout: Within 15-20 days
-              </p>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">
-              We'll send you an email confirmation shortly.
-            </p>
-
-            <button
-              onClick={onComplete}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Done
-            </button>
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-}
-```
-
-**Persistent Banner (if dismissed):**
-
-```typescript
-// components/payment-info-banner.tsx
-
-export function PaymentInfoBanner({ redemptionId, payoutAmount }: { redemptionId: string, payoutAmount: number }) {
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  return (
-    <div className="bg-yellow-50 border-b-2 border-yellow-300 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">💰</span>
-          <span className="font-medium text-yellow-900">
-            Enter payment info to receive ${payoutAmount.toFixed(2)}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {/* Open payment modal */}}
-            className="px-4 py-1 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
-          >
-            Enter Info
-          </button>
-          <button
-            onClick={() => setDismissed(true)}
-            className="text-gray-600 hover:text-gray-800"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-```
-
-**Trigger Logic:**
-
-```typescript
-// app/layout.tsx or useEffect in Home page
-
-useEffect(() => {
-  async function checkPendingPaymentInfo() {
-    const response = await fetch('/api/redemptions/pending-payment-info');
-    const data = await response.json();
-
-    if (data.pending_payouts?.length > 0) {
-      // Show modal for first pending payout
-      setShowPaymentModal(true);
-      setPendingPayout(data.pending_payouts[0]);
-    }
-  }
-
-  checkPendingPaymentInfo();
-}, []);
-```
-
-**Implementation Time:** ~1.5 hours
-- Multi-step modal component
-- Form validation
-- API integration
-- Persistent banner component
-- Trigger logic on login
-
 ---
 
 #### Q5.4: Scheduled Boost Status Display ✅ RESOLVED
 
-**Decision:** Show scheduled status on Home (card from Q5.2) + Rewards page (disabled button) + No cancellation (from Q4.1)
-
+**Decision:** Show scheduled status Rewards page (disabled button) + No cancellation (from Q4.1)
 **Rationale:**
-- **Home card already shows it:** Q5.2 ActiveBoostsCard displays all scheduled boosts
 - **Rewards page needs disabled button:** Prevent duplicate scheduling
 - **No cancellation for MVP:** Not in requirements, can add post-MVP if needed (see Q4.1)
 - **Simple UX:** Clear messaging about existing scheduled boost
-
-**Implementation:**
-
-**On Rewards Page:**
-
-```typescript
-// components/reward-card.tsx (Rewards page)
-
-function RewardCard({ reward }: { reward: Reward }) {
-  const { data: boosts } = useSWR('/api/redemptions/active-boosts', fetcher);
-
-  // Check if creator already has this reward type scheduled
-  const existingScheduled = boosts?.scheduled?.find(
-    b => b.reward_type === reward.type
-  );
-
-  const existingActive = boosts?.active?.find(
-    b => b.reward_type === reward.type
-  );
-
-  return (
-    <div className="reward-card p-4 border rounded-lg">
-      <h3 className="font-bold text-lg">{reward.name}</h3>
-      <p className="text-sm text-gray-600">{reward.description}</p>
-
-      {/* Active boost indicator */}
-      {existingActive && (
-        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded">
-          <p className="text-sm font-medium text-green-900">
-            ✅ Currently Active
-          </p>
-          <p className="text-xs text-gray-600 mt-1">
-            {existingActive.days_remaining} days remaining • Expires {existingActive.expires_formatted}
-          </p>
-        </div>
-      )}
-
-      {/* Scheduled boost indicator */}
-      {existingScheduled && (
-        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-          <p className="text-sm font-medium text-blue-900">
-            📅 Scheduled
-          </p>
-          <p className="text-xs text-gray-600 mt-1">
-            Activates {existingScheduled.activates_formatted}
-          </p>
-        </div>
-      )}
-
-      {/* Claim/Schedule button */}
-      {reward.scheduling_config.is_schedulable ? (
-        <button
-          onClick={() => {
-            if (existingScheduled) {
-              // Show error toast
-              toast.error(`You already have a ${reward.name} scheduled for ${existingScheduled.activates_formatted}`);
-            } else {
-              setShowScheduleModal(true);
-            }
-          }}
-          disabled={!!existingScheduled || !!existingActive}
-          className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          {existingActive
-            ? 'Already Active'
-            : existingScheduled
-            ? `Scheduled for ${formatShortDate(existingScheduled.scheduled_activation_at)}`
-            : 'Schedule Activation'
-          }
-        </button>
-      ) : (
-        <button
-          onClick={() => claimInstantly(reward.id)}
-          className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Claim Now
-        </button>
-      )}
-    </div>
-  );
-}
-```
-
-**On Home Page:**
-- Already handled by Q5.2 ActiveBoostsCard
-- Shows all scheduled boosts with countdown and details
-
-**Preventing Duplicate Scheduling:**
-
-```typescript
-// API endpoint: POST /api/rewards/:id/claim (from Q4.1)
-
-export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const { scheduled_activation_at } = await request.json();
-  const userId = await getUserId(request);
-
-  // Check for existing scheduled boost of same type
-  const { data: existingScheduled } = await supabase
-    .from('redemptions')
-    .select(`
-      *,
-      reward:rewards(type)
-    `)
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .eq('redemption_type', 'scheduled')
-    .eq('reward.type', 'commission_boost')
-    .single();
-
-  if (existingScheduled) {
-    return Response.json({
-      error: 'ALREADY_SCHEDULED',
-      message: `You already have a Pay Boost scheduled for ${formatDate(existingScheduled.scheduled_activation_at)}`,
-      existing_redemption_id: existingScheduled.id
-    }, { status: 400 });
-  }
-
-  // Proceed with scheduling...
-}
-```
-
-**Visual States:**
-
-**Rewards Page - No Scheduled Boost:**
-```
-┌────────────────────────────────┐
-│ Pay Boost: 5%                  │
-│ Get 5% extra commission        │
-│                                │
-│ [Schedule Activation]          │
-└────────────────────────────────┘
-```
-
-**Rewards Page - Already Scheduled:**
-```
-┌────────────────────────────────┐
-│ Pay Boost: 5%                  │
-│ Get 5% extra commission        │
-│                                │
-│ ┌────────────────────────────┐ │
-│ │ 📅 Scheduled                │ │
-│ │ Activates Feb 15 at 3 PM   │ │
-│ └────────────────────────────┘ │
-│                                │
-│ [Scheduled for Feb 15] (disabled) │
-└────────────────────────────────┘
-```
-
-**Rewards Page - Already Active:**
-```
-┌────────────────────────────────┐
-│ Pay Boost: 5%                  │
-│ Get 5% extra commission        │
-│                                │
-│ ┌────────────────────────────┐ │
-│ │ ✅ Currently Active         │ │
-│ │ 28 days remaining           │ │
-│ └────────────────────────────┘ │
-│                                │
-│ [Already Active] (disabled)    │
-└────────────────────────────────┘
-```
 
 **Cancellation (NOT included for MVP):**
 - No cancel button shown
@@ -3196,227 +1422,808 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
 ### 6. Admin Workflow
 
-#### Q6.1: Admin Panel - Scheduled Activations Queue
+#### Q6.1: Admin Panel - Scheduled Activations Queue ✅ RESOLVED
 
-**Current queue** (Loyalty.md:804-810):
-- Shows pending scheduled redemptions
-- Sorted by scheduled time
-- Shows: creator handle, reward name, scheduled time (Brazil), claimed timestamp
+**Decision:** Option A+ - Include in Existing Queue with Label + "Activate Now" Button
 
-**For commission_boost:**
-- Activation happens AUTOMATICALLY at 6 PM (via cron)
-- Admin doesn't need to manually activate
+**Rationale:**
+- **Strategic infrastructure:** Enables future "Surprise Pay Boost" missions (instant activation)
+- **Testing capability:** Admin can test boost flow without waiting for cron
+- **Flexibility:** Handle edge cases, early activations, manual triggers
+- **Reusable logic:** One activation function, multiple triggers (cron, manual, surprise missions)
+- **MVP-appropriate:** Only 1 hour implementation, high ROI for future features
 
-**Questions:**
-- ✅ Do we still show commission_boost in Scheduled Activations Queue?
-  - If yes, what's the purpose? Just for visibility?
-  - Should it show "Auto-activates at 6 PM" label?
+**Key Insight (User-Identified):**
+The "Activate Now" function enables a future feature where admin can upload CSV of TikTok handles and create instant "Surprise Pay Boost" missions. These missions would:
+- Target specific creators (not tier-based)
+- Show custom messages ("Happy Birthday!", "Top Performer Bonus")
+- Activate INSTANTLY on claim (not scheduled)
+- Reuse all commission boost infrastructure
 
-- ✅ Should commission_boost have separate queue?
-  - "Active Commission Boosts" queue
-  - Shows: creator handle, percent, start date, end date, days remaining
-  - Admin can see all active boosts at a glance
+#### Q6.2: Admin Panel - Payout Queue ✅ RESOLVED
 
----
+**Decision:**
+- **Sub-Q1:** YES - Admin can edit payout amount (with audit trail)
+- **Sub-Q2:** YES - Admin can edit payment info (with notification)
+- **Sub-Q3:** NO - Single-step workflow for MVP
 
-#### Q6.2: Admin Panel - Payout Queue
+**Critical Context: TikTok Data Limitations**
 
-**New queue needed:** "Pending Payouts"
+**The Problem:**
+1. Cruda shows **cumulative GMV** (lifetime sales), already accounts for returns
+2. Cruda does NOT show **date of sale** or **daily sales breakdown**
+3. Cannot isolate boost period sales from post-boost sales when checking D+15
+4. Example: D30 GMV = $50k, D45 GMV = $52k → Is that $2k from new sales or returns adjustment? **We can't tell.**
 
-**Shows:**
-- Creator handle
-- Boost details (percent, duration, dates)
-- Sales during boost
-- Commission breakdown (tier + boost)
-- Total payout amount
-- Payment method + account
-- Payout scheduled date (D+18)
-- Days until payout
-- Status: "Payment Info Collected" / "Ready to Pay" / "Paid"
+**MVP Bet:**
+- Calculate payout at D30 (boost expiration)
+- **Don't communicate amount to creator yet**
+- Admin manually verifies with TikTok dashboard at D+45
+- Admin can adjust if discrepancy found
+- **First 10 payouts:** Collect data on deviation to determine if automation is safe
 
-**Sorted by:** Payout scheduled date (earliest first)
-
-**Actions:**
-- [View Details] - Opens modal with full breakdown
-- [Mark as Paid] - Updates payout_sent_at, sends email
-- [Flag Issue] - If payment info is wrong, alert creator
-
-**Questions:**
-- ✅ Should admin be able to EDIT payout amount?
-  - In case of disputes or calculation errors?
-  - Or is it always locked to calculated amount?
-
-- ✅ Should admin be able to EDIT payment info?
-  - If creator made typo, can admin fix it?
-  - Or must creator be contacted to update?
-
-- ✅ Do we need payout approval workflow?
-  - Two-step: Calculate → Review → Approve → Pay?
-  - Or single-step: Calculate → Pay?
+**Rationale:**
+- **Sub-Q1 (Editable amount):** Data limitations require manual verification for MVP; builds learning loop
+- **Sub-Q2 (Editable payment info):** Reduces support overhead for typos
+- **Sub-Q3 (No approval workflow):** Admin edit step is sufficient; keep MVP simple
 
 ---
 
-#### Q6.3: Admin Panel - Commission Boost Reports
+## **Updated Email & Modal Flow**
 
-**Useful reports for admin:**
-1. Total payouts this month
-2. Average commission per creator
-3. ROI analysis (boost commission vs regular commission)
+### **Day XX: Boost Expires - Payment Info Modal (Revised Q5.3)**
 
-**Questions:**
-- ✅ Are these reports in scope for MVP?
-- ✅ Or post-MVP analytics feature?
+**Step 1: NO AMOUNT SHOWN**
+Happens after user programs their Pay Boost.
+- We send email confirming that the Pay Boost will be activated, and that we are calculating their final payout. They will receive this in 15 - 20 payment days (per TikTok)
 
+**Step 2: Pay Boost time elapses**
+We notify in App that the Pay boost has ended, and that we will send final payout in 15 - 20 days to account for returns. We ask them for their PayPal/Venmo.
+- Must be a persistant window that activates each time they login, at least twice 
+
+**Step 3: Wait time (returns) elapses**
+- We email them confirming their payment info saying payment will be sent
+
+## Step 4: Admin checks payment manually
+### **Admin Payout Queue Implementation**
+
+#### **Queue UI with Editable Amount**
+
+```typescript
+// app/admin/payouts/page.tsx
+
+export default async function PayoutsQueuePage() {
+  const { data: pendingPayouts } = await supabase
+    .from('commission_boost_payouts')
+    .select(`
+      *,
+      redemption:redemptions(
+        claimed_at,
+        activated_at,
+        expires_at,
+        tier_at_claim
+      ),
+      user:users(tiktok_handle, email),
+      adjustments:payout_adjustments(*)
+    `)
+    .is('payout_sent_at', null)
+    .not('payment_info_collected_at', 'is', null)
+    .order('payout_scheduled_date', { ascending: true });
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Pending Payouts Queue</h1>
+
+      <div className="space-y-6">
+        {pendingPayouts.map(payout => (
+          <PayoutCard key={payout.id} payout={payout} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PayoutCard({ payout }) {
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState(payout.boost_commission_amount);
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSaveAdjustment = async () => {
+    setLoading(true);
+
+    await fetch(`/api/admin/payouts/${payout.id}/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        original_amount: payout.boost_commission_amount,
+        adjusted_amount: parseFloat(amount),
+        adjustment_reason: reason
+      })
+    });
+
+    setEditing(false);
+    setLoading(false);
+    window.location.reload();
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!confirm(`Mark payout of $${amount} as paid to @${payout.user.tiktok_handle}?`)) {
+      return;
+    }
+
+    setLoading(true);
+
+    await fetch(`/api/admin/redemptions/${payout.redemption_id}/mark-paid`, {
+      method: 'POST'
+    });
+
+    window.location.reload();
+  };
+
+  const openTikTokDashboard = () => {
+    // Open Cruda in new tab for manual verification
+    window.open(`https://cruva.io/dashboard`, '_blank');
+  };
+
+  return (
+    <div className="border rounded-lg p-6 bg-white shadow">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold">@{payout.user.tiktok_handle}</h3>
+          <p className="text-sm text-gray-600">{payout.user.email}</p>
+        </div>
+        <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+          Pending Payment
+        </span>
+      </div>
+
+      {/* Boost Details */}
+      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+        <div>
+          <span className="text-gray-600">Boost Rate:</span>
+          <span className="font-semibold ml-2">{payout.boost_commission_rate}%</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Duration:</span>
+          <span className="font-semibold ml-2">
+            {formatDate(payout.redemption.activated_at)} - {formatDate(payout.redemption.expires_at)}
+          </span>
+        </div>
+        <div>
+          <span className="text-gray-600">Tier at Claim:</span>
+          <span className="font-semibold ml-2">{payout.redemption.tier_at_claim}</span>
+        </div>
+        <div>
+          <span className="text-gray-600">Scheduled Payout:</span>
+          <span className="font-semibold ml-2">{formatDate(payout.payout_scheduled_date)}</span>
+        </div>
+      </div>
+
+      {/* Sales Data */}
+      <div className="bg-gray-50 rounded p-4 mb-4">
+        <h4 className="font-semibold mb-2">Sales Data</h4>
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span>Sales at activation (D0):</span>
+            <span className="font-mono">${payout.sales_at_activation.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Sales at expiration (D30):</span>
+            <span className="font-mono">${payout.sales_at_expiration.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between font-semibold">
+            <span>Sales during boost:</span>
+            <span className="font-mono">${payout.sales_during_boost.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Payout Amount - EDITABLE */}
+      <div className="bg-blue-50 rounded p-4 mb-4">
+        <h4 className="font-semibold mb-2">Calculated Payout (Editable)</h4>
+
+        {editing ? (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Adjusted Amount:</label>
+              <input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full px-3 py-2 border rounded"
+              />
+              <p className="text-xs text-gray-600 mt-1">
+                Original: ${payout.boost_commission_amount.toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Reason (required):</label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g., Adjusted based on TikTok dashboard review - returns applied"
+                className="w-full px-3 py-2 border rounded"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveAdjustment}
+                disabled={!reason || loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300"
+              >
+                {loading ? 'Saving...' : 'Save Adjustment'}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="px-4 py-2 border rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-bold text-green-700">
+                ${amount.toFixed(2)}
+              </span>
+              <button
+                onClick={() => setEditing(true)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-50"
+              >
+                Edit Amount
+              </button>
+            </div>
+
+            {payout.adjustments?.length > 0 && (
+              <div className="mt-2 text-xs text-orange-600">
+                <strong>Adjusted:</strong> {payout.adjustments[0].adjustment_reason}
+                <br />
+                <span className="text-gray-600">
+                  By admin on {formatDateTime(payout.adjustments[0].adjusted_at)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Payment Info */}
+      <div className="bg-gray-50 rounded p-4 mb-4">
+        <h4 className="font-semibold mb-2">Payment Information</h4>
+        <div className="text-sm space-y-1">
+          <div><strong>Method:</strong> {payout.payment_method === 'venmo' ? 'Venmo' : 'PayPal'}</div>
+          <div><strong>Account:</strong> {payout.payment_account}</div>
+          <div className="text-xs text-gray-600">
+            Collected: {formatDateTime(payout.payment_info_collected_at)}
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3">
+        <button
+          onClick={openTikTokDashboard}
+          className="flex-1 px-4 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+        >
+          View TikTok Dashboard
+        </button>
+        <button
+          onClick={handleMarkAsPaid}
+          disabled={loading}
+          className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300"
+        >
+          {loading ? 'Processing...' : `Mark as Paid ($${amount})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+### **Database Schema for Adjustments**
+
+```sql
+-- Track all payout adjustments for audit trail
+CREATE TABLE payout_adjustments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payout_id UUID REFERENCES commission_boost_payouts(id) NOT NULL,
+  original_amount DECIMAL(10, 2) NOT NULL,
+  adjusted_amount DECIMAL(10, 2) NOT NULL,
+  adjustment_reason TEXT NOT NULL,
+  adjusted_by UUID REFERENCES users(id) NOT NULL,
+  adjusted_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_payout_adjustments_payout_id ON payout_adjustments(payout_id);
+
+-- commission_boost_payouts.boost_commission_amount remains editable
+-- Latest value is what gets paid
+-- All historical adjustments preserved in payout_adjustments table
+```
+
+---
+
+### **API Endpoints**
+
+#### **POST /api/admin/payouts/:id/adjust**
+
+```typescript
+// app/api/admin/payouts/[id]/adjust/route.ts
+
+export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const isAdmin = await checkAdminAuth(request);
+  if (!isAdmin) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { original_amount, adjusted_amount, adjustment_reason } = await request.json();
+
+  // Validate
+  if (!adjustment_reason || adjustment_reason.trim().length < 10) {
+    return Response.json({
+      error: 'INVALID_REASON',
+      message: 'Adjustment reason must be at least 10 characters'
+    }, { status: 400 });
+  }
+
+  const adminUserId = await getAdminUserId(request);
+
+  // 1. Log adjustment in audit table
+  await supabase
+    .from('payout_adjustments')
+    .insert({
+      payout_id: params.id,
+      original_amount,
+      adjusted_amount,
+      adjustment_reason,
+      adjusted_by: adminUserId
+    });
+
+  // 2. Update payout amount
+  await supabase
+    .from('commission_boost_payouts')
+    .update({
+      boost_commission_amount: adjusted_amount,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', params.id);
+
+  return Response.json({ success: true });
+}
+```
+
+---
+
+## **Learning Loop: First 10 Payouts**
+
+**After processing first 10 payouts, analyze deviation:**
+
+```typescript
+// Admin analytics (post-MVP)
+SELECT
+  user_id,
+  sales_during_boost,
+  boost_commission_rate,
+  (sales_during_boost * boost_commission_rate / 100) as calculated_amount,
+  boost_commission_amount as final_amount,
+  boost_commission_amount - (sales_during_boost * boost_commission_rate / 100) as deviation,
+  ((boost_commission_amount - (sales_during_boost * boost_commission_rate / 100)) /
+   (sales_during_boost * boost_commission_rate / 100) * 100) as deviation_pct
+FROM commission_boost_payouts
+WHERE payout_sent_at IS NOT NULL
+ORDER BY payout_sent_at ASC
+LIMIT 10;
+```
+
+**Decision tree:**
+- **Average deviation <2%:** Trust calculation, stop manual verification
+- **Average deviation 2-5%:** Apply automatic adjustment factor (e.g., × 0.98)
+- **Average deviation >5%:** Continue manual review process
+
+---
+
+## **Email 2 - Payment Sent (Unchanged from Q3.4)**
+
+```typescript
+// This email SHOWS the final amount for the first time
+// Uses the adjusted amount if admin edited it
+
+Subject: Payment Sent: $1,850
+
+Amount sent: $1,850
+Method: Venmo @handle
+...
+```
+
+**First time creator sees the actual amount they received.**
+
+---
+
+## **Summary**
+
+**Sub-Q1:** ✅ YES - Admin can edit payout amount
+- Reason required (min 10 chars)
+- Audit trail logged
+- Learning loop: First 10 payouts inform automation decision
+
+**Sub-Q2:** ✅ YES - Admin can edit payment info
+- Logged with admin ID
+- Creator notified via email
+
+**Sub-Q3:** ✅ NO - Single-step workflow
+- Flow: Calculate → Admin reviews/edits → Mark as Paid → Email 2 sent
+- Sufficient for MVP, can add approval workflow post-MVP if needed
+
+
+---
+
+#### Q6.3: Admin Panel - Commission Boost Reports ✅ RESOLVED
+
+**Decision:** Option A - Simple Monthly Summary Report
+
+**Purpose:** Generate monthly financial reconciliation report showing **boost commissions only** (not TikTok tier commissions) for client reimbursement.
+
+**Rationale:**
+- **Client reimbursement:** Report is for billing client, not analytics
+- **Simple and sufficient:** Line-item breakdown per creator with monthly total
+- **Fast to build:** ~1.5 hours vs 3-4 hours for detailed version
+- **Exportable:** PDF for client invoice, CSV for accounting
+- **Only paid amounts:** Excludes pending/unpaid payouts to avoid confusion
+
+**Report Example:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│          COMMISSION BOOST PAYOUTS                           │
+│               January 2025                                  │
+├─────────────────────────────────────────────────────────────┤
+│ Creator      │ Boost % │ Sales      │ Boost Paid           │
+├─────────────────────────────────────────────────────────────┤
+│ @creator1    │ 5%      │ $40,000    │ $2,000.00           │
+│ @creator2    │ 5%      │ $25,000    │ $1,250.00           │
+│ @creator3    │ 5%      │ $15,000    │ $750.00             │
+│ @creator4    │ 5%      │ $8,500     │ $425.00             │
+├─────────────────────────────────────────────────────────────┤
+│ TOTAL (4 creators)                    │ $4,425.00          │
+└─────────────────────────────────────────────────────────────┘
+
+Report Generated: February 1, 2025
+Period: January 1, 2025 - January 31, 2025
+Paid by: [Your Company Name]
+Owed by: [Client Name]
+
+* This report shows ONLY boost commission paid by [Your Company].
+  TikTok tier commissions (paid directly by TikTok) are not included.
+```
 ---
 
 ### 7. Edge Cases & Error Handling
 
-#### Q7.1: Creator Tier Changes During Boost
+#### Q7.1: Creator Tier Changes During Boost ✅ RESOLVED
+
+**Decision:** Option A - Tier at claim time (locked)
 
 **Scenario:**
 - Creator claims commission_boost at Silver tier (10% base commission)
 - During boost period, creator gets promoted to Gold tier (12% base commission)
 - Boost expires
 
-**Question:**
-- ✅ Which tier commission rate do we use for payout?
-  - **Option A:** Tier at claim time (locked in `redemptions.tier_at_claim`)
-  - **Option B:** Tier at expiration time (current tier)
-  - **Option C:** Weighted average based on days in each tier
+**Solution:** Use tier commission rate from `commission_boost_payouts.tier_commission_rate` (locked at activation time per Q1.3)
 
-**Recommendation:** Option A (locked at claim time) - simpler, matches existing logic for other benefits
+**Rationale:**
+- Consistency with Q1.3 decision
+- Simpler calculation (no need to track tier changes during boost)
+- Prevents disputes about which rate applies
+- Matches existing logic for other benefits
+
+**Implementation:** Already handled by Q1.3 - tier rate locked at activation in `tier_commission_rate` field.
 
 ---
 
-#### Q7.2: Benefit Value Changes During Boost
+#### Q7.2: Benefit Value Changes During Boost ✅ RESOLVED
+
+**Decision:** Option A - Rate at claim time (locked)
 
 **Scenario:**
 - Creator schedules 5% commission_boost
-- Admin edits benefit, changes to 7% commission_boost
+- Admin edits benefit, changes to 7% commission_boost before activation
 - Boost activates
 
-**Question:**
-- ✅ Which boost rate do we use?
-  - **Option A:** Rate at claim time (lock value_data in redemptions table)
-  - **Option B:** Rate at activation time (current benefit value)
+**Solution:** Use boost rate from scheduled claim time, not current benefit value
 
-**Recommendation:** Option A (locked at claim time) - prevents admin errors from affecting scheduled boosts
+**Rationale:**
+- Prevents admin errors from affecting already-scheduled boosts
+- Creator scheduled based on 5% promise, must honor that
+- Locked value provides certainty
+
+**Implementation:**
+```typescript
+// When creator schedules boost, copy value_data to redemptions table
+await supabase
+  .from('redemptions')
+  .insert({
+    // ... other fields ...
+    benefit_value_snapshot: benefit.value_data, // Lock the 5% at claim time
+  });
+
+// At activation, use snapshot, not current benefit value
+const boostRate = redemption.benefit_value_snapshot.percent; // 5%, not 7%
+```
 
 ---
 
-#### Q7.3: Benefit Disabled After Scheduling
+#### Q7.3: Benefit Disabled After Scheduling ✅ RESOLVED
+
+**Decision:** Option A - Honor the scheduled claim
 
 **Scenario:**
 - Creator schedules commission_boost for Jan 15
 - Jan 14: Admin disables benefit (enabled = false)
-- Jan 15 at 6 PM: Cron tries to activate
+- Jan 15 at 3 PM: Cron tries to activate
 
-**Question:**
-- ✅ Does boost still activate?
-  - **Option A:** Yes, honor the scheduled claim (benefit was enabled at claim time)
-  - **Option B:** No, cancel the activation (respect current benefit state)
+**Solution:** Boost activates as scheduled, regardless of current benefit.enabled status
 
-**Recommendation:** Option A - once scheduled, it's locked in
+**Rationale:**
+- Once scheduled, it's a commitment to the creator
+- Disabling benefit affects NEW claims, not existing scheduled claims
+- Similar to honoring a contract even if you stop offering it to new customers
+
+**Implementation:**
+```typescript
+// Cron activation logic does NOT check benefit.enabled
+// Only checks redemption status and scheduled time
+
+const { data: pendingBoosts } = await supabase
+  .from('redemptions')
+  .select('id')
+  .eq('redemption_type', 'scheduled')
+  .eq('status', 'pending')
+  .lte('scheduled_activation_at', new Date())
+  .is('activated_at', null);
+  // NO CHECK for benefit.enabled
+
+for (const boost of pendingBoosts) {
+  await activateCommissionBoost(boost.id); // Activates regardless
+}
+```
+
+**Edge case:** If admin wants to prevent activation, they must manually cancel the redemption (not implemented in MVP, but could add POST /api/admin/redemptions/:id/cancel later).
 
 ---
 
-#### Q7.4: User Deleted/Suspended During Boost
+#### Q7.4: User Deleted/Suspended During Boost ✅ RESOLVED
+
+**Decision:** Out of scope - won't happen in MVP
 
 **Scenario:**
 - Commission boost is active
 - Admin suspends user account (ToS violation, fraud, etc.)
 
-**Questions:**
-- ✅ Does boost continue until expiration?
-  - Or immediately terminate?
+**Rationale:**
+- Extremely rare edge case for MVP
+- User suspension is not planned for initial launch
+- If it happens, can handle manually (admin can choose not to pay in payout queue)
+- Over-engineering for a scenario that won't occur in 6-8 week MVP timeline
 
-- ✅ Does user still get payout?
-  - Even if suspended for fraud?
-  - Or forfeited?
+**MVP Solution:** If this scenario arises:
+- Boost continues until expiration (no termination logic)
+- Admin manually decides whether to pay in payout queue (can edit amount to $0 with reason "User suspended")
+- No special suspension handling needed
 
-- ✅ Can admin manually terminate active boost?
-  - If yes, add endpoint: DELETE /api/admin/redemptions/:id/terminate
+**Post-MVP:** If user suspension becomes a feature, can add:
+- Automatic boost termination on suspension
+- Payout forfeiture logic
+- Admin termination endpoint
+
+**Implementation time:** 0 hours (deferred)
 
 ---
 
-#### Q7.5: Payment Method No Longer Valid
+#### Q7.5: Payment Method No Longer Valid ✅ RESOLVED
+
+**Decision:** Option B - Manual admin contact (no automated retry workflow)
 
 **Scenario:**
-- Creator provides Venmo handle @myhandle
+- Creator provides Venmo @myhandle
 - 18 days later, admin tries to send payment
 - Venmo account is closed/suspended
 
-**Questions:**
-- ✅ How does admin know payment failed?
-  - Manual process (admin tries to send, gets error from Venmo)
-  - Or automated (we integrate with Venmo API to verify before sending)?
+**Solution:**
 
-- ✅ What's the retry workflow?
-  - Admin contacts creator via email: "Your Venmo account is invalid, please update"
-  - Creator updates payment info
-  - Admin retries payment
+**1. How admin knows payment failed:**
+- Manual process: Admin tries to send via Venmo/PayPal, gets error
+- No automated verification (Q3.2 decision - no API integration)
 
-- ✅ Do we need a "Payment Failed" status?
-  - Separate from "Pending" and "Paid"?
+**2. Retry workflow:**
+- Admin manually emails creator: "Payment to @myhandle failed. Please update your payment info."
+- Creator logs in, updates payment info (can update via Profile or admin can edit in Q6.2 payout queue)
+- Admin retries payment manually
+
+**3. Payment Failed tracking:**
+- Use `payout_adjustments` table to log issue:
+```typescript
+await supabase.from('payout_adjustments').insert({
+  payout_id: id,
+  original_amount: amount,
+  adjusted_amount: amount, // Same amount, just logging failure
+  adjustment_reason: 'Payment failed - invalid Venmo account. Contacted creator to update.',
+  adjusted_by: admin_id
+});
+```
+- No special "Failed" status needed - payout remains in "Pending" until resolved
+
+**Rationale:**
+- **Keep MVP simple:** No extra UI, no automated emails
+- **Rare occurrence:** Payment failures should be uncommon with double-entry validation (Q3.2)
+- **Admin has tools:** Can edit payment info in payout queue (Q6.2 Sub-Q2)
+- **Audit trail:** Log in adjustments table for record-keeping
+
+**Implementation time:** 0 hours (already handled by Q6.2)
 
 ---
 
-#### Q7.6: Duplicate Scraping (Race Condition)
+#### Q7.6: Duplicate Scraping (Race Condition) ✅ RESOLVED
+
+**Decision:** Option A - Existing idempotency check is sufficient
 
 **Scenario:**
-- Cron job runs at 6 PM EST
+- Cron job runs at 3 PM EST
 - Network hiccup, job times out after 5 minutes
 - Vercel retries job automatically
-- Job runs AGAIN at 6:05 PM
+- Job runs AGAIN at 3:05 PM
 
-**Questions:**
-- ✅ Does this cause duplicate activations?
-  - Two redemptions marked as activated?
-  - Two sales snapshots recorded?
+**Solution:** Already solved by Q6.1 implementation
 
-- ✅ How do we prevent this?
-  - Idempotency key in cron job
-  - Check if activation already processed today before running
-  - Lock mechanism (database flag: `activations_processed_at`)
+**Idempotency built into `activateCommissionBoost()`:**
+
+```typescript
+// From Q6.1 - activateCommissionBoost() function
+export async function activateCommissionBoost(redemptionId: string) {
+  // ... fetch redemption ...
+
+  // 2. Idempotency check - prevent double activation
+  if (redemption.activated_at) {
+    console.log(`Boost ${redemptionId} already activated at ${redemption.activated_at}`);
+    return { success: true }; // Already activated, not an error
+  }
+
+  // ... rest of activation logic ...
+}
+```
+
+**This prevents:**
+1. ✅ **Duplicate activations:** If redemption already has `activated_at`, function returns early
+2. ✅ **Duplicate sales snapshots:** Only creates `commission_boost_payouts` record if activation succeeds
+3. ✅ **Duplicate payout records:** Database constraint on `redemption_id` (unique in payouts table)
+
+**How it works:**
+- **First cron run (3:00 PM):** Sets `redemption.activated_at = NOW()`, creates payout record
+- **Retry cron run (3:05 PM):** Checks `redemption.activated_at`, sees it's already set, returns success without doing anything
+- **Result:** Only one activation, one payout record
+
+**Additional safety:** Database unique constraint
+
+```sql
+-- From Q1.1 schema
+CREATE TABLE commission_boost_payouts (
+  id UUID PRIMARY KEY,
+  redemption_id UUID UNIQUE REFERENCES redemptions(id), -- ← UNIQUE prevents duplicates
+  -- ... other fields ...
+);
+```
+
+Even if idempotency check fails, database constraint prevents duplicate payout records.
+
+**Rationale:**
+- Q6.1 already implemented robust idempotency
+- No additional locking mechanism needed
+- Database constraints provide backup safety
+- 0 hours additional work
+
+**Implementation time:** 0 hours (already implemented in Q6.1)
 
 ---
 
-#### Q7.7: Sales Discrepancies
+#### Q7.7: Sales Discrepancies ✅ RESOLVED
+
+**Decision:**
+- **Q1:** Option A - Admin manually reviews (no automated export)
+- **Q2:** Option A - Aggregate data only (no video-level tracking)
 
 **Scenario:**
 - D0 sales: $10,000
 - D30 sales: $50,000
-- Calculated boost commission: $2,000
+- Calculated boost commission: $2,000 (5% of $40,000)
 - Creator disputes: "I made $60,000 during boost, not $40,000"
 
-**Questions:**
-- ✅ How do we handle disputes?
-  - Provide CSV export of scraped data for audit?
-  - Admin manually reviews Cruda data?
-  - Auto-recount option that re-scrapes and recalculates?
+**Solution:**
 
-- ✅ Do we store video-level sales during boost for granular audit?
-  - Example: Videos posted during boost with individual GMV
-  - Or just aggregate numbers (simpler but less transparent)?
+**1. Dispute handling workflow:**
+
+```
+Creator disputes → Admin investigates → Admin adjusts if needed
+
+Step 1: Creator emails/messages admin with dispute
+Step 2: Admin logs into Cruda/TikTok dashboard
+Step 3: Admin manually verifies sales for boost period
+Step 4: If discrepancy confirmed:
+        - Admin edits payout amount in Q6.2 payout queue
+        - Admin adds reason: "Adjusted after manual review - actual sales $60k"
+Step 5: Admin responds to creator with resolution
+```
+
+**Data available to admin for review:**
+- `commission_boost_payouts.sales_at_activation` (D0)
+- `commission_boost_payouts.sales_at_expiration` (D30)
+- `commission_boost_payouts.sales_during_boost` (delta)
+- Cruda dashboard (external verification)
+
+**2. Data granularity:**
+
+**Store aggregate only:**
+```sql
+-- What we store (from Q1.1)
+sales_at_activation: $10,000    -- D0 total GMV
+sales_at_expiration: $50,000    -- D30 total GMV
+sales_during_boost: $40,000     -- D30 - D0
+```
+
+**Do NOT store:**
+- ❌ Individual video GMV
+- ❌ Daily sales breakdown
+- ❌ Product-level sales
+- ❌ Hourly snapshots
+
+**Rationale:**
+
+**Q1 (Manual review):**
+- **MVP simplicity:** No CSV export UI needed (0 hours saved)
+- **Admin has edit power:** Q6.2 already allows amount adjustments with audit trail
+- **Learning loop:** First 10 payouts (Q6.2) will reveal if disputes are common
+- **External source of truth:** Cruda/TikTok dashboard is final authority
+- **If disputes become common:** Can add CSV export post-MVP (~1 hour)
+
+**Q2 (Aggregate only):**
+- **Cruda API limitation:** Doesn't provide video-level GMV breakdown
+- **MVP complexity:** Would require scraping individual video pages (~3-4 hours)
+- **Diminishing returns:** Aggregate sales sufficient for 95% of cases
+- **TikTok is source of truth:** If dispute, creator can check their own TikTok analytics
+
+**Edge case handling:**
+
+| Scenario | Solution |
+|----------|----------|
+| **Scraping error at D0 or D30** | Admin re-scrapes manually, edits payout with new data |
+| **Creator insists on specific video sales** | Direct creator to their TikTok Shop analytics (creator has access) |
+| **Admin can't verify via Cruda** | Contact TikTok support, adjust payout based on official TikTok data |
+| **Systematic calculation errors** | Fix bug, recalculate all affected payouts, notify creators |
+
+**Post-MVP enhancements (if needed):**
+- CSV export of metrics snapshots (~1 hour)
+- Video-level sales tracking (~4-6 hours)
+- Automated dispute submission form (~2 hours)
+
+**Implementation time:** 0 hours (already handled by Q6.2 edit functionality)
 
 ---
 
-#### Q7.8: Negative Sales During Boost
+#### Q7.8: Negative Sales During Boost ✅ RESOLVED
+
+**Decision:** Option A - Floor at $0 + alert admin
 
 **Scenario:**
 - D0 sales: $10,000
-- D30 sales: $8,000 (refunds, returns, chargebacks)
+- D30 sales: $8,000 (massive refunds, returns, chargebacks)
 - Sales during boost: -$2,000
 
-**Questions:**
-- ✅ What's the payout?
-  - **Option A:** $0 (minimum payout)
-  - **Option B:** Negative payout (creator owes money?) - Not realistic
-  - **Option C:** Alert admin for manual review
-
-**Recommendation:** Option A (floor at $0) + alert admin if sales_during_boost < $0
-
----
+**Solution:** Payout = $0 (minimum)
 
 ## Creator Flow (Approved)
 
