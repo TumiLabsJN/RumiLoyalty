@@ -164,10 +164,6 @@ export function SchedulePayboostModal({
             <span className="font-semibold text-slate-900">
               +{boostPercent}% Pay Boost for {durationDays} Days 💰
             </span>
-            <br />
-            <span className="text-xs text-slate-500 mt-1 inline-block">
-              Activates at {localTimeDisplay} on your chosen date
-            </span>
           </DialogDescription>
         </DialogHeader>
 

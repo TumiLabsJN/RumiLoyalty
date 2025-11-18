@@ -1802,7 +1802,7 @@ _To be defined_
 
 ## GET /api/rewards
 
-**Purpose:** Returns current tier rewards and rewards.
+**Purpose:** Returns all VIP tier rewards for the Rewards page with pre-computed status, availability, and formatted display text.
 
 ### Request
 
@@ -1813,13 +1813,690 @@ Authorization: Bearer <supabase-jwt-token>
 
 ### Response Schema
 
-_To be defined_
+```typescript
+interface RewardsPageResponse {
+  // User & Tier Info (for header badge)
+  user: {
+    id: string                          // UUID from users.id
+    handle: string                      // From users.tiktok_handle (without @)
+    currentTier: string                 // From users.current_tier (tier_3)
+    currentTierName: string             // From tiers.tier_name ("Gold")
+    currentTierColor: string            // From tiers.tier_color (hex, e.g., "#F59E0B")
+  }
+
+  // Redemption history count (for "View Redemption History" link)
+  redemptionCount: number               // COUNT of status='concluded' redemptions
+
+  // Rewards list (sorted by status priority + display_order)
+  rewards: Array<{
+    // Core reward data
+    id: string                          // UUID from rewards.id
+    type: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+    name: string                        // From rewards.name (auto-generated)
+    description: string                 // From rewards.description (15 char max for physical_gift/experience)
+
+    // PRE-FORMATTED display text (backend handles all formatting)
+    displayText: string                 // "+5% Pay boost for 30 Days" | "$50 Gift Card" | "Win a Wireless Headphones"
+
+    // Structured data (camelCase transformed from value_data JSONB)
+    valueData: {
+      amount?: number                   // For gift_card, spark_ads
+      percent?: number                  // For commission_boost, discount
+      durationDays?: number             // For commission_boost, discount (backend converts duration_minutes / 1440 for discounts)
+      couponCode?: string               // For discount (2-8 char code)
+      maxUses?: number                  // For discount (optional usage limit)
+      requiresSize?: boolean            // For physical_gift
+      sizeCategory?: string             // For physical_gift
+      sizeOptions?: string[]            // For physical_gift
+    } | null
+
+    // COMPUTED status (backend derives from multiple tables)
+    status: 'clearing' | 'sending' | 'active' | 'scheduled' |
+            'redeeming_physical' | 'redeeming' | 'claimable' |
+            'limit_reached' | 'locked'
+
+    // COMPUTED availability (backend validates eligibility)
+    canClaim: boolean                   // Backend checks: tier match + limit + enabled + no active claim
+    isLocked: boolean                   // tier_eligibility != current_tier (preview from higher tier)
+    isPreview: boolean                  // Locked preview reward (from preview_from_tier)
+
+    // Usage tracking (VIP tier rewards only, current tier only)
+    usedCount: number                   // COUNT from redemptions WHERE mission_progress_id IS NULL AND tier_at_claim = current_tier
+    totalQuantity: number               // From rewards.redemption_quantity (1-10 or NULL for unlimited)
+
+    // Tier information
+    tierEligibility: string             // From rewards.tier_eligibility ("tier_3")
+    requiredTierName: string | null     // From tiers.tier_name ("Platinum") if locked, else null
+    displayOrder: number                // From rewards.display_order (admin-defined priority)
+
+    // PRE-FORMATTED status details (backend computes all dates/times)
+    statusDetails: {
+      // For 'scheduled' status (discount or commission_boost)
+      scheduledDate?: string            // "Jan 15, 2025 at 2:00 PM" (formatted in user's timezone)
+      scheduledDateRaw?: string         // ISO 8601 for frontend date pickers
+
+      // For 'active' status (discount or commission_boost)
+      activationDate?: string           // "Jan 10, 2025" (human readable)
+      expirationDate?: string           // "Feb 10, 2025" (human readable)
+      daysRemaining?: number            // Days until expiration (e.g., 15)
+
+      // For 'sending' status (physical_gift)
+      shippingCity?: string             // "Los Angeles" (user's shipping city)
+
+      // For 'clearing' status (commission_boost)
+      clearingDays?: number             // Days remaining until payout (20-day clearing period)
+    } | null
+
+    // Redemption frequency info (for UI hints)
+    redemptionFrequency: 'one-time' | 'monthly' | 'weekly' | 'unlimited'
+
+    // Redemption type (workflow type)
+    redemptionType: 'instant' | 'scheduled'  // 'instant' for gift_card/spark_ads/experience/physical_gift, 'scheduled' for commission_boost/discount
+  }>
+}
+```
+
+### Example Response
+
+```json
+{
+  "user": {
+    "id": "user-abc-123",
+    "handle": "creatorpro",
+    "currentTier": "tier_3",
+    "currentTierName": "Gold",
+    "currentTierColor": "#F59E0B"
+  },
+  "redemptionCount": 5,
+  "rewards": [
+    {
+      "id": "reward-boost-5pct",
+      "type": "commission_boost",
+      "name": "5% Commission Boost",
+      "description": "Temporary commission increase",
+      "displayText": "+5% Pay boost for 30 Days",
+      "valueData": {
+        "percent": 5,
+        "durationDays": 30
+      },
+      "status": "clearing",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 1,
+      "totalQuantity": 3,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 4,
+      "statusDetails": {
+        "clearingDays": 15
+      },
+      "redemptionFrequency": "monthly",
+      "redemptionType": "scheduled"
+    },
+    {
+      "id": "reward-headphones",
+      "type": "physical_gift",
+      "name": "Wireless Headphones",
+      "description": "Premium earbuds",
+      "displayText": "Win a Wireless Headphones",
+      "valueData": {
+        "requiresSize": false
+      },
+      "status": "sending",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 1,
+      "totalQuantity": 1,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 2,
+      "statusDetails": {
+        "shippingCity": "Los Angeles"
+      },
+      "redemptionFrequency": "one-time",
+      "redemptionType": "instant"
+    },
+    {
+      "id": "reward-discount-15",
+      "type": "discount",
+      "name": "15% Follower Discount",
+      "description": "Deal boost",
+      "displayText": "+15% Deal Boost for 7 Days",
+      "valueData": {
+        "percent": 15,
+        "durationDays": 7,
+        "couponCode": "GOLD15",
+        "maxUses": 100
+      },
+      "status": "active",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 1,
+      "totalQuantity": 2,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 6,
+      "statusDetails": {
+        "activationDate": "Jan 10, 2025",
+        "expirationDate": "Jan 17, 2025",
+        "daysRemaining": 3
+      },
+      "redemptionFrequency": "monthly",
+      "redemptionType": "scheduled"
+    },
+    {
+      "id": "reward-boost-10pct",
+      "type": "commission_boost",
+      "name": "10% Commission Boost",
+      "description": "Temporary commission increase",
+      "displayText": "+10% Pay boost for 30 Days",
+      "valueData": {
+        "percent": 10,
+        "durationDays": 30
+      },
+      "status": "scheduled",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 2,
+      "totalQuantity": 3,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 4,
+      "statusDetails": {
+        "scheduledDate": "Jan 20, 2025 at 6:00 PM",
+        "scheduledDateRaw": "2025-01-20T23:00:00Z"
+      },
+      "redemptionFrequency": "monthly",
+      "redemptionType": "scheduled"
+    },
+    {
+      "id": "reward-hoodie",
+      "type": "physical_gift",
+      "name": "Branded Hoodie",
+      "description": "Premium hoodie",
+      "displayText": "Win a Branded Hoodie",
+      "valueData": {
+        "requiresSize": true,
+        "sizeCategory": "clothing",
+        "sizeOptions": ["S", "M", "L", "XL"]
+      },
+      "status": "redeeming_physical",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 0,
+      "totalQuantity": 1,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 2,
+      "statusDetails": null,
+      "redemptionFrequency": "one-time",
+      "redemptionType": "instant"
+    },
+    {
+      "id": "reward-giftcard-50",
+      "type": "gift_card",
+      "name": "$50 Amazon Gift Card",
+      "description": "Amazon GC",
+      "displayText": "$50 Gift Card",
+      "valueData": {
+        "amount": 50
+      },
+      "status": "redeeming",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 1,
+      "totalQuantity": 2,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 3,
+      "statusDetails": null,
+      "redemptionFrequency": "monthly",
+      "redemptionType": "instant"
+    },
+    {
+      "id": "reward-giftcard-25",
+      "type": "gift_card",
+      "name": "$25 Amazon Gift Card",
+      "description": "Amazon GC",
+      "displayText": "$25 Gift Card",
+      "valueData": {
+        "amount": 25
+      },
+      "status": "claimable",
+      "canClaim": true,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 0,
+      "totalQuantity": 2,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 3,
+      "statusDetails": null,
+      "redemptionFrequency": "monthly",
+      "redemptionType": "instant"
+    },
+    {
+      "id": "reward-sparkads-100",
+      "type": "spark_ads",
+      "name": "$100 Spark Ads Credit",
+      "description": "Ads boost",
+      "displayText": "+$100 Ads Boost",
+      "valueData": {
+        "amount": 100
+      },
+      "status": "limit_reached",
+      "canClaim": false,
+      "isLocked": false,
+      "isPreview": false,
+      "usedCount": 1,
+      "totalQuantity": 1,
+      "tierEligibility": "tier_3",
+      "requiredTierName": null,
+      "displayOrder": 5,
+      "statusDetails": null,
+      "redemptionFrequency": "one-time",
+      "redemptionType": "instant"
+    },
+    {
+      "id": "reward-platinum-giftcard",
+      "type": "gift_card",
+      "name": "$200 Amazon Gift Card",
+      "description": "Premium GC",
+      "displayText": "$200 Gift Card",
+      "valueData": {
+        "amount": 200
+      },
+      "status": "locked",
+      "canClaim": false,
+      "isLocked": true,
+      "isPreview": true,
+      "usedCount": 0,
+      "totalQuantity": 1,
+      "tierEligibility": "tier_4",
+      "requiredTierName": "Platinum",
+      "displayOrder": 1,
+      "statusDetails": null,
+      "redemptionFrequency": "monthly",
+      "redemptionType": "instant"
+    }
+  ]
+}
+```
+
+### Business Logic
+
+#### **Status Computation (Backend Derives from Multiple Tables)**
+
+**Priority Rank 1 - Clearing:**
+```typescript
+// Commission boost pending payout (20-day clearing period)
+if (reward.type === 'commission_boost' &&
+    redemption.status === 'fulfilled' &&
+    boost_redemption.boost_status === 'pending_payout') {
+  status = 'clearing'
+  statusDetails = {
+    clearingDays: 20 - daysSince(boost_redemption.sales_at_expiration)
+  }
+}
+```
+
+**Priority Rank 2 - Sending:**
+```typescript
+// Physical gift shipped by admin
+if (reward.type === 'physical_gift' &&
+    redemption.status === 'claimed' &&
+    physical_gift_redemption.shipped_at IS NOT NULL) {
+  status = 'sending'
+  statusDetails = {
+    shippingCity: physical_gift_redemption.shipping_city
+  }
+}
+```
+
+**Priority Rank 2 - Active:**
+```typescript
+// Commission boost currently active
+if (reward.type === 'commission_boost' &&
+    redemption.status === 'claimed' &&
+    boost_redemption.boost_status === 'active') {
+  status = 'active'
+  statusDetails = {
+    activationDate: formatDate(boost_redemption.activated_at),
+    expirationDate: formatDate(boost_redemption.expires_at),
+    daysRemaining: daysBetween(NOW(), boost_redemption.expires_at)
+  }
+}
+
+// Discount currently active
+if (reward.type === 'discount' &&
+    redemption.status === 'fulfilled' &&
+    redemption.activation_date IS NOT NULL &&
+    redemption.expiration_date IS NOT NULL &&
+    NOW() >= redemption.activation_date &&
+    NOW() <= redemption.expiration_date) {
+  status = 'active'
+  statusDetails = {
+    activationDate: formatDate(redemption.activation_date),
+    expirationDate: formatDate(redemption.expiration_date),
+    daysRemaining: daysBetween(NOW(), redemption.expiration_date)
+  }
+}
+```
+
+**Priority Rank 4 - Scheduled:**
+```typescript
+// Commission boost or discount scheduled for future activation
+if ((reward.type === 'commission_boost' || reward.type === 'discount') &&
+    redemption.status === 'claimed' &&
+    redemption.scheduled_activation_date IS NOT NULL) {
+  status = 'scheduled'
+  statusDetails = {
+    scheduledDate: formatDateTime(redemption.scheduled_activation_date, redemption.scheduled_activation_time),
+    scheduledDateRaw: toISO8601(redemption.scheduled_activation_date, redemption.scheduled_activation_time)
+  }
+}
+```
+
+**Priority Rank 5 - Redeeming Physical:**
+```typescript
+// Physical gift claimed, address provided, but not shipped yet
+if (reward.type === 'physical_gift' &&
+    redemption.status === 'claimed' &&
+    physical_gift_redemption.shipping_city IS NOT NULL &&
+    physical_gift_redemption.shipped_at IS NULL) {
+  status = 'redeeming_physical'
+}
+```
+
+**Priority Rank 6 - Redeeming:**
+```typescript
+// Instant rewards (gift_card, spark_ads, experience) claimed but not fulfilled
+if (reward.type IN ('gift_card', 'spark_ads', 'experience') &&
+    redemption.status === 'claimed') {
+  status = 'redeeming'
+}
+```
+
+**Priority Rank 7 - Claimable:**
+```typescript
+// No active claim AND within limits
+if (!hasActiveClaim && usedCount < totalQuantity && tier matches) {
+  status = 'claimable'
+  canClaim = true
+}
+```
+
+**Priority Rank 8 - Limit Reached:**
+```typescript
+// All uses exhausted (only shows AFTER last reward is concluded)
+if (usedCount >= totalQuantity && allClaimsConcluded) {
+  status = 'limit_reached'
+  canClaim = false
+}
+```
+
+**Priority Rank 9 - Locked:**
+```typescript
+// Tier requirement not met (preview from higher tier)
+if (reward.tier_eligibility != user.current_tier &&
+    reward.preview_from_tier IS NOT NULL &&
+    user.current_tier >= reward.preview_from_tier) {
+  status = 'locked'
+  isLocked = true
+  isPreview = true
+  canClaim = false
+  requiredTierName = getTierName(reward.tier_eligibility)
+}
+```
+
+---
+
+#### **Usage Count Calculation (VIP Tier Rewards Only)**
+
+```sql
+-- Count ONLY VIP tier redemptions from current tier
+SELECT COUNT(*) as used_count
+FROM redemptions
+WHERE user_id = $userId
+  AND reward_id = $rewardId
+  AND mission_progress_id IS NULL              -- ✅ VIP tier rewards only
+  AND tier_at_claim = $currentTier             -- ✅ Current tier only
+  AND status IN ('claimed', 'fulfilled', 'concluded')  -- ✅ Active and completed claims
+  AND deleted_at IS NULL                       -- ✅ Not soft-deleted
+  AND created_at >= (
+    SELECT tier_achieved_at
+    FROM users
+    WHERE id = $userId
+  );
+```
+
+**Key Points:**
+- Mission rewards DON'T count toward VIP tier limits (`mission_progress_id IS NULL`)
+- Only current tier redemptions count (`tier_at_claim = current_tier`)
+- Resets on tier change (`created_at >= tier_achieved_at`)
+
+**Usage Count Reset Behavior:**
+
+When a user's tier changes, the usage count resets according to these rules:
+
+1. **Tier Promotion (e.g., Silver → Gold):**
+   - User's `tier_achieved_at` timestamp updates to NOW()
+   - `usedCount` for new tier's rewards starts at 0
+   - Old tier's redemptions remain in database (with `tier_at_claim = 'tier_2'`)
+   - New tier's rewards become available based on new tier's `redemption_quantity`
+
+2. **Tier Demotion (e.g., Gold → Silver):**
+   - User's `tier_achieved_at` timestamp updates to NOW()
+   - Higher tier's redemptions are **soft-deleted** (`deleted_at` set, `deleted_reason` = 'tier_change_tier_3_to_tier_2')
+   - Lower tier's rewards become available again
+   - `usedCount` for lower tier rewards starts fresh from demotion timestamp
+
+3. **Re-Promotion to Same Tier (e.g., Gold → Silver → Gold):**
+   - User's `tier_achieved_at` timestamp updates to NOW() when re-promoted
+   - Previous Gold tier redemptions are NOT reactivated (soft-deleted during demotion)
+   - User gets FRESH `redemption_quantity` limits for Gold tier rewards
+   - Example: Gold allows 3 commission boosts → demoted → re-promoted → gets 3 NEW boosts
+
+**SQL Query Ensures Fresh Count:**
+```sql
+-- Only count redemptions created AFTER current tier achievement
+created_at >= (SELECT tier_achieved_at FROM users WHERE id = $userId)
+```
+
+**Example Timeline:**
+```
+Jan 1:  User promoted to Gold (tier_achieved_at = Jan 1)
+Jan 5:  Claims commission boost #1 (usedCount = 1/3)
+Jan 10: Claims commission boost #2 (usedCount = 2/3)
+Feb 1:  Checkpoint: User demoted to Silver (tier_achieved_at = Feb 1, Gold redemptions soft-deleted)
+Mar 1:  User re-promoted to Gold (tier_achieved_at = Mar 1)
+Mar 5:  Claims commission boost #1 (usedCount = 1/3) ← Fresh count, previous boosts don't count
+```
+
+---
+
+#### **Display Text Formatting (Backend Pre-Formats)**
+
+```typescript
+function generateDisplayText(reward: Reward): string {
+  const { type, value_data, name } = reward
+
+  switch (type) {
+    case 'gift_card':
+      return `$${value_data.amount} Gift Card`
+
+    case 'commission_boost':
+      return `+${value_data.percent}% Pay boost for ${value_data.duration_days} Days`
+
+    case 'spark_ads':
+      return `+$${value_data.amount} Ads Boost`
+
+    case 'discount':
+      // Convert duration_minutes (stored in DB) to days for display
+      const durationDays = Math.floor(value_data.duration_minutes / 1440)
+      return `+${value_data.percent}% Deal Boost for ${durationDays} Days`
+
+    case 'physical_gift':
+      return `Win a ${name}`
+
+    case 'experience':
+      return `Win a ${name}`
+
+    default:
+      return name
+  }
+}
+```
+
+**Note:** Backend must transform discount `duration_minutes` (DB field) to `durationDays` (API field) before returning response:
+```typescript
+// For discount type rewards, transform value_data
+if (reward.type === 'discount') {
+  reward.valueData = {
+    percent: reward.value_data.percent,
+    durationDays: Math.floor(reward.value_data.duration_minutes / 1440),
+    couponCode: reward.value_data.coupon_code,
+    maxUses: reward.value_data.max_uses
+  }
+}
+```
+
+---
+
+#### **Sorting Logic (Backend Dual-Sort)**
+
+```typescript
+// Step 1: Sort by status priority
+const statusPriority = {
+  clearing: 1,
+  sending: 2,
+  active: 2,
+  scheduled: 4,
+  redeeming_physical: 5,
+  redeeming: 6,
+  claimable: 7,
+  limit_reached: 8,
+  locked: 9
+}
+
+// Step 2: Within same status, sort by display_order (admin-defined)
+rewards.sort((a, b) => {
+  const statusDiff = statusPriority[a.status] - statusPriority[b.status]
+  if (statusDiff !== 0) return statusDiff
+  return a.displayOrder - b.displayOrder  // Tiebreaker
+})
+```
+
+---
+
+#### **Database Query**
+
+```sql
+-- Get all rewards for user's current tier (including locked previews)
+SELECT
+  r.id,
+  r.type,
+  r.name,
+  r.description,
+  r.value_data,
+  r.tier_eligibility,
+  r.redemption_frequency,
+  r.redemption_quantity,
+  r.display_order,
+  r.preview_from_tier,
+  t.tier_name as tier_name,
+
+  -- Active redemption data (if exists)
+  red.id as redemption_id,
+  red.status as redemption_status,
+  red.claimed_at,
+  red.scheduled_activation_date,
+  red.scheduled_activation_time,
+  red.activation_date,
+  red.expiration_date,
+
+  -- Commission boost sub-state (if applicable)
+  cb.boost_status,
+  cb.activated_at as boost_activated_at,
+  cb.expires_at as boost_expires_at,
+  cb.sales_at_expiration,
+
+  -- Physical gift sub-state (if applicable)
+  pg.shipping_city,
+  pg.shipped_at
+
+FROM rewards r
+JOIN tiers t ON r.tier_eligibility = t.tier_id AND t.client_id = $clientId
+LEFT JOIN redemptions red ON (
+  red.reward_id = r.id
+  AND red.user_id = $userId
+  AND red.mission_progress_id IS NULL  -- VIP tier rewards only
+  AND red.status NOT IN ('concluded', 'rejected')  -- Exclude completed/rejected
+  AND red.deleted_at IS NULL
+)
+LEFT JOIN commission_boost_redemptions cb ON cb.redemption_id = red.id
+LEFT JOIN physical_gift_redemptions pg ON pg.redemption_id = red.id
+
+WHERE r.client_id = $clientId
+  AND r.enabled = true
+  AND (
+    -- Show rewards for current tier
+    r.tier_eligibility = $currentTier
+    OR
+    -- Show locked previews from higher tiers
+    (r.preview_from_tier IS NOT NULL AND $currentTierOrder >= (
+      SELECT tier_order FROM tiers WHERE tier_id = r.preview_from_tier AND client_id = $clientId
+    ))
+  )
+
+ORDER BY r.display_order ASC;  -- Backend will re-sort by status priority
+```
+
+---
+
+### Performance Optimization
+
+**Single Query Strategy:**
+- Fetch all rewards + active redemptions + sub-states in ONE query
+- Use LEFT JOINs for optional sub-state tables
+- Backend computes status for each reward
+- Backend re-sorts by status priority + display_order
+
+**Expected Response Time:** ~120-150ms
+
+---
+
+### Error Responses
+
+**401 Unauthorized:**
+```json
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "Internal Server Error",
+  "message": "Failed to fetch rewards data"
+}
+```
 
 ---
 
 ## POST /api/rewards/:id/claim
 
-**Purpose:** Creator claims a reward/reward from their current tier.
+**Purpose:** Creator claims a VIP tier reward from their current tier. Creates a redemption record and handles scheduling for commission_boost and discount types.
+
+**Note:** This endpoint is for VIP tier rewards ONLY (rewards page). For mission rewards, use `POST /api/missions/:id/claim`.
 
 ### Request
 
@@ -1829,13 +2506,136 @@ Authorization: Bearer <supabase-jwt-token>
 Content-Type: application/json
 ```
 
+### Request Body Schema
+
+```typescript
+interface ClaimRewardRequest {
+  // Optional: Only required for scheduled reward types (discount, commission_boost)
+  scheduledActivationAt?: string  // ISO 8601 timestamp
+                                   // Required if reward type is 'discount' or 'commission_boost'
+                                   // Not used for: gift_card, spark_ads, physical_gift, experience
+
+  // Optional: For physical gifts requiring size selection
+  sizeValue?: string               // Size value (e.g., "M", "L", "XL")
+                                   // Required if reward.value_data.requires_size = true
+                                   // Must match one of reward.value_data.size_options
+
+  // Optional: Shipping information for physical gifts
+  shippingInfo?: {
+    addressLine1: string
+    addressLine2?: string
+    city: string
+    state: string
+    postalCode: string
+    country: string
+    phone?: string
+  }  // Required if reward type is 'physical_gift'
+}
+```
+
+### Request Body Examples
+
+**Instant Reward (Gift Card, Spark Ads, Experience):**
+```json
+{}
+```
+
+**Physical Gift (No size required):**
+```json
+{
+  "shippingInfo": {
+    "addressLine1": "123 Main St",
+    "city": "Los Angeles",
+    "state": "CA",
+    "postalCode": "90001",
+    "country": "USA",
+    "phone": "555-0123"
+  }
+}
+```
+
+**Physical Gift (Size required):**
+```json
+{
+  "sizeValue": "L",
+  "shippingInfo": {
+    "addressLine1": "123 Main St",
+    "city": "Los Angeles",
+    "state": "CA",
+    "postalCode": "90001",
+    "country": "USA"
+  }
+}
+```
+
+**Discount (Requires scheduling):**
+```json
+{
+  "scheduledActivationAt": "2025-01-15T14:00:00Z"
+}
+```
+
+**Commission Boost (Requires activation date, time auto-set to 6 PM EST):**
+```json
+{
+  "scheduledActivationAt": "2025-01-20T23:00:00Z"
+}
+```
+
 ### Validation Business Rules
 
-**Tier Eligibility Check:**
-- Reward's `tier_eligibility` must match user's `current_tier`
-- Reward must have `enabled = true`
+#### **Pre-Claim Validation (in order):**
 
-**One-Time Redemption Validation:**
+1. **Authentication:** Valid JWT token required
+2. **Reward Exists:** Reward ID must exist in database
+3. **Reward Enabled:** `rewards.enabled = true`
+4. **Tier Eligibility:** `reward.tier_eligibility` must match `user.current_tier`
+5. **VIP Tier Reward Only:** This endpoint is for VIP tier rewards (rewards page), not mission rewards
+6. **No Active Claim:** User must NOT have an active redemption for this reward
+   ```sql
+   SELECT COUNT(*) FROM redemptions
+   WHERE user_id = $userId
+     AND reward_id = $rewardId
+     AND mission_progress_id IS NULL  -- VIP tier only
+     AND status IN ('claimed', 'fulfilled')  -- Active states
+     AND deleted_at IS NULL;
+   -- Must return 0 (user can't claim same reward twice simultaneously)
+   ```
+7. **Usage Limit Check:** Must not exceed `redemption_quantity`
+   ```sql
+   -- Count VIP tier redemptions from current tier only
+   SELECT COUNT(*) FROM redemptions
+   WHERE user_id = $userId
+     AND reward_id = $rewardId
+     AND mission_progress_id IS NULL              -- VIP tier only
+     AND tier_at_claim = $currentTier             -- Current tier only
+     AND status IN ('claimed', 'fulfilled', 'concluded')
+     AND deleted_at IS NULL
+     AND created_at >= (SELECT tier_achieved_at FROM users WHERE id = $userId);
+   -- Count must be < redemption_quantity
+   ```
+8. **Scheduling Required:** If reward type is `discount` or `commission_boost`, `scheduledActivationAt` must be provided
+9. **Scheduling Validation (Discount):**
+   - Date must be weekday (Mon-Fri)
+   - Time must be between 09:00-16:00 EST
+   - Date must be in future
+10. **Scheduling Validation (Commission Boost):**
+    - Date must be in future
+    - Time automatically set to 18:00:00 EST (6 PM) regardless of input
+11. **Physical Gift Requirements:**
+    - `shippingInfo` must be provided
+    - If `value_data.requires_size = true`, `sizeValue` must be provided
+    - If `sizeValue` is provided, it must match one of the values in `value_data.size_options`
+    ```typescript
+    if (reward.value_data.requires_size && !request.sizeValue) {
+      throw new Error('SIZE_REQUIRED')
+    }
+    if (request.sizeValue && !reward.value_data.size_options.includes(request.sizeValue)) {
+      throw new Error('INVALID_SIZE_SELECTION')
+    }
+    ```
+
+#### **Redemption Period Reset Rules:**
 
 One-time rewards have **two different behaviors** based on reward type:
 
@@ -1848,78 +2648,277 @@ One-time rewards have **two different behaviors** based on reward type:
 | `spark_ads` | Once per tier achievement | ✅ Yes | `user.tier_achieved_at` |
 | `discount` | Once per tier achievement | ✅ Yes | `user.tier_achieved_at` |
 
-**Validation SQL:**
+---
 
-```sql
--- For gift_card, physical_gift, experience (Once Forever)
-SELECT COUNT(*) FROM redemptions
-WHERE user_id = $userId
-  AND reward_id = $rewardId
-  AND created_at >= (SELECT created_at FROM users WHERE id = $userId);
--- Must return 0 to allow claim
+### Response Schema
 
--- For commission_boost, spark_ads, discount (Once Per Tier)
-SELECT COUNT(*) FROM redemptions
-WHERE user_id = $userId
-  AND reward_id = $rewardId
-  AND created_at >= (SELECT tier_achieved_at FROM users WHERE id = $userId);
--- Must return 0 to allow claim
-```
+```typescript
+interface ClaimRewardResponse {
+  success: boolean
+  message: string  // User-facing success message
 
-**Monthly/Weekly Redemption Validation:**
+  // Created redemption record
+  redemption: {
+    id: string                        // UUID of created redemption
+    status: 'claimed'                 // Always "claimed" immediately after claim
+    rewardType: 'gift_card' | 'commission_boost' | 'discount' | 'spark_ads' | 'physical_gift' | 'experience'
+    claimedAt: string                 // ISO 8601 timestamp
 
-```sql
--- Calculate period based on redemption_frequency
--- See Rewards.md Section 6.3 for period calculation logic
+    // Reward details (for confirmation display)
+    reward: {
+      id: string
+      name: string                    // e.g., "$25 Gift Card", "5% Commission Boost"
+      displayText: string             // Pre-formatted: "+5% Pay boost for 30 Days"
+      type: string
+      valueData: {
+        amount?: number               // For gift_card, spark_ads
+        percent?: number              // For commission_boost, discount
+        durationDays?: number         // For commission_boost, discount (converted from duration_minutes)
+        couponCode?: string           // For discount
+        maxUses?: number              // For discount
+      } | null
+    }
 
-SELECT COUNT(*) FROM redemptions
-WHERE user_id = $userId
-  AND reward_id = $rewardId
-  AND created_at >= $period_start
-  AND created_at < $period_end;
+    // Scheduling info (only present for discount, commission_boost)
+    scheduledActivationAt?: string    // ISO 8601 timestamp
 
--- Compare count to reward.redemption_quantity
--- If count >= redemption_quantity, reject claim
-```
+    // Updated usage tracking
+    usedCount: number                 // New count after this claim
+    totalQuantity: number             // From reward.redemption_quantity
 
-### Response
-
-**Success (201 Created):**
-```json
-{
-  "redemption": {
-    "id": "redemption-uuid",
-    "user_id": "user-uuid",
-    "reward_id": "reward-uuid",
-    "status": "pending",
-    "claimed_at": "2025-01-11T10:30:00Z",
-    "fulfilled_at": null
+    // Next steps (UI hints based on reward type)
+    nextSteps: {
+      action: 'wait_fulfillment' | 'shipping_confirmation' | 'scheduled_confirmation'
+      message: string                 // User-facing instruction
+    }
   }
+
+  // Updated rewards list (for UI refresh)
+  updatedRewards: Array<{
+    id: string
+    status: string                    // Updated status after claim
+    canClaim: boolean                 // Updated claimability
+    usedCount: number                 // Updated count
+  }>
 }
 ```
 
-**Error (400 Bad Request - Already Claimed):**
+### Response Examples
+
+**Success - Gift Card Claimed:**
 ```json
 {
-  "error": "ALREADY_CLAIMED",
-  "message": "You have already claimed this one-time reward",
-  "redemption_type": "once_forever"
+  "success": true,
+  "message": "Gift card claimed! You'll receive your reward soon.",
+  "redemption": {
+    "id": "redemption-abc-123",
+    "status": "claimed",
+    "rewardType": "gift_card",
+    "claimedAt": "2025-01-14T15:30:00Z",
+    "reward": {
+      "id": "reward-giftcard-25",
+      "name": "$25 Amazon Gift Card",
+      "displayText": "$25 Gift Card",
+      "type": "gift_card",
+      "valueData": {
+        "amount": 25
+      }
+    },
+    "usedCount": 1,
+    "totalQuantity": 2,
+    "nextSteps": {
+      "action": "wait_fulfillment",
+      "message": "Your gift card is being processed. You'll receive an email when it's ready!"
+    }
+  },
+  "updatedRewards": [
+    {
+      "id": "reward-giftcard-25",
+      "status": "redeeming",
+      "canClaim": false,
+      "usedCount": 1
+    }
+  ]
 }
 ```
 
-**Error (403 Forbidden - Tier Mismatch):**
+**Success - Commission Boost Scheduled:**
 ```json
 {
-  "error": "TIER_INELIGIBLE",
-  "message": "This reward requires Gold tier. You are currently Silver."
+  "success": true,
+  "message": "Commission boost scheduled to activate on Jan 20 at 6:00 PM ET",
+  "redemption": {
+    "id": "redemption-boost-456",
+    "status": "claimed",
+    "rewardType": "commission_boost",
+    "claimedAt": "2025-01-14T15:30:00Z",
+    "reward": {
+      "id": "reward-boost-10pct",
+      "name": "10% Commission Boost",
+      "displayText": "+10% Pay boost for 30 Days",
+      "type": "commission_boost",
+      "valueData": {
+        "percent": 10,
+        "durationDays": 30
+      }
+    },
+    "scheduledActivationAt": "2025-01-20T23:00:00Z",
+    "usedCount": 1,
+    "totalQuantity": 3,
+    "nextSteps": {
+      "action": "scheduled_confirmation",
+      "message": "Your boost will activate automatically at 6 PM ET on Jan 20!"
+    }
+  },
+  "updatedRewards": [
+    {
+      "id": "reward-boost-10pct",
+      "status": "scheduled",
+      "canClaim": false,
+      "usedCount": 1
+    }
+  ]
 }
 ```
 
-**Error (400 Bad Request - Limit Reached):**
+**Success - Physical Gift Claimed:**
+```json
+{
+  "success": true,
+  "message": "Hoodie claimed! We'll ship it to your address soon.",
+  "redemption": {
+    "id": "redemption-hoodie-789",
+    "status": "claimed",
+    "rewardType": "physical_gift",
+    "claimedAt": "2025-01-14T15:30:00Z",
+    "reward": {
+      "id": "reward-hoodie",
+      "name": "Branded Hoodie",
+      "displayText": "Win a Branded Hoodie",
+      "type": "physical_gift",
+      "valueData": null
+    },
+    "usedCount": 1,
+    "totalQuantity": 1,
+    "nextSteps": {
+      "action": "shipping_confirmation",
+      "message": "Your shipping info has been received. We'll send tracking details via email!"
+    }
+  },
+  "updatedRewards": [
+    {
+      "id": "reward-hoodie",
+      "status": "redeeming_physical",
+      "canClaim": false,
+      "usedCount": 1
+    }
+  ]
+}
+```
+
+---
+
+### Error Responses
+
+**400 Bad Request - Active Claim Exists:**
+```json
+{
+  "error": "ACTIVE_CLAIM_EXISTS",
+  "message": "You already have an active claim for this reward. Wait for it to be fulfilled before claiming again.",
+  "activeRedemptionId": "redemption-xyz-123",
+  "activeRedemptionStatus": "claimed"
+}
+```
+
+**400 Bad Request - Limit Reached:**
 ```json
 {
   "error": "LIMIT_REACHED",
-  "message": "You have reached the redemption limit for this reward (2 of 2 used this month)"
+  "message": "You have reached the redemption limit for this reward (2 of 2 used this month)",
+  "usedCount": 2,
+  "totalQuantity": 2,
+  "redemptionFrequency": "monthly"
+}
+```
+
+**400 Bad Request - Missing Scheduled Date:**
+```json
+{
+  "error": "SCHEDULING_REQUIRED",
+  "message": "This reward requires a scheduled activation date",
+  "rewardType": "discount"
+}
+```
+
+**400 Bad Request - Invalid Schedule (Weekend):**
+```json
+{
+  "error": "INVALID_SCHEDULE",
+  "message": "Discounts can only be scheduled on weekdays (Monday-Friday)",
+  "allowedDays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+}
+```
+
+**400 Bad Request - Invalid Time Slot:**
+```json
+{
+  "error": "INVALID_TIME_SLOT",
+  "message": "Discounts must be scheduled between 9 AM - 4 PM EST",
+  "allowedHours": "09:00 - 16:00 EST"
+}
+```
+
+**400 Bad Request - Missing Shipping Info:**
+```json
+{
+  "error": "SHIPPING_INFO_REQUIRED",
+  "message": "Physical gifts require shipping information",
+  "rewardType": "physical_gift"
+}
+```
+
+**400 Bad Request - Missing Size:**
+```json
+{
+  "error": "SIZE_REQUIRED",
+  "message": "This item requires a size selection",
+  "sizeOptions": ["S", "M", "L", "XL"]
+}
+```
+
+**400 Bad Request - Invalid Size:**
+```json
+{
+  "error": "INVALID_SIZE_SELECTION",
+  "message": "Selected size is not available for this item",
+  "selectedSize": "XXL",
+  "availableSizes": ["S", "M", "L", "XL"]
+}
+```
+
+**403 Forbidden - Tier Mismatch:**
+```json
+{
+  "error": "TIER_INELIGIBLE",
+  "message": "This reward requires Gold tier. You are currently Silver.",
+  "requiredTier": "tier_3",
+  "currentTier": "tier_2"
+}
+```
+
+**404 Not Found:**
+```json
+{
+  "error": "REWARD_NOT_FOUND",
+  "message": "Reward not found or not available for your tier"
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "CLAIM_FAILED",
+  "message": "Failed to process reward claim. Please try again or contact support."
 }
 ```
 
@@ -2486,9 +3485,15 @@ WHERE mission_id = $missionId
 
 ---
 
-**Document Version:** 1.3
-**Last Updated:** 2025-01-14 (Missions page API contracts added)
-**Next Review:** After remaining page contracts defined (Rewards, Tiers, Auth)
+**Document Version:** 1.5
+**Last Updated:** 2025-01-18 (Rewards page API contracts complete with all validations)
+**Changelog:**
+- v1.5: Fixed all validation issues (3 critical + 4 minor improvements)
+- v1.4.1: Resolved critical schema mismatches (discount duration, missing fields)
+- v1.4: Added Rewards page API contracts
+- v1.3: Added Missions page API contracts
+**Validation Status:** ✅ 100% Schema Alignment (SchemaFinalv2.md)
+**Next Review:** After remaining page contracts defined (Rewards History, Tiers, Auth)
 
 ---
 

@@ -1,10 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
+
+// US States for dropdown
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+]
 
 export interface ShippingAddress {
   shipping_address_line1: string
@@ -22,6 +32,7 @@ interface ValidationErrors {
   shipping_state?: string
   shipping_postal_code?: string
   shipping_country?: string
+  shipping_phone?: string
 }
 
 interface ShippingAddressFormProps {
@@ -31,17 +42,34 @@ interface ShippingAddressFormProps {
 }
 
 export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: ShippingAddressFormProps) {
+  // TODO (API Integration): Add support for saved shipping addresses
+  // When implementing the claim API endpoint, consider:
+  // 1. Fetching user's previously saved shipping address (if exists)
+  // 2. Pre-populating form fields via initialData prop
+  // 3. Adding "Use saved address" checkbox/option
+  // 4. Allowing users to update their default shipping address
+  // Reference: physical_gift_redemptions table schema in SchemaFinalv2.md
+
+  const firstInputRef = useRef<HTMLInputElement>(null)
+
   const [formData, setFormData] = useState<ShippingAddress>({
     shipping_address_line1: initialData?.shipping_address_line1 || "",
     shipping_address_line2: initialData?.shipping_address_line2 || "",
     shipping_city: initialData?.shipping_city || "",
     shipping_state: initialData?.shipping_state || "",
     shipping_postal_code: initialData?.shipping_postal_code || "",
-    shipping_country: initialData?.shipping_country || "USA",
+    shipping_country: "USA", // US-only, locked
     shipping_phone: initialData?.shipping_phone || "",
   })
 
   const [errors, setErrors] = useState<ValidationErrors>({})
+
+  // Autofocus first field when form mounts
+  useEffect(() => {
+    if (!isSubmitting) {
+      firstInputRef.current?.focus()
+    }
+  }, [isSubmitting])
 
   const validateField = (name: keyof ShippingAddress, value: string): string | undefined => {
     switch (name) {
@@ -71,6 +99,11 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
         if (value.length > 100) return "Country must be 100 characters or less"
         return undefined
 
+      case "shipping_phone":
+        if (!value.trim()) return "Phone number is required"
+        if (value.length > 50) return "Phone number must be 50 characters or less"
+        return undefined
+
       default:
         return undefined
     }
@@ -81,6 +114,15 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
     setFormData(prev => ({ ...prev, [name]: value }))
 
     // Clear error when user starts typing
+    if (errors[name as keyof ValidationErrors]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }))
+    }
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }))
+
+    // Clear error when user selects
     if (errors[name as keyof ValidationErrors]) {
       setErrors(prev => ({ ...prev, [name]: undefined }))
     }
@@ -104,7 +146,8 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
       "shipping_city",
       "shipping_state",
       "shipping_postal_code",
-      "shipping_country"
+      "shipping_country",
+      "shipping_phone"
     ]
 
     requiredFields.forEach(field => {
@@ -132,6 +175,7 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
     formData.shipping_state.trim() !== "" &&
     formData.shipping_postal_code.trim() !== "" &&
     formData.shipping_country.trim() !== "" &&
+    formData.shipping_phone.trim() !== "" &&
     Object.keys(errors).length === 0
 
   return (
@@ -142,6 +186,7 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
           Street Address <span className="text-red-500">*</span>
         </Label>
         <Input
+          ref={firstInputRef}
           id="shipping_address_line1"
           name="shipping_address_line1"
           type="text"
@@ -161,13 +206,13 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
       {/* Address Line 2 - Optional */}
       <div className="space-y-2">
         <Label htmlFor="shipping_address_line2" className="text-sm font-medium text-slate-700">
-          Apartment, Suite, Unit (Optional)
+          Apartment, Suite, Unit <span className="text-slate-500">(Optional)</span>
         </Label>
         <Input
           id="shipping_address_line2"
           name="shipping_address_line2"
           type="text"
-          placeholder="Apt 4B"
+          placeholder="Apt, Suite, Unit, etc."
           value={formData.shipping_address_line2}
           onChange={handleChange}
           disabled={isSubmitting}
@@ -199,23 +244,30 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
       {/* State and Postal Code - Grid */}
       <div className="grid grid-cols-2 gap-4">
-        {/* State - Required */}
+        {/* State - Required (Dropdown) */}
         <div className="space-y-2">
           <Label htmlFor="shipping_state" className="text-sm font-medium text-slate-700">
             State <span className="text-red-500">*</span>
           </Label>
-          <Input
-            id="shipping_state"
-            name="shipping_state"
-            type="text"
-            placeholder="NY"
+          <Select
             value={formData.shipping_state}
-            onChange={handleChange}
-            onBlur={handleBlur}
+            onValueChange={(value) => handleSelectChange("shipping_state", value)}
             disabled={isSubmitting}
-            className={errors.shipping_state ? "border-red-500" : ""}
-            maxLength={100}
-          />
+          >
+            <SelectTrigger
+              id="shipping_state"
+              className={errors.shipping_state ? "border-red-500" : ""}
+            >
+              <SelectValue placeholder="Select state" />
+            </SelectTrigger>
+            <SelectContent>
+              {US_STATES.map((state) => (
+                <SelectItem key={state} value={state}>
+                  {state}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.shipping_state && (
             <p className="text-sm text-red-500">{errors.shipping_state}</p>
           )}
@@ -244,7 +296,7 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
         </div>
       </div>
 
-      {/* Country - Required */}
+      {/* Country - US Only (Read-only) */}
       <div className="space-y-2">
         <Label htmlFor="shipping_country" className="text-sm font-medium text-slate-700">
           Country <span className="text-red-500">*</span>
@@ -253,22 +305,20 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
           id="shipping_country"
           name="shipping_country"
           type="text"
-          value={formData.shipping_country}
-          onChange={handleChange}
-          onBlur={handleBlur}
-          disabled={isSubmitting}
-          className={errors.shipping_country ? "border-red-500" : ""}
-          maxLength={100}
+          value="USA"
+          readOnly
+          disabled
+          className="bg-slate-100 cursor-not-allowed"
         />
-        {errors.shipping_country && (
-          <p className="text-sm text-red-500">{errors.shipping_country}</p>
-        )}
+        <p className="text-xs text-slate-500">
+          Currently shipping to USA only
+        </p>
       </div>
 
-      {/* Phone - Optional */}
+      {/* Phone - Required */}
       <div className="space-y-2">
         <Label htmlFor="shipping_phone" className="text-sm font-medium text-slate-700">
-          Phone Number (Optional)
+          Phone Number <span className="text-red-500">*</span>
         </Label>
         <Input
           id="shipping_phone"
@@ -277,11 +327,16 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
           placeholder="(555) 123-4567"
           value={formData.shipping_phone}
           onChange={handleChange}
+          onBlur={handleBlur}
           disabled={isSubmitting}
+          className={errors.shipping_phone ? "border-red-500" : ""}
           maxLength={50}
         />
+        {errors.shipping_phone && (
+          <p className="text-sm text-red-500">{errors.shipping_phone}</p>
+        )}
         <p className="text-xs text-slate-500">
-          We'll only use this if there are delivery questions
+          For delivery notifications and questions
         </p>
       </div>
 

@@ -551,6 +551,8 @@ CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility,
 | claimed_at | TIMESTAMP | | redemptions | When creator clicked "Claim" | |
 | scheduled_activation_date | DATE | | redemptions | Date to activate | For discounts and commission boosts |
 | scheduled_activation_time | TIME | | redemptions | Time in EST to activate | Discounts: 9 AM-4 PM EST, Boosts: 6 PM EST |
+| activation_date | TIMESTAMP | | redemptions | When discount/boost activated | Set when status='fulfilled' for discounts (cron job activates at scheduled time) |
+| expiration_date | TIMESTAMP | | redemptions | When discount/boost expires | For discounts: activation_date + duration_minutes, For boosts: see commission_boost_redemptions.expires_at |
 | google_calendar_event_id | VARCHAR(255) | | redemptions | Calendar reminder link | For scheduled rewards |
 | fulfilled_at | TIMESTAMP | | redemptions | When admin marked fulfilled | |
 | fulfilled_by | UUID | REFERENCES users(id) | redemptions | Which admin fulfilled | |
@@ -596,6 +598,8 @@ CREATE INDEX idx_redemptions_status ON redemptions(status);
 CREATE INDEX idx_redemptions_tenant ON redemptions(client_id, user_id, status);
 CREATE INDEX idx_redemptions_scheduled ON redemptions(scheduled_activation_date, scheduled_activation_time)
   WHERE scheduled_activation_date IS NOT NULL;
+CREATE INDEX idx_redemptions_active_period ON redemptions(user_id, status, activation_date, expiration_date)
+  WHERE activation_date IS NOT NULL AND expiration_date IS NOT NULL; -- Query active discounts/boosts
 CREATE INDEX idx_redemptions_active ON redemptions(user_id, status, deleted_at)
   WHERE deleted_at IS NULL; -- Efficient queries for active (non-deleted) rewards
 ```

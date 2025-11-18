@@ -491,8 +491,8 @@ See SchemaFinal.md commission_boost_state_history table for audit trail and Loya
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='scheduled'` |
 | **3** | User claims & schedules activation time slot<br>(9 AM - 4 PM EST, weekdays) | - | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set<br>`scheduled_activation_date` set<br>`scheduled_activation_time` set |
-| **4** | Discount activates (at scheduled time)<br>System action: Discount code becomes active for TikTok shop | - | `value_data.coupon_code` activated<br>`value_data.percent`<br>`value_data.duration_minutes` | `status='completed'` | `status='fulfilled'`<br>`fulfilled_at` set |
-| **5** | Discount expires (after duration_minutes) OR max_uses reached | - | `value_data.duration_minutes` elapsed<br>OR `value_data.max_uses` reached | `status='completed'` | `status='concluded'`<br>`concluded_at` set |
+| **4** | Discount activates (at scheduled time)<br>System action: Discount code becomes active for TikTok shop | - | `value_data.coupon_code` activated<br>`value_data.percent`<br>`value_data.duration_minutes` | `status='completed'` | `status='fulfilled'`<br>`fulfilled_at` set<br>`activation_date` set<br>`expiration_date` calculated (activation_date + duration_minutes) |
+| **5** | Discount expires (after duration_minutes) OR max_uses reached | - | `value_data.duration_minutes` elapsed<br>OR `value_data.max_uses` reached | `status='completed'` | `status='concluded'`<br>`concluded_at` set<br>`NOW() >= expiration_date` |
 
 ---
 
@@ -519,7 +519,9 @@ See SchemaFinal.md commission_boost_state_history table for audit trail and Loya
 #### redemptions (Reward Claim Status)
 - `mission_progress_id` - Links to mission_progress.id (which mission completion created this redemption)
 - `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
-- `scheduled_activation_date` - When discount activates
+- `scheduled_activation_date` - When discount activates (date only)
 - `scheduled_activation_time` - Time slot (9 AM - 4 PM EST, weekdays only)
+- `activation_date` - Actual activation timestamp (set when cron job activates discount)
+- `expiration_date` - Calculated expiration timestamp (activation_date + duration_minutes)
 
-**NOTE:** Discount has NO sub-state table. All scheduling info stored in main redemptions table.
+**NOTE:** Discount has NO sub-state table. All scheduling and activation tracking stored in main redemptions table.

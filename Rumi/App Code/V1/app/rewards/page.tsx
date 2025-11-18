@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/pagelayout";
 import { ScheduleDiscountModal } from "@/components/schedule-discount-modal";
 import { SchedulePayboostModal } from "@/components/schedule-payboost-modal";
+import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -36,6 +37,8 @@ export default function RewardsPage() {
       const [selectedDiscount, setSelectedDiscount] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
       const [showPayboostModal, setShowPayboostModal] = useState(false);
       const [selectedPayboost, setSelectedPayboost] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
+      const [showPhysicalGiftModal, setShowPhysicalGiftModal] = useState(false);
+      const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null);
       const [userTimezone, setUserTimezone] = useState<string>("America/New_York");
       const [isClient, setIsClient] = useState(false);
 
@@ -67,6 +70,13 @@ export default function RewardsPage() {
             durationDays: benefit.value_data?.duration_days || 30,
           })
           setShowPayboostModal(true)
+          return
+        }
+
+        // If physical gift type, open physical gift claim modal
+        if (benefit.type === "physical_gift") {
+          setSelectedPhysicalGift(benefit)
+          setShowPhysicalGiftModal(true)
           return
         }
 
@@ -164,6 +174,12 @@ export default function RewardsPage() {
             duration: 5000,
           })
         }
+      }
+
+      const handlePhysicalGiftSuccess = () => {
+        console.log("[v0] Physical gift claimed successfully")
+        // TODO: Refresh benefits data from API
+        // For now, the modal handles success toast
       }
 
       // Custom Gift Drop SVG icon
@@ -437,7 +453,7 @@ export default function RewardsPage() {
             type: "physical_gift",
             name: "Gift Drop: Headphones 123",
             description: "Wireless earbuds",
-            value_data: null,
+            value_data: { requires_size: false }, // Flow 1: Just shipping address
             tier_eligibility: "tier_3",
             redemption_frequency: "one-time",
             redemption_quantity: 1,
@@ -450,9 +466,13 @@ export default function RewardsPage() {
           {
             id: "b11",
             type: "physical_gift",
-            name: "Gift Drop: Headphones 123",
-            description: "Wireless earbuds",
-            value_data: null,
+            name: "Gift Drop: Hoodie",
+            description: "Premium branded hoodie",
+            value_data: {
+              requires_size: true,
+              size_category: "clothing",
+              size_options: ["S", "M", "L", "XL"]
+            }, // Flow 2: Size selection → shipping address
             tier_eligibility: "tier_3",
             redemption_frequency: "one-time",
             redemption_quantity: 1,
@@ -460,15 +480,14 @@ export default function RewardsPage() {
             can_claim: true,
             is_locked: false,
             preview_from_tier: null,
-            status: "claimed", // Claimed
-            shipping_city: "New York", // Shipping info set - triggers Sending status
+            status: "claimable", // Claimable - will show "Claim" button
           },
           {
             id: "b12",
             type: "physical_gift",
             name: "Gift Drop: AirPods Pro",
             description: "Premium earbuds",
-            value_data: null,
+            value_data: { requires_size: false },
             tier_eligibility: "tier_3",
             redemption_frequency: "one-time",
             redemption_quantity: 1,
@@ -476,7 +495,23 @@ export default function RewardsPage() {
             can_claim: true,
             is_locked: false,
             preview_from_tier: null,
-            status: "claimed", // Claimed but no shipping info yet - triggers Redeeming status
+            status: "claimed", // Claimed but no shipping info yet - triggers Redeeming Physical status
+          },
+          {
+            id: "b13",
+            type: "physical_gift",
+            name: "Gift Drop: Smart Watch",
+            description: "Fitness tracker",
+            value_data: { requires_size: false },
+            tier_eligibility: "tier_3",
+            redemption_frequency: "one-time",
+            redemption_quantity: 1,
+            used_count: 0,
+            can_claim: true,
+            is_locked: false,
+            preview_from_tier: null,
+            status: "claimed", // Claimed with shipping info - triggers Sending status
+            shipping_city: "Los Angeles", // Shipping info set
           },
         ],
       };
@@ -625,7 +660,7 @@ export default function RewardsPage() {
                             {getIconForBenefitType(benefit.type)}
                             <div>
                               <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-semibold text-slate-900">
+                                <h4 className="text-base font-semibold text-slate-900">
                                   {getBenefitName(benefit.type, benefit.name, benefit.description)}
                                 </h4>
                                 {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
@@ -635,7 +670,7 @@ export default function RewardsPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-600">
+                              <p className="text-sm text-slate-600">
                                 {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
                               </p>
 
@@ -700,7 +735,7 @@ export default function RewardsPage() {
                             {benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
                               <Button
                                 onClick={() => handleRedeemClick(benefit)}
-                                className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-sm px-4 py-2 rounded-lg font-medium"
+                                className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-xs px-4 py-2 rounded-lg font-medium"
                               >
                                 {(benefit.type === "discount" || benefit.type === "commission_boost") ? "Schedule" : "Claim"}
                               </Button>
@@ -847,6 +882,21 @@ export default function RewardsPage() {
               onConfirm={handleSchedulePayboost}
               boostPercent={selectedPayboost.percent}
               durationDays={selectedPayboost.durationDays}
+            />
+          )}
+
+          {/* Physical Gift Claim Modal */}
+          {selectedPhysicalGift && (
+            <ClaimPhysicalGiftModal
+              open={showPhysicalGiftModal}
+              onOpenChange={(open) => {
+                setShowPhysicalGiftModal(open)
+                if (!open) {
+                  setSelectedPhysicalGift(null)
+                }
+              }}
+              reward={selectedPhysicalGift}
+              onSuccess={handlePhysicalGiftSuccess}
             />
           )}
         </PageLayout>
