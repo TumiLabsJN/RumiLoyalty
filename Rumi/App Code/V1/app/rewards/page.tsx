@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import type { RewardsPageResponse, Reward, RewardStatus } from "@/types/rewards";
 import {
   Trophy,
   History,
@@ -16,12 +17,14 @@ import {
   Calendar,
   CheckCircle2,
   Truck,
+  CircleDollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/pagelayout";
 import { ScheduleDiscountModal } from "@/components/schedule-discount-modal";
 import { SchedulePayboostModal } from "@/components/schedule-payboost-modal";
 import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal";
+import { PaymentInfoModal } from "@/components/payment-info-modal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -39,6 +42,8 @@ export default function RewardsPage() {
       const [selectedPayboost, setSelectedPayboost] = useState<{ id: string; percent: number; durationDays: number } | null>(null);
       const [showPhysicalGiftModal, setShowPhysicalGiftModal] = useState(false);
       const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null);
+      const [showPaymentInfoModal, setShowPaymentInfoModal] = useState(false);
+      const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
       const [userTimezone, setUserTimezone] = useState<string>("America/New_York");
       const [isClient, setIsClient] = useState(false);
 
@@ -48,15 +53,15 @@ export default function RewardsPage() {
         setIsClient(true);
       }, []);
 
-      const handleRedeemClick = async (benefit: any) => {
+      const handleRedeemClick = async (benefit: Reward) => {
         console.log("[v0] Redeem clicked for benefit:", benefit.id)
 
         // If discount type, open discount scheduling modal
         if (benefit.type === "discount") {
           setSelectedDiscount({
             id: benefit.id,
-            percent: benefit.value_data?.percent || 0,
-            durationDays: benefit.value_data?.duration_days || 30,
+            percent: benefit.valueData?.percent || 0,
+            durationDays: benefit.valueData?.durationDays || 30,
           })
           setShowScheduleModal(true)
           return
@@ -66,8 +71,8 @@ export default function RewardsPage() {
         if (benefit.type === "commission_boost") {
           setSelectedPayboost({
             id: benefit.id,
-            percent: benefit.value_data?.percent || 0,
-            durationDays: benefit.value_data?.duration_days || 30,
+            percent: benefit.valueData?.percent || 0,
+            durationDays: benefit.valueData?.durationDays || 30,
           })
           setShowPayboostModal(true)
           return
@@ -82,8 +87,8 @@ export default function RewardsPage() {
 
         // For other reward types, claim immediately
         try {
-          // TODO: POST /api/benefits/:id/claim
-          // Backend will update benefit.status to 'claimed'
+          // TODO: POST /api/rewards/:id/claim
+          // Backend will update reward.status to 'redeeming'
           // This will trigger the "Pending" badge to appear
           await new Promise(resolve => setTimeout(resolve, CLAIM_DELAY_MS))
 
@@ -102,8 +107,8 @@ export default function RewardsPage() {
         console.log("[v0] Schedule discount for:", selectedDiscount.id, scheduledDate.toISOString())
 
         try {
-          // TODO: POST /api/benefits/:id/claim
-          // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
+          // TODO: POST /api/rewards/:id/claim
+          // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
 
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
@@ -142,8 +147,8 @@ export default function RewardsPage() {
         console.log("[v0] Schedule payboost for:", selectedPayboost.id, scheduledDate.toISOString())
 
         try {
-          // TODO: POST /api/benefits/:id/claim
-          // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
+          // TODO: POST /api/rewards/:id/claim
+          // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
 
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
@@ -180,6 +185,12 @@ export default function RewardsPage() {
         console.log("[v0] Physical gift claimed successfully")
         // TODO: Refresh benefits data from API
         // For now, the modal handles success toast
+      }
+
+      const handlePaymentInfoSuccess = () => {
+        console.log("[v0] Payment info submitted successfully")
+        // TODO: Refresh benefits data from API
+        // Status should change from "pending_info" to "clearing"
       }
 
       // Custom Gift Drop SVG icon
@@ -302,233 +313,254 @@ export default function RewardsPage() {
       };
 
       /**
-       * TEST DATA - Minimal scenario for flip card testing
-       * Full test scenarios available in /home/jorge/Loyalty/Rumi/RewardsTestScenarios.md
+       * MOCK DATA - All 9 reward statuses for testing
+       * Follows API_CONTRACTS.md v1.5 structure
        */
-      const testData = {
-        currentTier: "tier_3",
+      const mockData: RewardsPageResponse = {
+        user: {
+          id: "user-123",
+          handle: "creator_jane",
+          currentTier: "tier_3",
+          currentTierName: "Gold",
+          currentTierColor: "#F59E0B"
+        },
         redemptionCount: 5,
-        benefits: [
+        rewards: [
+          // Status 1: Clearing
           {
-            id: "b1",
+            id: "reward-clearing-1",
             type: "commission_boost",
-            name: "Pay Boost: 5%",
-            description: "More commission for 30 days",
-            value_data: { percent: 5, duration_days: 30 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 3,
-            used_count: 1,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed",
-            boost_status: "pending_payout",  // For testing flip card
+            name: "5% Pay Boost",
+            description: "",
+            displayText: "Higher earnings (30d)",
+            valueData: { percent: 5, durationDays: 30 },
+            status: "clearing",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 3,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 1,
+            statusDetails: { clearingDays: 15 },
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
           },
+          // Status 2: Sending
           {
-            id: "b2",
-            type: "gift_card",
-            name: "Gift Card: $50",
-            description: "Redeem for Amazon gift card",
-            value_data: { amount: 50 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 2,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable",
-          },
-          {
-            id: "b3",
-            type: "commission_boost",
-            name: "Pay Boost: 10%",
-            description: "More commission for 30 days",
-            value_data: { percent: 10, duration_days: 30 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 3,
-            used_count: 1,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable",  // Changed to claimable for testing schedule modal
-          },
-          {
-            id: "b4",
-            type: "discount",
-            name: "Deal Boost: 15%",
-            description: "Earn a discount for your viewers",
-            value_data: { percent: 15, duration_days: 7 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 2,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed",
-            scheduled_activation_date: new Date("2025-01-20T14:30:00-05:00"), // Jan 20 at 2:30 PM EST
-          },
-          {
-            id: "b5",
-            type: "commission_boost",
-            name: "Pay Boost: 10%",
-            description: "More commission for 30 days",
-            value_data: { percent: 10, duration_days: 30 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 3,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed",
-            activation_date: new Date("2025-11-01T18:00:00-05:00"), // Nov 1 at 6:00 PM EST (in the past)
-            expiration_date: new Date("2025-11-30T18:00:00-05:00"),  // Nov 30 at 6:00 PM EST (in the future)
-          },
-          {
-            id: "b6",
-            type: "spark_ads",
-            name: "Ads Boost: $50",
-            description: "Spark Ads promo",
-            value_data: { duration_days: 7 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable",
-          },
-          {
-            id: "b7",
-            type: "experience",
-            name: "VIP Creator Event",
-            description: "Exclusive meetup",
-            value_data: null,
-            tier_eligibility: "tier_3",
-            redemption_frequency: "one-time",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable",
-          },
-          {
-            id: "b8",
-            type: "gift_card",
-            name: "Gift Card: $25",
-            description: "Redeem for Amazon gift card",
-            value_data: { amount: 25 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 2,
-            used_count: 1,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed", // Claimed but not yet fulfilled - triggers Redeeming status
-          },
-          {
-            id: "b9",
-            type: "discount",
-            name: "Deal Boost: 20%",
-            description: "Follower discount",
-            value_data: { percent: 20, duration_days: 7 },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "monthly",
-            redemption_quantity: 2,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable", // Claimable - will show "Schedule" button
-          },
-          {
-            id: "b10",
+            id: "reward-sending-1",
             type: "physical_gift",
-            name: "Gift Drop: Headphones 123",
-            description: "Wireless earbuds",
-            value_data: { requires_size: false }, // Flow 1: Just shipping address
-            tier_eligibility: "tier_3",
-            redemption_frequency: "one-time",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable", // Claimable - will show "Claim" button
+            name: "Gift Drop: Headphones",
+            description: "Headphones",
+            displayText: "Premium wireless earbuds",
+            valueData: { requiresSize: false, displayText: "Premium wireless earbuds" },
+            status: "sending",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 2,
+            statusDetails: { shippingCity: "Los Angeles" },
+            redemptionFrequency: "one-time",
+            redemptionType: "instant"
           },
+          // Status 3: Active
           {
-            id: "b11",
+            id: "reward-active-1",
+            type: "discount",
+            name: "15% Deal Boost",
+            description: "",
+            displayText: "Follower Discount (7d)",
+            valueData: {
+              percent: 15,
+              durationDays: 7,
+              couponCode: "GOLD15",
+              maxUses: 100
+            },
+            status: "active",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 2,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 3,
+            statusDetails: {
+              activationDate: "Jan 10, 2025",
+              expirationDate: "Jan 17, 2025",
+              daysRemaining: 3
+            },
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
+          },
+          // Status 4: Pending Info (NEW)
+          {
+            id: "reward-pending-info-1",
+            type: "commission_boost",
+            name: "5% Pay Boost",
+            description: "",
+            displayText: "Higher earnings (30d)",
+            valueData: { percent: 5, durationDays: 30 },
+            status: "pending_info",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 3,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 4,
+            statusDetails: null,
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
+          },
+          // Status 5: Scheduled
+          {
+            id: "reward-scheduled-1",
+            type: "commission_boost",
+            name: "10% Pay Boost",
+            description: "",
+            displayText: "Higher earnings (30d)",
+            valueData: { percent: 10, durationDays: 30 },
+            status: "scheduled",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 2,
+            totalQuantity: 3,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 5,
+            statusDetails: {
+              scheduledDate: "Jan 20, 2025 at 6:00 PM",
+              scheduledDateRaw: "2025-01-20T23:00:00Z"
+            },
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
+          },
+          // Status 6: Redeeming Physical
+          {
+            id: "reward-redeeming-physical-1",
             type: "physical_gift",
             name: "Gift Drop: Hoodie",
-            description: "Premium branded hoodie",
-            value_data: {
-              requires_size: true,
-              size_category: "clothing",
-              size_options: ["S", "M", "L", "XL"]
-            }, // Flow 2: Size selection → shipping address
-            tier_eligibility: "tier_3",
-            redemption_frequency: "one-time",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimable", // Claimable - will show "Claim" button
+            description: "Hoodie",
+            displayText: "Premium branded hoodie",
+            valueData: {
+              requiresSize: true,
+              sizeCategory: "clothing",
+              sizeOptions: ["S", "M", "L", "XL"],
+              displayText: "Premium branded hoodie"
+            },
+            status: "redeeming_physical",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 0,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 6,
+            statusDetails: null,
+            redemptionFrequency: "one-time",
+            redemptionType: "instant"
           },
+          // Status 7: Redeeming
           {
-            id: "b12",
-            type: "physical_gift",
-            name: "Gift Drop: AirPods Pro",
-            description: "Premium earbuds",
-            value_data: { requires_size: false },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "one-time",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed", // Claimed but no shipping info yet - triggers Redeeming Physical status
+            id: "reward-redeeming-1",
+            type: "gift_card",
+            name: "$50 Gift Card",
+            description: "",
+            displayText: "$50 Amazon Gift Card",
+            valueData: { amount: 50 },
+            status: "redeeming",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 2,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 7,
+            statusDetails: null,
+            redemptionFrequency: "monthly",
+            redemptionType: "instant"
           },
+          // Status 8: Claimable (Experience example)
           {
-            id: "b13",
-            type: "physical_gift",
-            name: "Gift Drop: Smart Watch",
-            description: "Fitness tracker",
-            value_data: { requires_size: false },
-            tier_eligibility: "tier_3",
-            redemption_frequency: "one-time",
-            redemption_quantity: 1,
-            used_count: 0,
-            can_claim: true,
-            is_locked: false,
-            preview_from_tier: null,
-            status: "claimed", // Claimed with shipping info - triggers Sending status
-            shipping_city: "Los Angeles", // Shipping info set
+            id: "reward-claimable-1",
+            type: "experience",
+            name: "Mystery Trip",
+            description: "Mystery Trip",
+            displayText: "A hidden adventure",
+            valueData: { displayText: "A hidden adventure" },
+            status: "claimable",
+            canClaim: true,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 0,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 8,
+            statusDetails: null,
+            redemptionFrequency: "one-time",
+            redemptionType: "instant"
           },
-        ],
+          // Status 9: Limit Reached
+          {
+            id: "reward-limit-reached-1",
+            type: "spark_ads",
+            name: "$100 Ads Boost",
+            description: "",
+            displayText: "Spark Ads Promo",
+            valueData: { amount: 100 },
+            status: "limit_reached",
+            canClaim: false,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 1,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 9,
+            statusDetails: null,
+            redemptionFrequency: "one-time",
+            redemptionType: "instant"
+          },
+          // Status 10: Locked
+          {
+            id: "reward-locked-1",
+            type: "gift_card",
+            name: "$200 Gift Card",
+            description: "",
+            displayText: "$200 Amazon Gift Card",
+            valueData: { amount: 200 },
+            status: "locked",
+            canClaim: false,
+            isLocked: true,
+            isPreview: true,
+            usedCount: 0,
+            totalQuantity: 1,
+            tierEligibility: "tier_4",
+            requiredTierName: "Platinum",
+            displayOrder: 10,
+            statusDetails: null,
+            redemptionFrequency: "monthly",
+            redemptionType: "instant"
+          }
+        ]
       };
 
-      const currentTier = testData.currentTier;
-      const redemptionCount = testData.redemptionCount;
-      const benefits = testData.benefits;
+      const { user, redemptionCount, rewards } = mockData;
 
-      // Tier colors (matches VIP level)
-      const tierColors = {
-        tier_1: "#CD7F32", // Bronze
-        tier_2: "#94a3b8", // Silver
-        tier_3: "#F59E0B", // Gold
-        tier_4: "#818CF8", // Platinum
-      };
-
-      const currentTierColor = tierColors[currentTier as keyof typeof tierColors];
+      // Get current tier info from user object
+      const currentTier = user.currentTier;
+      const currentTierColor = user.currentTierColor;
 
       /**
        * All benefits from backend API (GET /api/benefits)
@@ -549,32 +581,8 @@ export default function RewardsPage() {
        * - preview_from_tier: Tier that can preview this benefit (NULL = only eligible tier sees it)
        */
 
-      // Frontend filtering and sorting: Show benefits user can see
-      const displayBenefits = benefits
-        .filter((benefit) => {
-          // Show if user's tier matches tier_eligibility (EXACT match)
-          if (benefit.tier_eligibility === currentTier) return true
-
-          // OR show if locked but within preview range
-          if (benefit.is_locked && benefit.preview_from_tier) {
-            const tierLevels = { tier_1: 1, tier_2: 2, tier_3: 3, tier_4: 4 };
-            const currentLevel = tierLevels[currentTier as keyof typeof tierLevels];
-            const previewLevel = tierLevels[benefit.preview_from_tier as keyof typeof tierLevels];
-            return currentLevel >= previewLevel
-          }
-
-          return false
-        })
-        .sort((a, b) => {
-          // Ineligible = locked OR can't claim (limit reached)
-          const aIsIneligible = a.is_locked || !a.can_claim;
-          const bIsIneligible = b.is_locked || !b.can_claim;
-
-          // Sort: Eligible first, ineligible last
-          if (aIsIneligible && !bIsIneligible) return 1;
-          if (!aIsIneligible && bIsIneligible) return -1;
-          return 0;
-        });
+      // Backend already filters and sorts rewards - just use directly
+      const displayBenefits = rewards;
 
       return (
         <PageLayout
@@ -594,52 +602,27 @@ export default function RewardsPage() {
           {/* Benefit Cards */}
           <div className="space-y-3">
             {displayBenefits.map((benefit) => {
-              // Get tier display name for locked badge
-              const requiredTierName = getTierDisplayName(benefit.tier_eligibility);
+              // Get tier display name for locked badge (using requiredTierName from backend)
+              const requiredTierName = benefit.requiredTierName || getTierDisplayName(benefit.tierEligibility);
 
-              // Check if this is a commission boost in clearing status
-              const isClearing = benefit.type === "commission_boost" &&
-                                benefit.status === "claimed" &&
-                                benefit.boost_status === "pending_payout";
-
-              // Check if this is a scheduled benefit (discount or commission boost)
-              const isScheduled = benefit.status === "claimed" &&
-                                 benefit.scheduled_activation_date &&
-                                 (benefit.type === "discount" || benefit.type === "commission_boost");
-
-              // Check if this is an active benefit (discount or commission boost currently running)
-              const isActive = benefit.status === "claimed" &&
-                              benefit.activation_date &&
-                              benefit.expiration_date &&
-                              (benefit.type === "discount" || benefit.type === "commission_boost") &&
-                              new Date() >= new Date(benefit.activation_date) &&
-                              new Date() <= new Date(benefit.expiration_date);
-
-              // Check if this is a sending benefit (physical_gift with shipping info set)
-              const isSending = benefit.type === "physical_gift" &&
-                               benefit.status === "claimed" &&
-                               benefit.shipping_city; // shipping_city is set when shipping info collected
-
-              // Check if this is a redeeming physical gift (claimed but no shipping info yet) - NOT flippable
-              const isRedeemingPhysical = benefit.type === "physical_gift" &&
-                                         benefit.status === "claimed" &&
-                                         !benefit.shipping_city;
-
-              // Check if this is a redeeming benefit (claimed but not clearing/scheduled/active/sending/physical)
-              const isRedeeming = benefit.status === "claimed" &&
-                                 !isClearing &&
-                                 !isScheduled &&
-                                 !isActive &&
-                                 !isSending &&
-                                 !isRedeemingPhysical &&
-                                 benefit.type !== "physical_gift"; // Exclude physical gifts from flippable redeeming
+              // Trust backend's computed status - no client-side derivation needed
+              const isClearing = benefit.status === "clearing";
+              const isScheduled = benefit.status === "scheduled";
+              const isActive = benefit.status === "active";
+              const isPendingInfo = benefit.status === "pending_info";
+              const isSending = benefit.status === "sending";
+              const isRedeemingPhysical = benefit.status === "redeeming_physical";
+              const isRedeeming = benefit.status === "redeeming";
+              const isLimitReached = benefit.status === "limit_reached";
+              const isLocked = benefit.status === "locked";
 
               const cardClass = cn(
                 "relative flex items-center justify-between p-4 rounded-lg border min-h-[88px]",
                 (isActive || isSending) && "bg-green-50 border-green-200",
-                !isActive && !isSending && benefit.can_claim && !benefit.is_locked && "bg-slate-50 border-slate-200",
-                !isActive && !isSending && !benefit.can_claim && !benefit.is_locked && "bg-amber-50 border-amber-200",
-                benefit.is_locked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
+                (isClearing || isScheduled) && "bg-slate-50 border-slate-200",
+                !isActive && !isSending && !isClearing && !isScheduled && benefit.canClaim && !benefit.isLocked && "bg-slate-50 border-slate-200",
+                !isActive && !isSending && !isClearing && !isScheduled && !benefit.canClaim && !benefit.isLocked && "bg-amber-50 border-amber-200",
+                benefit.isLocked && "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
               );
 
               return (
@@ -649,7 +632,7 @@ export default function RewardsPage() {
                       <FlipFrontSide>
                         <div className={cardClass}>
                           {/* INFO ICON: Positioned in upper right corner for flippable cards */}
-                          {(isClearing || isScheduled || isActive || isSending || isRedeeming) && !isRedeemingPhysical && (
+                          {(isClearing || isScheduled || isActive || isPendingInfo || isSending || isRedeeming) && !isRedeemingPhysical && (
                             <div className="absolute top-0.5 right-0.5">
                               <FlipInfoButton onClick={flip} />
                             </div>
@@ -661,20 +644,20 @@ export default function RewardsPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h4 className="text-base font-semibold text-slate-900">
-                                  {getBenefitName(benefit.type, benefit.name, benefit.description)}
+                                  {benefit.name}
                                 </h4>
-                                {/* Show "X/Y" counter only for multiple-use benefits (redemption_quantity > 1) */}
-                                {benefit.redemption_quantity && benefit.redemption_quantity > 1 && !benefit.is_locked && (
+                                {/* Show "X/Y" counter only for multiple-use benefits (totalQuantity > 1) */}
+                                {benefit.totalQuantity > 1 && !benefit.isLocked && (
                                   <span className="text-xs text-slate-500 font-medium">
-                                    {benefit.used_count}/{benefit.redemption_quantity}
+                                    {benefit.usedCount}/{benefit.totalQuantity}
                                   </span>
                                 )}
                               </div>
                               <p className="text-sm text-slate-600">
-                                {getBenefitDescription(benefit.type, benefit.description, benefit.value_data)}
+                                {benefit.displayText}
                               </p>
 
-                              {!benefit.can_claim && !benefit.is_locked && (
+                              {isLimitReached && (
                                 <p className="text-xs text-amber-600 font-medium mt-1">Limit reached</p>
                               )}
                             </div>
@@ -696,6 +679,19 @@ export default function RewardsPage() {
                                 <Calendar className="h-4 w-4 text-purple-500" />
                                 Scheduled
                               </div>
+                            )}
+
+                            {/* STATUS BADGE: Pending Payment Info (Commission Boost) */}
+                            {isPendingInfo && (
+                              <Button
+                                onClick={() => {
+                                  setSelectedReward(benefit)
+                                  setShowPaymentInfoModal(true)
+                                }}
+                                className="bg-white border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50 text-xs px-4 py-2 rounded-lg font-medium"
+                              >
+                                Add Info
+                              </Button>
                             )}
 
                             {/* STATUS BADGE: Active (Discount or Commission Boost Currently Running) */}
@@ -730,9 +726,8 @@ export default function RewardsPage() {
                               </div>
                             )}
 
-                            {/* STATUS BADGE: Default Claim - Action button shows "Claim" */}
-                            {/* STATUS BADGE: Default Schedule - Action button shows "Schedule" */}
-                            {benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
+                            {/* STATUS BADGE: Default Claim - Action button shows "Claim" or "Schedule" */}
+                            {benefit.canClaim && !benefit.isLocked && benefit.status === "claimable" && (
                               <Button
                                 onClick={() => handleRedeemClick(benefit)}
                                 className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 text-xs px-4 py-2 rounded-lg font-medium"
@@ -742,14 +737,14 @@ export default function RewardsPage() {
                             )}
 
                             {/* STATUS BADGE: Limit Reached */}
-                            {!benefit.can_claim && !benefit.is_locked && benefit.status !== "claimed" && (
+                            {isLimitReached && (
                               <div className="bg-slate-100 text-slate-500 px-3 py-2 rounded-lg text-xs font-medium">
                                 Limit Reached
                               </div>
                             )}
 
                             {/* STATUS BADGE: Locked (Tier-Locked) */}
-                            {benefit.is_locked && (
+                            {isLocked && (
                               <div className="flex flex-col items-center gap-1">
                                 <Lock className="h-4 w-4 text-slate-400" />
                                 <span className="text-xs text-slate-500 font-medium">{requiredTierName}</span>
@@ -778,11 +773,11 @@ export default function RewardsPage() {
                               <div className="flex items-center gap-2 mb-1">
                                 <Calendar className="h-4 w-4 text-purple-500" />
                                 <p className="text-xs font-semibold text-purple-700">
-                                  {formatScheduledDateTime(benefit.scheduled_activation_date, benefit.type)}
+                                  {benefit.statusDetails?.scheduledDate || "Scheduled"}
                                 </p>
                               </div>
                               <p className="text-xs text-slate-600">
-                                Will be active for {benefit.value_data?.duration_days || 30} days
+                                Will be active for {benefit.valueData?.durationDays || 30} days
                               </p>
                             </div>
                           </div>
@@ -797,16 +792,33 @@ export default function RewardsPage() {
                               <div className="flex items-center gap-2 mb-1">
                                 <p className="text-xs text-slate-600">Started:</p>
                                 <p className="text-xs font-semibold text-green-700">
-                                  {formatScheduledDateTime(benefit.activation_date, benefit.type)}
+                                  {benefit.statusDetails?.activationDate || "Active"}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
                                 <p className="text-xs text-slate-600">Expires:</p>
                                 <p className="text-xs font-semibold text-green-700">
-                                  {formatScheduledDateTime(benefit.expiration_date, benefit.type)}
+                                  {benefit.statusDetails?.expirationDate || "Soon"}
                                 </p>
                               </div>
+                              {benefit.statusDetails?.daysRemaining !== undefined && (
+                                <p className="text-xs text-slate-600 mt-1">
+                                  {benefit.statusDetails.daysRemaining} days remaining
+                                </p>
+                              )}
                             </div>
+                          </div>
+                        </FlipBackSide>
+                      )}
+
+                      {/* BACK SIDE: Pending Info explanation */}
+                      {isPendingInfo && (
+                        <FlipBackSide onClick={flipBack}>
+                          <div className="flex items-center justify-center gap-2 p-4 rounded-lg border bg-yellow-50 border-yellow-200 min-h-[88px]">
+                            <p className="text-sm text-yellow-700 font-medium leading-snug text-center">
+                              Set up your payout info
+                            </p>
+                            <CircleDollarSign className="h-5 w-5 text-yellow-600" />
                           </div>
                         </FlipBackSide>
                       )}
@@ -897,6 +909,22 @@ export default function RewardsPage() {
               }}
               reward={selectedPhysicalGift}
               onSuccess={handlePhysicalGiftSuccess}
+            />
+          )}
+
+          {/* Payment Info Modal */}
+          {selectedReward && (
+            <PaymentInfoModal
+              open={showPaymentInfoModal}
+              onOpenChange={(open) => {
+                setShowPaymentInfoModal(open)
+                if (!open) {
+                  setSelectedReward(null)
+                }
+              }}
+              rewardId={selectedReward.id}
+              rewardName={selectedReward.name}
+              onSuccess={handlePaymentInfoSuccess}
             />
           )}
         </PageLayout>

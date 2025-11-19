@@ -432,7 +432,7 @@ for (const mp of missionProgress) {
 ### Key Attributes by Table
 
 #### missions (Mission Config)
-- `mission_type` - 'sales_dollars', 'sales_units', 'videos', 'views', 'likes'
+- `mission_type` - 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
 - `target_value` - Goal to achieve
 - `reward_id` - Points to commission_boost reward
 

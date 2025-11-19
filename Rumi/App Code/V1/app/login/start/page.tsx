@@ -1,10 +1,11 @@
 "use client"
 
-  import { Button } from "@/components/ui/button"
-  import { Input } from "@/components/ui/input"
-  import { AuthLayout } from "@/components/authlayout"
-  import { useState } from "react"
-  import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { AuthLayout } from "@/components/authlayout"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import type { CheckHandleRequest, CheckHandleResponse, AuthErrorResponse } from "@/types/auth"
 
   /**
    * LOGIN PAGE - Creator Authentication
@@ -27,9 +28,11 @@
    * - Max 30 characters
    */
 
-  export default function LoginPage() {
-    const router = useRouter()
-    const [handle, setHandle] = useState("")
+export default function LoginPage() {
+  const router = useRouter()
+  const [handle, setHandle] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
     // Frontend validation: Remove @ symbol if user types it
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,26 +42,44 @@
       setHandle(sanitized)
     }
 
-    const handleContinue = () => {
-      if (handle.trim()) {
-        console.log("TikTok handle:", `@${handle}`)
+  const handleContinue = async () => {
+    if (!handle.trim()) return
 
-        // TEST FLOW: Check if handle is "Test" (recognized user)
-        const isRecognized = handle.toLowerCase() === "test"
+    setIsLoading(true)
+    setError(null)
 
-        // Store user type in sessionStorage for later use
-        sessionStorage.setItem("userType", isRecognized ? "recognized" : "unrecognized")
-        sessionStorage.setItem("userHandle", handle)
+    try {
+      // Call check-handle API (API_CONTRACTS.md lines 34-181)
+      const response = await fetch('/api/auth/check-handle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle } satisfies CheckHandleRequest)
+      })
 
-        // Route to signup page for both flows
-        router.push("/login/signup")
-
-        // TODO: In production, send to backend for validation
-        // Backend will check if handle exists in users table (tiktok_handle column)
-        // API endpoint: POST /api/auth/validate-handle
-        // Request body: { handle: "@username" }
+      if (!response.ok) {
+        const errorData = (await response.json()) as AuthErrorResponse
+        throw new Error(errorData.message || 'Failed to validate handle')
       }
+
+      const data = (await response.json()) as CheckHandleResponse
+
+      // Store normalized handle for next steps
+      sessionStorage.setItem("userHandle", data.handle)
+
+      // Route based on API response
+      if (data.route === 'login') {
+        router.push("/login/wb")      // User has email → password login
+      } else {
+        router.push("/login/signup")  // No email OR new user → signup flow
+      }
+
+    } catch (err) {
+      console.error('Handle check failed:', err)
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
+  }
 
     // ============================================
     // DYNAMIC DATA - Replace with backend values
@@ -109,6 +130,13 @@
 
           {/* Helper text */}
           <p className="text-xs text-slate-500 mt-2">Without the @ symbol</p>
+
+          {/* Error message */}
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
         </div>
 
         {/* Continue Button */}
@@ -116,11 +144,10 @@
           {/* Static: Continue button */}
           <Button
             onClick={handleContinue}
-            disabled={!handle.trim()}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50
-  disabled:cursor-not-allowed"
+            disabled={!handle.trim() || isLoading}
+            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Continue
+            {isLoading ? 'Checking...' : 'Continue'}
           </Button>
         </div>
       </AuthLayout>

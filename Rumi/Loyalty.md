@@ -55,11 +55,12 @@ Loyalty program platform for content creators based on TikTok video performance 
 - **Multi-tenant ready:** Single codebase, client_id isolation via RLS policies
 - **LLM-optimized:** Stack chosen for Claude Code generation efficiency
 - **Daily automation:** Single cron job (sequential execution) for data sync + tier calculation
-  - Runs at 3:00 PM EST daily (`"schedule": "0 19 * * *"`) - 7:00 PM UTC
+  - Runs at 6:00 PM EST daily (`"schedule": "0 23 * * *"`) - 11:00 PM UTC
   - Data updates once per day (24-hour max delay)
   - Performance: ~2 minutes total at 1000 creators
+  - **Timing rationale:** Aligns with commission boost activation time for accurate sales snapshots
   - **MVP rationale:** Start simple, validate with user feedback, then optimize if needed
-  - **Easy upgrade path:** Change 1 line in vercel.json to go hourly (`"0 20 * * *"`) - no code changes required
+  - **Easy upgrade path:** Change 1 line in vercel.json to go hourly - no code changes required
   - **Cost:** ~$0.10/month (daily) vs $2.40/month (hourly) - staying efficient during validation phase
   - **Validation triggers:** Upgrade to hourly if >10% support tickets about delays, user requests, or 500+ creators
 
@@ -79,7 +80,7 @@ Loyalty program platform for content creators based on TikTok video performance 
                  │ ① Daily CSV Download
                  │    (Puppeteer automation)
                  │    videos.csv
-                 │    Midnight UTC
+                 │    6 PM EST / 11 PM UTC
                  ▼
 ┌─────────────────────────────────────────────────┐
 │  Next.js Application                            │
@@ -122,732 +123,71 @@ Loyalty program platform for content creators based on TikTok video performance 
 - See [Data Flows](#data-flows) section below for detailed processing steps
 
 ### Architecture - Schema
-- Multi-tenant database architecture (single client for MVP)
-- Uptk automation script (daily sync)
-- **Daily checkpoint processor:** Evaluates tier maintenance, handles promotions/demotions
-- Row Level Security (RLS) for data isolation
-- Downgrade notification system (email alerts when tier is lost)
-```sql
--- Clients table (future-proofing for multi-tenant)
-CREATE TABLE clients (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  subdomain VARCHAR(100) UNIQUE, -- For future: 'clientx.loyaltyapp.com'
 
-  -- Branding
-  logo_url TEXT, -- Supabase Storage URL for login screen logo (required for go-live)
-  primary_color VARCHAR(7) DEFAULT '#6366f1', -- Global header color for all screens
-  default_country VARCHAR(100) DEFAULT 'USA', -- Default country for physical gift shipping
-
-  -- Tier calculation settings (future-proofing)
-  tier_calculation_mode VARCHAR(50) DEFAULT 'lifetime',
-    -- Values: 'lifetime' (Phase 1), 'fixed_checkpoint' (Future)
-
-  -- Checkpoint duration (same for all non-Bronze tiers, but calculated per user)
-  checkpoint_months INTEGER DEFAULT 4, -- Each user gets 4-month period starting from their tier_achieved_at
-    -- Example: User A reaches Gold on Jan 15 → checkpoint on May 15
-    --          User B reaches Gold on Feb 3 → checkpoint on Jun 3
-    -- NOT calendar-based (users don't all reset on same day)
-
-  -- VIP tier progression metric
-  vip_metric VARCHAR(20) NOT NULL DEFAULT 'sales',
-    -- Values: 'sales' (revenue $$$) or 'units' (volume #)
-    -- Determines how tier thresholds are measured and checkpoint evaluations calculated
-    -- Immutable after client launch (no migration tooling in MVP)
-    -- CHECK constraint enforces valid values
-
-  -- Note: Tier thresholds, names, colors now stored in 'tiers' table (see line 1740)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CHECK (vip_metric IN ('sales', 'units'))
-);
-
--- MVP: Insert single client row (checkpoint mode enabled by default)
-INSERT INTO clients (name, subdomain, tier_calculation_mode)
-VALUES ('Your Company', 'main', 'fixed_checkpoint');
-
--- Users table (content creators)
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Primary identifier (from Cruva CSV)
-  tiktok_handle VARCHAR(100) NOT NULL,
-
-  -- Authentication (collected on first login)
-  email VARCHAR(255), -- NULLABLE - added when creator first logs in
-  email_verified BOOLEAN DEFAULT false,
-  is_admin BOOLEAN DEFAULT false, -- Admin role flag (security)
-
-  -- Current tier status
-  current_tier VARCHAR(50) DEFAULT 'tier_1',
-
-  -- Checkpoint tracking (for fixed_checkpoint mode)
-  -- NOTE: These fields track the user's CURRENT checkpoint period (updates when tier changes)
-  -- mission_progress table uses SNAPSHOTS of these values (checkpoint_start/checkpoint_end)
-  tier_achieved_at TIMESTAMP, -- When did they reach current tier? (Start of current checkpoint period)
-                              -- mission_progress.checkpoint_start references this value as a snapshot
-  next_checkpoint_at TIMESTAMP, -- When is their next evaluation? (End of current checkpoint period)
-                                -- mission_progress.checkpoint_end references this value as a snapshot
-  checkpoint_sales_target DECIMAL(10, 2), -- Sales needed to maintain tier (sales mode)
-  checkpoint_units_target INTEGER, -- Units needed to maintain tier (units mode)
-
-  -- Precomputed fields (updated daily during midnight sync for performance)
-  -- Leaderboard
-  leaderboard_rank INTEGER,
-  total_sales DECIMAL(10, 2) DEFAULT 0, -- Lifetime sales for sorting in sales mode
-  total_units INTEGER DEFAULT 0, -- Lifetime units for sorting in units mode
-  manual_adjustments_total DECIMAL(10, 2) DEFAULT 0, -- Sum of manual sales adjustments (for transparency)
-  manual_adjustments_units INTEGER DEFAULT 0, -- Sum of manual unit adjustments (for units mode)
-
-  -- Checkpoint progress
-  checkpoint_sales_current DECIMAL(10, 2) DEFAULT 0, -- Sales in current checkpoint period (sales mode)
-  checkpoint_units_current INTEGER DEFAULT 0, -- Units in current checkpoint period (units mode)
-  projected_tier_at_checkpoint VARCHAR(50),
-
-  -- Checkpoint period engagement metrics
-  checkpoint_videos_posted INTEGER DEFAULT 0,
-  checkpoint_total_views BIGINT DEFAULT 0,
-  checkpoint_total_likes BIGINT DEFAULT 0,
-  checkpoint_total_comments BIGINT DEFAULT 0,
-
-  -- Next tier information
-  next_tier_name VARCHAR(50),
-  next_tier_threshold DECIMAL(10, 2), -- Sales threshold for next tier (sales mode)
-  next_tier_threshold_units INTEGER, -- Units threshold for next tier (units mode)
-
-  -- Last checkpoint result (historical)
-  checkpoint_progress_updated_at TIMESTAMP,
-
-  -- Metadata
-  first_video_date TIMESTAMP, -- When first appeared in Cruva
-  last_login_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  UNIQUE(client_id, tiktok_handle), -- Handle unique per client
-  UNIQUE(client_id, email) -- Email unique per client (when provided)
-);
-
-CREATE INDEX idx_users_tiktok_handle ON users(tiktok_handle);
-CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
-CREATE INDEX idx_users_leaderboard_rank ON users(leaderboard_rank) WHERE leaderboard_rank IS NOT NULL;
-CREATE INDEX idx_users_total_sales ON users(total_sales DESC);
-
--- Videos table (per-video analytics from videos.csv)
-CREATE TABLE videos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
-
-  -- Video identifiers
-  video_url TEXT UNIQUE NOT NULL,
-  video_title TEXT,
-  post_date DATE NOT NULL,
-
-  -- Engagement metrics
-  views INTEGER DEFAULT 0,
-  likes INTEGER DEFAULT 0,
-  comments INTEGER DEFAULT 0,
-
-  -- Sales metrics
-  gmv DECIMAL(10, 2) DEFAULT 0, -- GMV per video
-  ctr DECIMAL(5, 2), -- Click-through rate
-  units_sold INTEGER DEFAULT 0,
-
-  -- Sync metadata
-  sync_date TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_videos_user_id ON videos(user_id);
-CREATE INDEX idx_videos_post_date ON videos(post_date);
-CREATE INDEX idx_videos_user_postdate ON videos(user_id, post_date);
-CREATE UNIQUE INDEX idx_videos_url ON videos(video_url);
-
--- Rewards table (configurable rewards per client)
-CREATE TABLE rewards (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Reward details
-  type VARCHAR(100) NOT NULL, -- 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
-  name VARCHAR(255), -- Auto-generated from type + value_data (Section 2 decision)
-  description VARCHAR(15), -- User-facing display for physical_gift/experience only (e.g., "VIP Event Access")
-                           -- NULL for other reward types (gift_card, commission_boost, spark_ads, discount)
-                           -- Also used for raffle prize display (max 15 chars)
-
-  -- Value storage (Section 3: Smart Hybrid approach)
-  value_data JSONB, -- JSON for structured data (percent, amount, duration_days)
-    -- Examples:
-    -- commission_boost: {"percent": 5, "duration_days": 30}
-    -- spark_ads: {"amount": 100}
-    -- gift_card: {"amount": 50}
-    -- discount: {"percent": 10, "duration_days": 7}
-    -- physical_gift/experience: Uses description VARCHAR(15) instead
-
-  -- Tier targeting (Section 8)
-  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6' (exact match)
-
-  -- Visibility controls
-  enabled BOOLEAN DEFAULT false,
-  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: NULL = only eligible tier, 'tier_1' = Bronze+ can preview as locked
-
-  -- Redemption limits (Section 6: Numeric quantities)
-  redemption_frequency VARCHAR(50) DEFAULT 'unlimited', -- 'one-time', 'monthly', 'weekly', 'unlimited'
-  redemption_quantity INTEGER DEFAULT 1, -- How many times claimable per frequency period (1-10)
-    -- Examples:
-    -- {redemption_quantity: 2, redemption_frequency: 'monthly'} = 2 per month
-    -- {redemption_quantity: 1, redemption_frequency: 'one-time'} = once (forever for gift_card/physical_gift/experience, per tier for commission_boost/spark_ads/discount)
-    -- {redemption_quantity: NULL, redemption_frequency: 'unlimited'} = unlimited
-
-  -- Redemption process type (hardcoded per reward type in MVP)
-  redemption_type VARCHAR(50) NOT NULL DEFAULT 'instant', -- 'instant' or 'scheduled'
-    -- instant: gift_card, spark_ads, physical_gift, experience
-    -- scheduled: commission_boost, discount (creator/system schedules activation time)
-
-  expires_days INTEGER, -- NULL = no expiration
-  display_order INTEGER, -- For admin UI sorting
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Validation: description required for physical_gift/experience only
-  CHECK (
-    (type IN ('physical_gift', 'experience') AND description IS NOT NULL AND LENGTH(description) <= 15) OR
-    (type NOT IN ('physical_gift', 'experience') AND description IS NULL)
-  )
-
-  -- Constraints
-  CONSTRAINT check_quantity_with_frequency CHECK (
-    (redemption_frequency = 'unlimited' AND redemption_quantity IS NULL) OR
-    (redemption_frequency != 'unlimited' AND redemption_quantity >= 1 AND redemption_quantity <= 10)
-  ),
-  CONSTRAINT check_preview_tier CHECK (
-    preview_from_tier IS NULL OR
-    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  )
-);
-
--- Redemptions table (edge case handling)
-CREATE TABLE redemptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  reward_id UUID REFERENCES rewards(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
-  mission_progress_id UUID REFERENCES mission_progress(id),  -- Link to mission completion (NULL for VIP tier rewards)
-
-  -- Status tracking
-  status VARCHAR(50) DEFAULT 'claimable', -- Options: 'claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'
-    -- 'claimable': Mission completed, reward ready to claim
-    -- 'claimed': Creator claimed, pending admin fulfillment
-    -- 'fulfilled': Admin completed fulfillment
-    -- 'concluded': Fulfillment finalized, moves to history
-    -- 'rejected': Raffle non-winner (bulk rejected by admin)
-
-  -- Eligibility snapshot (locked at claim time)
-  tier_at_claim VARCHAR(50) NOT NULL, -- tier_1/tier_2/tier_3/tier_4 when creator clicked "Claim"
-  claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
-
-  -- Redemption type (instant vs scheduled)
-  redemption_type VARCHAR(50) NOT NULL, -- 'instant' or 'scheduled'
-
-  -- Scheduling (for scheduled rewards: commission_boost, discount)
-  scheduled_activation_date DATE, -- Calendar date to activate
-  scheduled_activation_time TIME, -- Time in EST to activate (Discounts: 9 AM-4 PM EST, Boosts: 6 PM EST)
-  google_calendar_event_id VARCHAR(255), -- Google Calendar event ID for admin reminders
-
-  -- Fulfillment tracking
-  fulfilled_at TIMESTAMP, -- When admin marked as fulfilled
-  fulfilled_by UUID REFERENCES users(id), -- Which admin fulfilled
-  fulfillment_notes TEXT, -- Admin's fulfillment details (gift card codes, activation notes, etc.)
-
-  -- Rejection tracking (for raffle non-winners)
-  rejection_reason TEXT, -- Why redemption was rejected (e.g., "Raffle entry - not selected as winner")
-  rejected_at TIMESTAMP, -- When admin rejected
-  rejected_by UUID REFERENCES users(id), -- Which admin rejected
-
-  -- Conclusion tracking
-  concluded_at TIMESTAMP, -- When reward lifecycle finalized
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CHECK (redemption_type IN ('instant', 'scheduled')),
-  CHECK (status IN ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected')),
-  CHECK (
-    (scheduled_activation_date IS NULL AND scheduled_activation_time IS NULL) OR
-    (scheduled_activation_date IS NOT NULL AND scheduled_activation_time IS NOT NULL)
-  ),
-
-  -- Composite unique constraint for sub-state table foreign keys
-  UNIQUE (id, client_id)  -- Allows redemptions(id, client_id) to be referenced by composite FKs
-);
-
--- Commission Boost Redemptions (Sub-State for commission_boost rewards)
-CREATE TABLE commission_boost_redemptions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  redemption_id UUID NOT NULL UNIQUE REFERENCES redemptions(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
-
-  -- Lifecycle state (6 states)
-  boost_status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-    -- 'scheduled': Boost scheduled, not yet active
-    -- 'active': Boost running, tracking sales
-    -- 'expired': Boost period ended, calculating payout
-    -- 'pending_info': Waiting for creator to submit payment info
-    -- 'pending_payout': Payment info collected, admin needs to pay
-    -- 'paid': Final state, payout completed
-
-  -- Date tracking
-  scheduled_activation_date DATE NOT NULL,  -- Date to activate
-  activated_at TIMESTAMP,  -- Actual activation time (6 PM EST)
-  expires_at TIMESTAMP,  -- activated_at + duration_days
-  duration_days INTEGER NOT NULL DEFAULT 30,  -- Boost duration (from reward config, locked at claim)
-
-  -- Commission rates (locked at claim time)
-  boost_rate DECIMAL(5,2) NOT NULL,  -- Commission boost percentage (e.g., 5.00 = 5%)
-  tier_commission_rate DECIMAL(5,2),  -- Tier base rate (for display purposes, locked at claim)
-
-  -- Sales tracking
-  sales_at_activation DECIMAL(10,2),  -- GMV at D0
-  sales_at_expiration DECIMAL(10,2),  -- GMV at DX
-  sales_delta DECIMAL(10,2) GENERATED ALWAYS AS (GREATEST(0, sales_at_expiration - sales_at_activation)) STORED,  -- Calculated delta (auto-calculated)
-
-  -- Payout calculation
-  calculated_commission DECIMAL(10,2),  -- Auto-calculated payout (sales_delta * boost_rate)
-  admin_adjusted_commission DECIMAL(10,2),  -- Manual adjustment (if admin edits payout)
-  final_payout_amount DECIMAL(10,2),  -- Final amount to pay (calculated or adjusted)
-
-  -- Payment info
-  payment_method VARCHAR(20),  -- Options: 'venmo', 'paypal'
-  payment_account VARCHAR(255),  -- Venmo handle or PayPal email
-  payment_account_confirm VARCHAR(255),  -- Double-entry verification (must match)
-  payment_info_collected_at TIMESTAMP,  -- When user submitted
-  payment_info_confirmed BOOLEAN DEFAULT false,  -- Verification flag
-
-  -- Payout tracking
-  payout_sent_at TIMESTAMP,  -- When payment sent
-  payout_sent_by UUID REFERENCES users(id),  -- Which admin sent payment
-  payout_notes TEXT,  -- Admin notes (transaction ID, etc.)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CHECK (boost_status IN ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid')),
-  CHECK (payment_method IN ('venmo', 'paypal') OR payment_method IS NULL),
-  CHECK (payment_account = payment_account_confirm OR payment_account IS NULL),
-
-  -- Composite FK to enforce client_id matching with parent redemption
-  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
-);
-
-CREATE INDEX idx_commission_boost_redemption ON commission_boost_redemptions(redemption_id);
-CREATE INDEX idx_commission_boost_status ON commission_boost_redemptions(boost_status);
-CREATE INDEX idx_commission_boost_expiration ON commission_boost_redemptions(expires_at) WHERE boost_status IN ('scheduled', 'active');
-CREATE INDEX idx_commission_boost_tenant ON commission_boost_redemptions(client_id, boost_status);
-
--- Physical Gift Redemptions (Sub-State for physical_gift rewards)
-CREATE TABLE physical_gift_redemptions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  redemption_id UUID NOT NULL UNIQUE REFERENCES redemptions(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
-
-  -- Size information (for clothing/shoes only)
-  requires_size BOOLEAN DEFAULT false,           -- Does this gift require size selection?
-  size_category VARCHAR(50),                     -- 'clothing', 'shoes', NULL
-  size_value VARCHAR(20),                        -- 'S', 'M', 'L', 'XL', '8', '9.5', etc.
-  size_submitted_at TIMESTAMP,                   -- When user submitted size info
-
-  -- Shipping information
-  shipping_name VARCHAR(255),
-  shipping_address_line1 VARCHAR(255),
-  shipping_address_line2 VARCHAR(255),
-  shipping_city VARCHAR(100),
-  shipping_state VARCHAR(50),
-  shipping_postal_code VARCHAR(20),
-  shipping_country VARCHAR(100) DEFAULT 'USA',
-  shipping_phone VARCHAR(50),
-  shipping_info_collected_at TIMESTAMP,
-
-  -- Fulfillment tracking
-  tracking_number VARCHAR(255),
-  carrier VARCHAR(50),                           -- 'FedEx', 'UPS', 'USPS', 'DHL'
-  shipped_at TIMESTAMP,
-  delivered_at TIMESTAMP,
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CHECK (
-    (requires_size = false) OR
-    (requires_size = true AND size_category IS NOT NULL AND size_value IS NOT NULL)
-  ),
-
-  -- Composite FK to enforce client_id matching with parent redemption
-  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
-);
-
-CREATE INDEX idx_physical_gift_redemption ON physical_gift_redemptions(redemption_id);
-CREATE INDEX idx_physical_gift_shipped ON physical_gift_redemptions(shipped_at) WHERE shipped_at IS NOT NULL;
-
--- Missions table (Section 4: Mode 3 - Task completion rewards)
-CREATE TABLE missions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Mission details
-  title VARCHAR(255) NOT NULL, -- Admin internal reference only (not shown to creators)
-  display_name VARCHAR(255) NOT NULL, -- User-facing mission name (e.g., "Unlock Payday", "Lights, Camera, Go!", "Road to Viral", "Eyes on You", "Lucky Ticket")
-  description TEXT, -- Admin-only notes (NEVER shown to creators, internal use only)
-                    -- For raffle user-facing text, use rewards.name via reward_id FK
-
-  -- Mission type & target (Section 7)
-  mission_type VARCHAR(50) NOT NULL, -- 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
-  target_value INTEGER NOT NULL, -- 500 (sales), 10 (videos), 0 (raffle - no progress tracking)
-
-  -- Reward
-  reward_id UUID NOT NULL REFERENCES rewards(id), -- What they unlock when complete
-
-  -- Tier eligibility (Section 8)
-  tier_eligibility VARCHAR(50) NOT NULL, -- 'tier_1' through 'tier_6', or 'all'
-    -- Controls which tier can participate in mission
-    -- Combined with preview_from_tier, controls visibility
-
-  -- Raffle-specific (Section 4: Mode 4)
-  raffle_end_date TIMESTAMP NULL, -- ONLY for raffles (any reward type)
-    -- Regular missions use checkpoint as deadline
-    -- Raffles use custom end date for winner selection
-    -- Raffles typically use physical_gift/experience but can use any reward type
-    -- Raffle prize name comes from rewards.name (via reward_id FK)
-
-  -- Visibility controls
-  enabled BOOLEAN DEFAULT true,
-  activated BOOLEAN DEFAULT false, -- For raffles only: false = dormant, true = accepting entries
-    -- Regular missions (sales, videos, views, likes): Ignored (always behave as activated)
-    -- Raffle missions: Start dormant (false), admin manually activates to accept entries
-  preview_from_tier VARCHAR(50) DEFAULT NULL, -- Section 5: Locked mission visibility
-  display_order INTEGER NOT NULL, -- Sequential unlock position (1, 2, 3...)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  CONSTRAINT check_raffle_requirements CHECK (
-    (mission_type != 'raffle') OR
-    (mission_type = 'raffle' AND raffle_end_date IS NOT NULL AND target_value = 0)
-  ),
-  CONSTRAINT check_non_raffle_fields CHECK (
-    (mission_type = 'raffle') OR
-    (mission_type != 'raffle' AND raffle_end_date IS NULL)
-  ),
-  CONSTRAINT check_tier_eligibility CHECK (
-    tier_eligibility = 'all' OR
-    tier_eligibility IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  ),
-  CONSTRAINT check_preview_tier_missions CHECK (
-    preview_from_tier IS NULL OR
-    preview_from_tier IN ('tier_1', 'tier_2', 'tier_3', 'tier_4', 'tier_5', 'tier_6')
-  ),
-  -- Enforce unique display order per tier+type (prevents conflicts in sequential unlock)
-  UNIQUE(client_id, tier_eligibility, mission_type, display_order)
-);
-
--- Mission progress tracking
-CREATE TABLE mission_progress (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  mission_id UUID REFERENCES missions(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
-
-  -- Progress tracking
-  current_value INTEGER DEFAULT 0, -- Current progress (e.g., $350 out of $500)
-  status VARCHAR(50) DEFAULT 'active', -- Options: 'dormant', 'active', 'completed'
-    -- 'dormant': Mission visible but not yet active (raffle with activated=false, OR regular mission before checkpoint)
-    -- 'active': In progress
-    -- 'completed': Target reached (reward claiming handled by redemptions table)
-    --
-    -- Note: After mission_progress.status='completed', the system creates a redemptions record with status='claimable'.
-    -- The reward claiming lifecycle is tracked in the redemptions table, NOT in mission_progress.
-
-  -- Status timestamps
-  completed_at TIMESTAMP, -- When they hit target
-  created_at TIMESTAMP DEFAULT NOW(),  -- Audit trail
-  updated_at TIMESTAMP DEFAULT NOW(),  -- Audit trail
-
-  -- Checkpoint period linkage (Section 4: Missions reset at checkpoint)
-  -- NOTE: These are SNAPSHOTS copied from users table when mission is created
-  -- They NEVER update, even if user's tier changes (preserves original mission deadline)
-  checkpoint_start TIMESTAMP, -- Snapshot of user's tier_achieved_at when mission was created
-  checkpoint_end TIMESTAMP, -- Snapshot of user's next_checkpoint_at when mission was created
-                            -- Used for: mission deadlines, checkpoint resets, historical tracking
-
-  -- Constraints
-  UNIQUE(user_id, mission_id, checkpoint_start), -- One progress record per mission per checkpoint
-  CHECK (status IN ('dormant', 'active', 'completed'))
-);
-
-CREATE INDEX idx_mission_progress_user ON mission_progress(user_id);
-CREATE INDEX idx_mission_progress_status ON mission_progress(status);
-CREATE INDEX idx_mission_progress_tenant ON mission_progress(client_id, user_id, status);
-
--- Raffle participants table (Section 4: Mode 4 - Raffle participation tracking)
-CREATE TABLE raffle_participations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  mission_id UUID NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  mission_progress_id UUID NOT NULL REFERENCES mission_progress(id) ON DELETE CASCADE,
-  redemption_id UUID NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id),  -- Multi-tenant isolation
-
-  participated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  is_winner BOOLEAN,  -- NULL = not yet selected, TRUE = won, FALSE = lost
-  winner_selected_at TIMESTAMP,
-  selected_by UUID REFERENCES users(id),  -- Which admin selected winner
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints
-  UNIQUE(mission_id, user_id),  -- One entry per user per raffle
-  CHECK (
-    (is_winner IS NULL AND winner_selected_at IS NULL) OR
-    (is_winner IS NOT NULL AND winner_selected_at IS NOT NULL)
-  ),
-
-  -- Composite FK to enforce client_id matching with parent redemption
-  FOREIGN KEY (redemption_id, client_id) REFERENCES redemptions(id, client_id)
-);
-
-CREATE INDEX idx_raffle_mission ON raffle_participations(mission_id, is_winner);
-CREATE INDEX idx_raffle_user ON raffle_participations(user_id, mission_id);
-CREATE INDEX idx_raffle_winner ON raffle_participations(is_winner, winner_selected_at) WHERE is_winner = true;
-CREATE INDEX idx_raffle_redemption ON raffle_participations(redemption_id);
-
--- Tiers table (Section 1: Dynamic tier configuration, 3-6 tiers per client)
-CREATE TABLE tiers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-
-  -- Tier identity
-  tier_order INTEGER NOT NULL, -- Display order: 1-6 (supports 3-6 tiers)
-  tier_id VARCHAR(50) NOT NULL, -- Internal ID: 'tier_1' through 'tier_6' (supports 3-6 tiers)
-  tier_name VARCHAR(100) NOT NULL, -- Admin-customizable: 'Bronze', 'Silver', 'Gold', 'Platinum'
-  tier_color VARCHAR(7) NOT NULL, -- Hex color for UI display
-
-  -- Threshold & rewards
-  sales_threshold DECIMAL(10, 2), -- Minimum sales ($) required to reach tier (sales mode only, mutually exclusive with units_threshold)
-  units_threshold INTEGER, -- Minimum units (#) sold to reach tier (units mode only, mutually exclusive with sales_threshold)
-  commission_rate DECIMAL(5, 2) NOT NULL, -- Commission percentage for this tier
-
-  -- Checkpoint behavior (Section 1: Field 1.8)
-  checkpoint_exempt BOOLEAN DEFAULT false, -- true = no checkpoint evaluations (entry tier only - tier_1/Bronze)
-
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-
-  UNIQUE(client_id, tier_order),
-  UNIQUE(client_id, tier_id),
-
-  -- Constraints: Exactly one threshold must be set (dual field approach for type safety)
-  CHECK (
-    (sales_threshold IS NOT NULL AND units_threshold IS NULL) OR
-    (sales_threshold IS NULL AND units_threshold IS NOT NULL)
-  )
-);
-
-CREATE INDEX idx_tiers_client ON tiers(client_id);
-CREATE INDEX idx_tiers_units_threshold ON tiers(client_id, units_threshold) WHERE units_threshold IS NOT NULL;
-
--- Sales adjustments table (Section 1: Field 1.9 - Manual sales corrections)
-CREATE TABLE sales_adjustments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
-
-  -- Adjustment details
-  amount DECIMAL(10, 2), -- Positive or negative sales adjustment (sales mode, mutually exclusive with amount_units)
-  amount_units INTEGER, -- Positive or negative units adjustment (units mode, mutually exclusive with amount)
-  reason TEXT NOT NULL, -- Admin explanation (e.g., "Offline sale from event", "Refund correction")
-  adjustment_type VARCHAR(50) NOT NULL, -- 'manual_sale', 'refund', 'bonus', 'correction'
-
-  -- Audit trail
-  adjusted_by UUID REFERENCES users(id), -- Which admin made the adjustment
-  created_at TIMESTAMP DEFAULT NOW(),
-
-  -- Note: Adjustments apply during next daily sync, not immediately
-  -- Tier recalculation happens in daily cron (Section 1 decision)
-  applied_at TIMESTAMP, -- When adjustment was included in tier calculation
-
-  -- Constraints: Exactly one amount must be set
-  CHECK (
-    (amount IS NOT NULL AND amount_units IS NULL) OR
-    (amount IS NULL AND amount_units IS NOT NULL)
-  )
-);
-
-CREATE INDEX idx_sales_adjustments_user ON sales_adjustments(user_id);
-CREATE INDEX idx_sales_adjustments_applied ON sales_adjustments(applied_at);
-
--- Tier checkpoints table (tracks tier maintenance evaluations)
-CREATE TABLE tier_checkpoints (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
-  checkpoint_date TIMESTAMP NOT NULL,
-  period_start_date TIMESTAMP NOT NULL,
-  period_end_date TIMESTAMP NOT NULL,
-  sales_in_period DECIMAL(10, 2), -- Sales in checkpoint period (sales mode only, includes manual adjustments)
-  sales_required DECIMAL(10, 2), -- Sales required to maintain tier (sales mode only)
-  units_in_period INTEGER, -- Units in checkpoint period (units mode only, includes manual adjustments)
-  units_required INTEGER, -- Units required to maintain tier (units mode only)
-  tier_before VARCHAR(50) NOT NULL,
-  tier_after VARCHAR(50) NOT NULL,
-  status VARCHAR(50) NOT NULL, -- 'maintained', 'promoted', 'demoted'
-  created_at TIMESTAMP DEFAULT NOW(),
-
-  -- Constraints: Exactly one metric pair must be set
-  CHECK (
-    (sales_in_period IS NOT NULL AND units_in_period IS NULL) OR
-    (sales_in_period IS NULL AND units_in_period IS NOT NULL)
-  )
-);
-
--- Handle changes table (audit trail for TikTok handle changes)
-CREATE TABLE handle_changes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  old_handle VARCHAR(100) NOT NULL,
-  new_handle VARCHAR(100) NOT NULL,
-  detected_at TIMESTAMP DEFAULT NOW(),
-  resolved_by UUID, -- Admin who confirmed the change
-  resolved_at TIMESTAMP
-);
-
--- Indexes for performance
-CREATE INDEX idx_clients_vip_metric ON clients(vip_metric);
-CREATE INDEX idx_users_client ON users(client_id);
-CREATE INDEX idx_users_next_checkpoint ON users(next_checkpoint_at); -- For daily checkpoint checks
-CREATE INDEX idx_rewards_client ON rewards(client_id);
-CREATE INDEX idx_rewards_enabled ON rewards(enabled);
-CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility, display_order); -- Composite index for GET /api/rewards
-CREATE INDEX idx_missions_lookup ON missions(client_id, enabled, tier_eligibility, display_order); -- Composite index for GET /api/missions
-CREATE INDEX idx_redemptions_user ON redemptions(user_id);
-CREATE INDEX idx_redemptions_status ON redemptions(status);
-CREATE INDEX idx_tier_checkpoints_user ON tier_checkpoints(user_id);
-
--- Row Level Security (RLS) policies
--- Security Model: Strict role-based access (Creator/System/Admin)
-
--- Helper functions for role checks
-CREATE OR REPLACE FUNCTION auth.user_role()
-RETURNS TEXT AS $$
-  SELECT COALESCE(auth.jwt() ->> 'role', 'creator');
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION auth.is_admin()
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM users WHERE id = auth.uid() AND is_admin = true
-  );
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION auth.current_client_id()
-RETURNS UUID AS $$
-  SELECT client_id FROM users WHERE id = auth.uid();
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
--- Table: clients
-ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
-CREATE POLICY clients_select ON clients
-  FOR SELECT USING (id = auth.current_client_id() OR auth.is_admin());
-CREATE POLICY clients_insert ON clients
-  FOR INSERT WITH CHECK (auth.is_admin());
-CREATE POLICY clients_update ON clients
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-
--- Table: users
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY users_select ON users
-  FOR SELECT USING (id = auth.uid() OR auth.is_admin());
-CREATE POLICY users_insert ON users
-  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY users_update_creator ON users
-  FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
-CREATE POLICY users_update_system ON users
-  FOR UPDATE USING (auth.user_role() = 'system')
-  WITH CHECK (auth.user_role() = 'system');
-CREATE POLICY users_update_admin ON users
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY users_delete ON users
-  FOR DELETE USING (auth.is_admin());
-
--- Table: rewards
-ALTER TABLE rewards ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rewards_select ON rewards
-  FOR SELECT USING (
-    (client_id = auth.current_client_id() AND enabled = true) OR auth.is_admin()
-  );
-CREATE POLICY rewards_insert ON rewards
-  FOR INSERT WITH CHECK (auth.is_admin());
-CREATE POLICY rewards_update ON rewards
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY rewards_delete ON rewards
-  FOR DELETE USING (auth.is_admin());
-
--- Table: redemptions
-ALTER TABLE redemptions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY redemptions_select ON redemptions
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY redemptions_insert ON redemptions
-  FOR INSERT WITH CHECK (user_id = auth.uid() AND status = 'claimable');
-CREATE POLICY redemptions_update ON redemptions
-  FOR UPDATE USING (auth.is_admin()) WITH CHECK (auth.is_admin());
-CREATE POLICY redemptions_delete ON redemptions
-  FOR DELETE USING (auth.is_admin());
-
--- Table: tier_checkpoints (immutable audit log)
-ALTER TABLE tier_checkpoints ENABLE ROW LEVEL SECURITY;
-CREATE POLICY tier_checkpoints_select ON tier_checkpoints
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY tier_checkpoints_insert ON tier_checkpoints
-  FOR INSERT WITH CHECK (auth.user_role() = 'system');
-
--- Table: videos
-ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY videos_select ON videos
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY videos_insert ON videos
-  FOR INSERT WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY videos_update ON videos
-  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
-  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-CREATE POLICY videos_delete ON videos
-  FOR DELETE USING (auth.is_admin());
-
--- Table: handle_changes
-ALTER TABLE handle_changes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY handle_changes_select ON handle_changes
-  FOR SELECT USING (user_id = auth.uid() OR auth.is_admin());
-CREATE POLICY handle_changes_insert ON handle_changes
-  FOR INSERT WITH CHECK (auth.user_role() = 'system');
-CREATE POLICY handle_changes_update ON handle_changes
-  FOR UPDATE USING (auth.user_role() = 'system' OR auth.is_admin())
-  WITH CHECK (auth.user_role() = 'system' OR auth.is_admin());
-
--- Role-based access summary:
--- Creator: Read own data, claim rewards
--- System: Write users/tiers/videos (automation)
--- Admin: Full access to all tables
-```
-
-
-**MVP Note:** All users will reference the same `client_id`. When scaling to multi-tenant, just add more rows to `clients` table.
+**Database:** Supabase PostgreSQL with Row-Level Security (RLS)
+**Design:** Multi-tenant ready (client_id isolation), single client for MVP
+
+#### Core Tables
+
+**System Configuration:**
+- `clients` - Brand/client configuration (branding, tier settings, VIP metric mode)
+- `tiers` - Dynamic tier configuration (3-6 tiers, admin-customizable names/colors/thresholds)
+
+**User Management:**
+- `users` - Content creators (tier status, checkpoint tracking, 16 precomputed dashboard fields)
+- `handle_changes` - TikTok handle change audit trail
+
+**Performance Tracking:**
+- `videos` - Per-video analytics from Cruva CSV (granular video-level data)
+- `sales_adjustments` - Manual corrections (offline sales, refunds, bonuses)
+
+**Tier System:**
+- `tier_checkpoints` - Tier evaluation audit trail (immutable log)
+
+**Missions & Rewards:**
+- `missions` - Task-based challenges (6 types: sales_dollars, sales_units, videos, views, likes, raffle)
+- `mission_progress` - Creator progress tracking on missions
+- `rewards` - Reward catalog (6 types: gift_card, commission_boost, spark_ads, discount, physical_gift, experience)
+- `redemptions` - Claim tracking (5-state lifecycle: claimable → claimed → fulfilled → concluded)
+
+**Reward Sub-States:**
+- `commission_boost_redemptions` - Commission boost lifecycle (6 states: scheduled → active → expired → pending_info → pending_payout → paid)
+- `commission_boost_state_history` - Boost transition audit trail (financial compliance)
+- `physical_gift_redemptions` - Shipping & size collection
+- `raffle_participations` - Raffle entry tracking
+
+#### Key Architectural Patterns
+
+1. **Multi-tenant isolation** - `client_id` on all tables, enforced via RLS policies
+2. **Transactional workflows** - State changes wrapped in database transactions (Pattern 1)
+3. **Idempotent operations** - Uniqueness constraints prevent duplicates (Pattern 2)
+4. **State validation** - Database triggers enforce valid state transitions (Pattern 3)
+5. **Auto-sync triggers** - Commission boost status auto-updates parent redemption (Pattern 4)
+6. **Soft delete pattern** - VIP rewards hidden/restored on tier changes (Pattern 6)
+7. **Audit trails** - Commission boost state history for financial compliance (Pattern 7)
+8. **Cross-tenant protection** - All UPDATE/DELETE queries filter by client_id (Pattern 8)
+9. **Sensitive data encryption** - Payment accounts encrypted at rest with AES-256-GCM (Pattern 9)
+
+#### Security Model
+
+**Row-Level Security (RLS) policies:**
+- **Creator role:** Read own data, claim rewards
+- **System role:** Write users/tiers/videos (automation)
+- **Admin role:** Full access to all tables
+
+**5-layer security:**
+1. Authentication/Authorization (per-route)
+2. Rate limiting (Upstash Redis)
+3. Input validation (Zod schemas)
+4. CSRF protection (Next.js automatic)
+5. Database security (RLS policies)
+
+---
+
+**👉 Complete schema details:** See [SchemaFinalv2.md](./SchemaFinalv2.md)
+**👉 Critical implementation patterns:** See "Critical Implementation Patterns" section below (lines 1189-2182)
+
+**MVP Note:** All users reference the same `client_id`. Multi-tenant scaling = add more rows to `clients` table.
 
 
 ## API Security
@@ -1037,30 +377,46 @@ Day 4: Admin marks complete
 ### Discovery & Onboarding Model
 
 **How creators join the program:**
-1. **Brand outreach:** Tumi Labs (us) represents brand, and reaches out to creators via automated DMs, SMS, or sample delivery coordination apps
-2. **Program introduction:** Tumi Labs tells creators about VIP loyalty program benefits
-3. **URL sharing:** Tumi Labs shares platform URL (e.g., loyalty.brand.com)
-4. **Self-registration:** Creators visit site, enter TikTok handle + email to activate account
-5. **Validation:** Platform validates handle exists in Cruva database (auto-created via Flow 2)
-6. **Instant access:** Account activated, creator can immediately access dashboard
+
+**Path 1: Recognized Creators (Already in System)**
+1. **Brand outreach:** Tumi Labs reaches out via DMs/SMS to existing content creators
+2. **Program introduction:** Explain VIP loyalty benefits (tiers, rewards, commissions)
+3. **URL sharing:** Share platform URL (e.g., loyalty.brand.com)
+4. **Self-registration:** Enter TikTok handle → Email + Password → OTP verification
+5. **Instant access:** Full platform access (dashboard, rewards, missions, tier progression)
+
+**Path 2: Unrecognized Creators (Not Yet in System - Sample Program)**
+1. **Brand outreach:** Tumi Labs reaches out to prospective creators
+2. **Sample program introduction:** Offer free product samples for content creation
+3. **URL sharing:** Share platform URL for sample registration
+4. **Self-registration:** Enter TikTok handle → Email + Password → OTP verification
+5. **Soft onboarding:** Welcome screen displays "Onboarding begins Monday" + sample delivery instructions
+6. **Preview access:** Can explore platform features while awaiting sample delivery
+7. **Content creation:** After receiving samples, creator posts TikTok video featuring product
+8. **Full activation:** Video appears in Cruva CSV (daily sync) → Status changes to "Recognized" → Full access granted
+
+**Two-Tier Access Model:**
+- **Recognized users:** Handle exists in Cruva database (has created content) → Full platform access
+- **Unrecognized users:** Handle NOT in database yet → Preview access + sample request workflow
+- **Transition:** Unrecognized → Recognized happens automatically when first video appears in Cruva export
 
 **Division of responsibilities:**
-- **Brand role:** Decides Loyalty Program structure, Rewards, Amounts, Commissions
+- **Brand role:** Decides loyalty program structure, rewards, commissions
 - **Platform role:** Validate eligibility, collect credentials, activate accounts
-- **Agency role:** Manage platform and loyalty program
-
-**Access control:** Open registration (anyone can try), validated against Cruva data (must exist in database)
+- **Agency role (Tumi Labs):** Manage outreach, sample coordination, platform operations
 
 ---
 
 ### Flow 1: Daily Metrics Sync (Automated)
 
-**Trigger:** Vercel cron job at 3:00 PM EST daily (`0 19 * * *`) - 7:00 PM UTC
+**Trigger:** Vercel cron job at 6:00 PM EST daily (`0 23 * * *`) - 11:00 PM UTC
 
 **Frequency:** Once per 24 hours
 
+**Timing Rationale:** Aligned with commission boost activation (6 PM EST) to ensure accurate sales snapshots for boost payout calculations.
+
 **Data Freshness:**
-- Creator makes sale at 1:00 AM → Appears in dashboard at 20:00 UTC next day
+- Creator makes sale at 1:00 AM → Appears in dashboard at 23:00 UTC same day (11 PM UTC)
 - Maximum delay: 23 hours 59 minutes
 - Average delay: 12 hours
 - User-facing indicator: Dashboard displays "Last updated: X hours ago" with tooltip explaining daily updates
@@ -1097,8 +453,8 @@ Day 4: Admin marks complete
    -- Sales mode: Update sales-based fields
    UPDATE users u
    SET
-     total_sales = (SELECT COALESCE(SUM(sales_dollars), 0) FROM videos WHERE user_id = u.id),
-     checkpoint_sales_current = (SELECT COALESCE(SUM(sales_dollars), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
+     total_sales = (SELECT COALESCE(SUM(gmv), 0) FROM videos WHERE user_id = u.id),
+     checkpoint_sales_current = (SELECT COALESCE(SUM(gmv), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
      checkpoint_videos_posted = (SELECT COUNT(*) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
      checkpoint_total_views = (SELECT COALESCE(SUM(views), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
      checkpoint_total_likes = (SELECT COALESCE(SUM(likes), 0) FROM videos WHERE user_id = u.id AND post_date >= u.tier_achieved_at),
@@ -1114,14 +470,14 @@ Day 4: Admin marks complete
    SET
      current_value = CASE m.mission_type
        WHEN 'sales_dollars' THEN (
-         SELECT COALESCE(SUM(v.sales_dollars), 0)
+         SELECT COALESCE(SUM(v.gmv), 0)
          FROM videos v
          WHERE v.user_id = mp.user_id
            AND v.post_date >= mp.checkpoint_start
            AND v.post_date < mp.checkpoint_end
        )
        WHEN 'sales_units' THEN (
-         SELECT COALESCE(SUM(v.sales_units), 0)
+         SELECT COALESCE(SUM(v.units_sold), 0)
          FROM videos v
          WHERE v.user_id = mp.user_id
            AND v.post_date >= mp.checkpoint_start
@@ -1189,994 +545,156 @@ Day 4: Admin marks complete
 
 ## Critical Implementation Patterns
 
-**Purpose:** Non-negotiable database patterns that ensure data integrity and prevent financial errors. These patterns apply across all flows and must be followed consistently.
-
-**Source:** SchemaDecisions.md Fixes 2-8 (Codex audit recommendations)
+**Purpose:** Non-negotiable database patterns that ensure data integrity and prevent financial errors.
 
 ---
 
-### Pattern 1: Transactional Workflows (Atomicity)
+### Pattern 1: Transactional Workflows
 
-**Problem:** State transitions not wrapped in transactions can lead to partial updates. Example: Mission completes but redemption not created → creator locked forever.
+**Requirement:** Wrap all multi-step state changes in database transactions.
 
-**Solution:** Wrap all multi-step state changes in database transactions. Either ALL steps succeed or ALL rollback.
+**Apply to:**
+- Mission progress updates → redemption creation → next mission unlock
+- Tier promotion → reward creation
+- Claim reward button → sub-state record creation
+- Raffle winner selection → redemption updates
 
-**Critical Use Cases:**
-1. Mission completion + redemption creation + next mission unlock
-2. VIP tier promotion + reward creation
-3. Claim button + sub-state record creation
-4. Raffle winner selection + redemption updates
+**Rule:** ALL steps succeed OR ALL rollback (no partial updates).
 
-**Implementation Pattern:**
-
-```typescript
-// Mission completion flow (transactional)
-async function completeMission(missionProgressId: string) {
-  return await db.transaction(async (trx) => {
-    // Step 1: Mark mission complete
-    await trx.mission_progress.update({
-      where: { id: missionProgressId },
-      data: { status: 'completed', completed_at: new Date() }
-    });
-
-    // Step 2: Create redemption (idempotent via upsert)
-    await trx.redemptions.upsert({
-      where: {
-        unique_user_mission_redemption: {
-          user_id,
-          mission_progress_id
-        }
-      },
-      create: {
-        user_id,
-        reward_id,
-        status: 'claimable',
-        client_id,
-        tier_at_claim
-      },
-      update: {} // If exists, do nothing (idempotent)
-    });
-
-    // Step 3: Unlock next mission (if exists)
-    const nextMission = await findNextMission(trx, missionType, tier);
-    if (nextMission) {
-      await trx.mission_progress.create({
-        data: {
-          user_id,
-          mission_id: nextMission.id,
-          status: 'active',
-          client_id
-        }
-      });
-    }
-  });
-  // Either ALL succeed or ALL rollback
-}
-```
-
-**Benefits:**
-- ✅ No orphaned states (mission complete without redemption impossible)
-- ✅ Crash recovery (transaction rolls back on failure)
-- ✅ Data consistency guaranteed at database level
-- ✅ Idempotent (retry safe via upsert pattern)
-
-**Where to Apply:**
-- Flow 1, Step 6: Mission progress updates
-- Flow 8: Tier promotion logic
-- Flow 10: Claim reward button
-- Raffle winner selection (admin action)
+👉 **Implementation:** ARCHITECTURE.md Section 10.1
 
 ---
 
-### Pattern 2: Idempotent Operations (Uniqueness Constraints)
+### Pattern 2: Idempotent Operations
 
-**Problem:** Network retries can create duplicate records (e.g., user clicks "Claim" twice during slow network).
+**Requirement:** All claim operations MUST be idempotent via database UNIQUE constraints.
 
-**Solution:** Database-level uniqueness constraints prevent duplicates at the source.
+**Apply to:**
+- Mission reward claims (UNIQUE: user_id, mission_progress_id)
+- Raffle participation (UNIQUE: mission_id, user_id)
+- VIP tier rewards (UNIQUE: user_id, reward_id, tier_at_claim, claimed_at)
+- Payment info submission
 
-**Constraints Implemented:**
+**Rule:** Database rejects duplicate operations at query level.
 
-```sql
--- Prevent duplicate mission-based redemptions
-ALTER TABLE redemptions
-ADD CONSTRAINT unique_user_mission_redemption
-UNIQUE (user_id, mission_progress_id)
-WHERE mission_progress_id IS NOT NULL;
-
--- Prevent duplicate mission progress records
-ALTER TABLE mission_progress
-ADD CONSTRAINT unique_user_mission_checkpoint
-UNIQUE (user_id, mission_id, checkpoint_start);
-```
-
-**Benefits:**
-- ✅ Database rejects duplicate operations automatically
-- ✅ Retries are safe (returns existing record)
-- ✅ Prevents double-payouts
-- ✅ Works even if application logic has bugs
-
-**Application Pattern:**
-
-```typescript
-// Always use upsert for retry safety
-await db.redemptions.upsert({
-  where: {
-    unique_user_mission_redemption: {
-      user_id,
-      mission_progress_id
-    }
-  },
-  create: { /* new record */ },
-  update: {} // If exists, do nothing
-});
-```
+👉 **Implementation:** SchemaFinalv2.md Section 2 (constraints), ARCHITECTURE.md Section 10.2
 
 ---
 
-### Pattern 3: State Transition Validation (Database Triggers)
+### Pattern 3: State Transition Validation
 
-**Problem:** Application bugs or manual SQL queries could cause invalid state transitions (e.g., `concluded` → `claimable` would allow double-payouts).
+**Requirement:** Database triggers MUST validate all state transitions.
 
-**Solution:** Database triggers enforce valid state transition rules at the database level.
+**Apply to:**
+- redemptions: claimable → claimed → fulfilled → concluded (terminal)
+- commission_boost: scheduled → active → expired → pending_info → pending_payout → paid (terminal)
+- mission_progress: dormant → active → completed (terminal)
 
-**Valid Transitions:**
+**Rule:** Only valid transitions allowed. Invalid transitions raise EXCEPTION.
 
-```typescript
-// Redemptions table
-const VALID_TRANSITIONS = {
-  'claimable': ['claimed'],
-  'claimed': ['fulfilled', 'concluded'], // Can skip fulfilled for instant rewards
-  'fulfilled': ['concluded'],
-  'concluded': [] // Terminal state
-};
-
-// Commission Boost sub-states
-const BOOST_TRANSITIONS = {
-  'scheduled': ['active', 'expired'],
-  'active': ['expired', 'pending_info'],
-  'expired': ['paid'], // Expired boosts get paid $0
-  'pending_info': ['pending_payout'],
-  'pending_payout': ['paid'],
-  'paid': [] // Terminal state
-};
-```
-
-**Database Trigger:**
-
-```sql
--- Validate redemption state transitions
-CREATE OR REPLACE FUNCTION validate_redemption_transition()
-RETURNS TRIGGER AS $$
-DECLARE
-  allowed BOOLEAN := FALSE;
-BEGIN
-  IF (OLD.status = 'claimable' AND NEW.status = 'claimed') THEN
-    allowed := TRUE;
-  ELSIF (OLD.status = 'claimed' AND NEW.status IN ('fulfilled', 'concluded')) THEN
-    allowed := TRUE;
-  ELSIF (OLD.status = 'fulfilled' AND NEW.status = 'concluded') THEN
-    allowed := TRUE;
-  ELSIF (OLD.status = NEW.status) THEN
-    allowed := TRUE; -- Idempotent updates OK
-  END IF;
-
-  IF NOT allowed THEN
-    RAISE EXCEPTION 'Invalid redemption transition: % -> %', OLD.status, NEW.status;
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER check_redemption_transition
-  BEFORE UPDATE ON redemptions
-  FOR EACH ROW
-  EXECUTE FUNCTION validate_redemption_transition();
-```
-
-**Benefits:**
-- ✅ Prevents backward transitions (concluded → claimable impossible)
-- ✅ Enforces Commission Boost workflow (can't skip steps)
-- ✅ Protects against application bugs and manual SQL errors
-- ✅ Financial safety (prevents double-payout scenarios)
+👉 **Implementation:** SchemaFinalv2.md lines 752-785 (trigger examples)
 
 ---
 
-### Pattern 4: Auto-Sync Triggers (Commission Boost Status)
+### Pattern 4: Auto-Sync Triggers
 
-**Problem:** Commission Boost has sub-states that must stay synchronized with parent redemption status. Manual sync is error-prone.
+**Requirement:** Commission boost sub-state changes MUST auto-update parent redemption status.
 
-**Solution:** Database trigger automatically updates `redemptions.status` when `boost_status` changes.
-
-**Status Mapping:**
-
-```typescript
-const BOOST_TO_REWARD_STATUS = {
-  'scheduled': 'claimed',
-  'active': 'claimed',
-  'expired': 'claimed',
-  'pending_info': 'claimed',
-  'pending_payout': 'fulfilled',
-  'paid': 'concluded'
-};
-```
-
-**Auto-Sync Trigger:**
-
-```sql
-CREATE OR REPLACE FUNCTION auto_sync_boost_to_redemption()
-RETURNS TRIGGER AS $$
-DECLARE
-  expected_redemption_status VARCHAR(50);
-BEGIN
-  -- Determine expected redemption status
-  expected_redemption_status := CASE NEW.boost_status
-    WHEN 'scheduled' THEN 'claimed'
-    WHEN 'active' THEN 'claimed'
-    WHEN 'expired' THEN 'claimed'
-    WHEN 'pending_info' THEN 'claimed'
-    WHEN 'pending_payout' THEN 'fulfilled'
-    WHEN 'paid' THEN 'concluded'
-  END;
-
-  -- Update parent redemption status (self-healing)
-  UPDATE redemptions
-  SET status = expected_redemption_status,
-      updated_at = NOW()
-  WHERE id = NEW.redemption_id
-    AND status != expected_redemption_status; -- Only if out of sync
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER auto_sync_boost_redemption
-  AFTER INSERT OR UPDATE ON commission_boost_redemptions
-  FOR EACH ROW
-  EXECUTE FUNCTION auto_sync_boost_to_redemption();
-```
-
-**Benefits:**
-- ✅ Guarantees boost and redemption status always synchronized
-- ✅ Self-healing (fixes drift automatically)
-- ✅ Safe for PayPal/Venmo automation (database-level guarantee)
-- ✅ Application can't forget to update parent status
-
-**Where to Apply:**
+**Apply to:**
 - Commission boost lifecycle transitions
 - Payment queue processing
 - Admin payout actions
+
+**Mapping:** scheduled/active/expired/pending_info → claimed | pending_payout → fulfilled | paid → concluded
+
+**Rule:** Database triggers keep boost_status and redemptions.status synchronized.
+
+👉 **Implementation:** SchemaFinalv2.md lines 690-693
 
 ---
 
 ### Pattern 5: Status Validation Constraints
 
-**Problem:** Status columns defined as `VARCHAR(50)` accept any string value. Typos like `'claimabel'` create orphaned records.
+**Requirement:** CHECK constraints MUST enforce valid status values on all state columns.
 
-**Solution:** CHECK constraints enforce valid status values at database level.
+**Apply to:**
+- redemptions.status: 'claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'
+- mission_progress.status: 'active', 'dormant', 'completed'
+- commission_boost_redemptions.boost_status: 'scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'
 
-**Implementation:**
+**Rule:** Database rejects invalid status values immediately (prevents typos).
 
-```sql
--- Prevent invalid redemption statuses
-ALTER TABLE redemptions
-ADD CONSTRAINT check_redemption_status
-CHECK (status IN ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'));
-
--- Prevent invalid mission statuses
-ALTER TABLE mission_progress
-ADD CONSTRAINT check_mission_status
-CHECK (status IN ('active', 'dormant', 'completed'));
-
--- Prevent invalid commission boost sub-states
-ALTER TABLE commission_boost_redemptions
-ADD CONSTRAINT check_boost_status
-CHECK (boost_status IN ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'));
-```
-
-**Benefits:**
-- ✅ Database rejects invalid status values immediately
-- ✅ Prevents typos from creating orphaned records
-- ✅ Self-documenting schema (valid states visible in constraints)
-- ✅ Protects against application bugs
-
-**Why CHECK Constraint (not ENUM):**
-- Flexibility: Adding new states requires simple `ALTER TABLE` (drop old constraint, add new one)
-- Low complexity: Single migration, easy rollback
-- Proven pattern: Battle-tested across millions of PostgreSQL databases
+👉 **Implementation:** SchemaFinalv2.md Section 2 (CHECK constraints on all tables)
 
 ---
 
-### Pattern 6: VIP Reward Lifecycle Management (Backfill + Soft Delete)
+### Pattern 6: VIP Reward Lifecycle Management
 
-**Problem:** VIP tier rewards need special handling for three scenarios:
-1. Admin adds new reward to existing tier → Existing users miss out (unfair)
-2. User demoted to lower tier → Sees rewards they shouldn't (UX bug)
-3. User re-promoted to higher tier → Creates duplicate records (data bloat)
+**Requirement:** VIP tier rewards MUST use backfill + soft delete pattern for tier changes.
 
-**Solution:** Combined backfill job + soft delete pattern with reactivation logic.
+**Apply to:**
+- Admin creates new reward for existing tier (backfill to all current tier users)
+- User demoted to lower tier (soft delete claimable rewards: deleted_at, deleted_reason)
+- User re-promoted to higher tier (reactivate existing records, no duplicates)
 
-**Schema Requirements:**
+**Rule:** Backfill creates redemptions for all eligible users. Soft delete hides/shows rewards based on tier (reversible).
 
-```sql
--- Add soft delete columns to redemptions table
-ALTER TABLE redemptions ADD COLUMN deleted_at TIMESTAMP;
-ALTER TABLE redemptions ADD COLUMN deleted_reason VARCHAR(100);
+**Schema:** redemptions.deleted_at, redemptions.deleted_reason (SchemaFinalv2.md lines 579-582)
 
--- Index for efficient queries (only active rewards)
-CREATE INDEX idx_redemptions_active ON redemptions(user_id, status, deleted_at)
-  WHERE deleted_at IS NULL;
-```
-
-**Three Lifecycle Scenarios:**
-
-**Scenario 1: Admin Adds New Reward to Gold Tier**
-
-```typescript
-// Backfill Job: When admin creates reward
-async function onRewardCreated(rewardId: string, tierEligibility: string) {
-  // Find all users currently in that tier
-  const eligibleUsers = await db.users.findMany({
-    where: { current_tier: tierEligibility }
-  });
-
-  console.log(`Backfilling reward ${rewardId} to ${eligibleUsers.length} ${tierEligibility} users...`);
-
-  // Create claimable redemptions for all (idempotent)
-  for (const user of eligibleUsers) {
-    await db.redemptions.upsert({
-      where: {
-        unique_user_reward: {
-          user_id: user.id,
-          reward_id: rewardId
-        }
-      },
-      create: {
-        user_id: user.id,
-        reward_id: rewardId,
-        status: 'claimable',
-        client_id: user.client_id,
-        tier_at_claim: tierEligibility,
-        created_at: new Date()
-      },
-      update: {} // If exists, skip
-    });
-  }
-
-  console.log(`✅ Backfill complete: ${eligibleUsers.length} users granted access`);
-}
-```
-
-**Why Backfill:**
-- Fairness: All existing tier users get new rewards immediately
-- No manual admin work: Automatic when reward created
-- Idempotent: Safe to run multiple times
+👉 **Implementation:** ARCHITECTURE.md Section 10.6 (backfill job, tier change handler)
 
 ---
 
-**Scenario 2 & 3: User Tier Changes (Demotion + Re-promotion)**
+### Pattern 7: Commission Boost State History
 
-```typescript
-// Tier Change Handler: Soft delete old tier rewards, reactivate new tier rewards
-async function onUserTierChanged(
-  userId: string,
-  oldTier: string,
-  newTier: string
-) {
-  return await db.transaction(async (trx) => {
-    // Step 1: Soft delete old tier claimable rewards
-    await trx.redemptions.updateMany({
-      where: {
-        user_id: userId,
-        status: 'claimable',
-        reward: { tier_eligibility: oldTier },
-        deleted_at: null // Only active ones
-      },
-      data: {
-        deleted_at: new Date(),
-        deleted_reason: `tier_change_${oldTier}_to_${newTier}`
-      }
-    });
+**Requirement:** Commission boost state transitions MUST be logged to audit table via database trigger.
 
-    // Step 2: Reactivate new tier rewards (if previously deleted)
-    await trx.redemptions.updateMany({
-      where: {
-        user_id: userId,
-        deleted_at: { not: null },
-        reward: { tier_eligibility: newTier }
-      },
-      data: {
-        deleted_at: null,
-        deleted_reason: null
-      }
-    });
-
-    // Step 3: Create any missing new tier rewards
-    const newTierRewards = await trx.rewards.findMany({
-      where: { tier_eligibility: newTier }
-    });
-
-    for (const reward of newTierRewards) {
-      await trx.redemptions.upsert({
-        where: {
-          unique_user_reward: {
-            user_id: userId,
-            reward_id: reward.id
-          }
-        },
-        create: {
-          user_id: userId,
-          reward_id: reward.id,
-          status: 'claimable',
-          client_id: (await trx.users.findUnique({ where: { id: userId } }))!.client_id,
-          tier_at_claim: newTier
-        },
-        update: {} // Already exists (was reactivated in step 2)
-      });
-    }
-  });
-}
-```
-
-**Why Soft Delete (Not Hard Delete):**
-- Audit trail: Can track user's tier change history
-- Reactivation: Re-promotion reuses existing records (no duplicates)
-- Data integrity: Claimed/fulfilled rewards preserved (only claimable rewards hidden)
-
----
-
-**Application Query Pattern:**
-
-```typescript
-// Always filter out soft-deleted records in queries
-async function getClaimableRewards(userId: string) {
-  return await db.redemptions.findMany({
-    where: {
-      user_id: userId,
-      status: 'claimable',
-      deleted_at: null // Only active rewards
-    }
-  });
-}
-```
-
-**Benefits:**
-- ✅ Fairness: Existing tier users get newly added rewards immediately
-- ✅ Clean UX: Users only see rewards for their current tier
-- ✅ Audit trail: Can track tier promotions/demotions via `deleted_reason`
-- ✅ No data bloat: Soft delete is reversible (no orphaned records)
-- ✅ No duplicates: Re-promotion reuses existing redemption records
-- ✅ Transactional safety: All tier change operations atomic
-
-**Where to Apply:**
-- Flow 1, Step 5: Daily tier calculations (tier promotion/demotion handler)
-- Admin panel: "Create Reward" action (backfill job)
-- Manual tier adjustments (admin override)
-
----
-
-### Pattern 7: Commission Boost State History (Audit Trail)
-
-**Problem:** Commission Boost has a complex 6-state workflow with financial implications. Without audit trail:
-- Debugging payment issues requires manual log analysis
-- User disputes ("Why wasn't I paid?") hard to resolve definitively
-- Financial compliance may require proof of state changes for PayPal/Venmo
-- Can't measure transition times or identify bottlenecks
-
-**Solution:** Dedicated audit table that automatically logs all Commission Boost state transitions via database trigger.
-
-**Schema:**
-
-```sql
-CREATE TABLE commission_boost_state_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  boost_redemption_id UUID NOT NULL REFERENCES commission_boost_redemptions(id) ON DELETE CASCADE,
-  client_id UUID NOT NULL REFERENCES clients(id), -- Multi-tenant isolation
-  from_status VARCHAR(50),  -- NULL for initial creation
-  to_status VARCHAR(50),
-  transitioned_at TIMESTAMP DEFAULT NOW(),
-  transitioned_by UUID REFERENCES users(id),  -- NULL if automated (cron)
-  transition_type VARCHAR(50),  -- 'manual', 'cron', 'api'
-  notes TEXT,  -- Admin notes, error messages
-  metadata JSONB  -- Extra context (payment amount, error messages, etc.)
-);
-
-CREATE INDEX idx_boost_history_redemption
-  ON commission_boost_state_history(boost_redemption_id, transitioned_at);
-
-CREATE INDEX idx_boost_history_transitioned_by
-  ON commission_boost_state_history(transitioned_by)
-  WHERE transitioned_by IS NOT NULL;
-```
-
----
-
-**Database Trigger (Automatic Logging):**
-
-```sql
--- Trigger to automatically log all transitions
-CREATE OR REPLACE FUNCTION log_boost_transition()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Only log if status actually changed
-  IF OLD.boost_status IS DISTINCT FROM NEW.boost_status THEN
-    INSERT INTO commission_boost_state_history (
-      boost_redemption_id,
-      from_status,
-      to_status,
-      transitioned_by,
-      transition_type
-    )
-    VALUES (
-      NEW.id,
-      OLD.boost_status,
-      NEW.boost_status,
-      NULLIF(current_setting('app.current_user_id', true), '')::UUID,  -- Set by application
-      CASE
-        WHEN current_setting('app.current_user_id', true) = '' THEN 'cron'
-        ELSE 'manual'
-      END
-    );
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER track_boost_transitions
-  AFTER UPDATE ON commission_boost_redemptions
-  FOR EACH ROW
-  EXECUTE FUNCTION log_boost_transition();
-```
-
-**How It Works:**
-1. Trigger fires AFTER every UPDATE on `commission_boost_redemptions`
-2. Checks if `boost_status` actually changed (skips if same)
-3. Inserts audit record with old status, new status, timestamp
-4. Detects who made the change (admin vs cron) based on session variable
-5. Returns NEW (doesn't block the update)
-
----
-
-**Application Integration:**
-
-```typescript
-// Set user context before updates (for audit trail)
-async function updateBoostStatus(
-  boostId: string,
-  newStatus: string,
-  userId?: string,
-  notes?: string
-) {
-  // Set session variable so trigger knows who made the change
-  if (userId) {
-    await db.$executeRaw`SET LOCAL app.current_user_id = ${userId}`;
-  }
-
-  // Update boost status (trigger logs automatically)
-  await db.commission_boost_redemptions.update({
-    where: { id: boostId },
-    data: { boost_status: newStatus }
-  });
-
-  // Optionally add notes to most recent history record
-  if (notes) {
-    await db.commission_boost_state_history.updateMany({
-      where: {
-        boost_redemption_id: boostId,
-        to_status: newStatus
-      },
-      orderBy: { transitioned_at: 'desc' },
-      take: 1,
-      data: { notes }
-    });
-  }
-}
-
-// Query transition history for debugging/disputes
-async function getBoostHistory(boostRedemptionId: string) {
-  return await db.commission_boost_state_history.findMany({
-    where: { boost_redemption_id: boostRedemptionId },
-    orderBy: { transitioned_at: 'asc' },
-    include: {
-      transitioned_by: {
-        select: { name: true, email: true }
-      }
-    }
-  });
-}
-
-// Example: Show user their boost timeline
-async function showBoostTimeline(boostId: string) {
-  const history = await getBoostHistory(boostId);
-
-  console.log('Commission Boost Timeline:');
-  for (const event of history) {
-    const actor = event.transitioned_by
-      ? `${event.transitioned_by.name} (admin)`
-      : 'System (automated)';
-
-    console.log(`${event.transitioned_at}: ${event.from_status} → ${event.to_status} by ${actor}`);
-    if (event.notes) {
-      console.log(`  Notes: ${event.notes}`);
-    }
-  }
-}
-```
-
-**Example Output:**
-```
-Commission Boost Timeline:
-2025-01-15 15:00:00: scheduled → active by System (automated)
-2025-02-14 23:59:59: active → expired by System (automated)
-2025-02-15 10:30:12: expired → pending_info by System (automated)
-2025-02-15 14:22:45: pending_info → pending_payout by Creator (@sarahjohnson)
-  Notes: PayPal: sarah@example.com
-2025-02-16 09:15:33: pending_payout → paid by Admin (John Smith)
-  Notes: Sent $28.75 via PayPal, txn: 1A2B3C4D5E
-```
-
----
-
-**Benefits:**
-
-- ✅ **Financial Compliance:** Complete audit trail for PayPal/Venmo transactions
-- ✅ **Debugging Efficiency:** Trace exact state flow in 30 seconds (vs hours in logs)
-- ✅ **User Dispute Resolution:** Definitive proof of transitions ("You moved to pending_payout on Feb 15")
-- ✅ **Analytics-Ready:** Measure transition times, identify bottlenecks (e.g., "pending_info → pending_payout takes 2 days avg")
-- ✅ **Automatic Logging:** Developers can't forget (trigger fires always)
-- ✅ **Low Overhead:** Only logs on status change (not every UPDATE)
-
-**Where to Apply:**
-- All commission boost status updates (cron activation, expiration, payment)
+**Apply to:**
+- All commission boost status updates (cron activation, expiration)
 - Admin payout actions (pending_payout → paid)
 - User payment info submission (pending_info → pending_payout)
 
-**When to Query:**
-- User asks "Why wasn't I paid?"
-- Admin debugging: "Why is this boost stuck in pending_info?"
-- Compliance audit: "Show all payouts in Q1 2025"
-- Analytics: "Average time from expiration to payout"
+**Rule:** Database trigger logs all boost_status changes to commission_boost_state_history table (financial compliance).
+
+**Schema:** commission_boost_state_history table (SchemaFinalv2.md Section 2.7)
+
+👉 **Implementation:** SchemaFinalv2.md lines 735-750 (trigger), ARCHITECTURE.md Section 10.7
 
 ---
 
-### Pattern 8: Multi-Tenant Query Isolation (Cross-Tenant Mutation Prevention)
+### Pattern 8: Multi-Tenant Query Isolation
 
-**Problem:** Repository methods that update/delete by ID only (without client_id verification) allow cross-tenant mutations. An attacker who guesses another tenant's UUID can modify their data.
+**Requirement:** ALL UPDATE/DELETE queries MUST filter by BOTH primary key AND client_id.
 
-**Attack Scenario:**
-```typescript
-// Vulnerable code - updates ANY mission_id without tenant check
-await missionRepository.updateStatus('uuid-from-tenant-B', 'completed')
-// ❌ Cross-tenant mutation! Attacker from Tenant A modified Tenant B's mission
-```
+**Apply to:**
+- ALL repository UPDATE methods on tenant-scoped tables
+- ALL repository DELETE methods on tenant-scoped tables
+- Tables: missions, rewards, redemptions, users, mission_progress, etc.
 
-**Solution:** ALWAYS filter UPDATE/DELETE queries by BOTH the primary key AND client_id.
+**Rule:** WHERE clause MUST include `.eq('client_id', clientId)` to prevent cross-tenant mutations (IDOR attacks).
 
-**Schema Requirements:**
-- All tenant-scoped tables MUST have `client_id UUID NOT NULL REFERENCES clients(id)` (already implemented in Phase 1)
-- Composite indexes on (client_id, id) for fast lookups
+**Schema:** All tenant tables have client_id column + composite indexes (SchemaFinalv2.md Section 1)
 
-**Implementation Pattern:**
-
-```typescript
-// CORRECT: Repository method with tenant isolation
-async updateStatus(
-  missionId: string,
-  clientId: string,  // Always require client_id parameter
-  status: 'active' | 'completed' | 'dormant'
-): Promise<void> {
-  const supabase = createClient()
-
-  // Update with compound WHERE filter
-  const { error, count } = await supabase
-    .from('mission_progress')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('mission_id', missionId)
-    .eq('client_id', clientId)  // ← Enforces tenant isolation
-    .select('id', { count: 'exact', head: true })
-
-  if (error) throw error
-
-  // Fail if no rows updated (mission doesn't exist OR wrong tenant)
-  if (count === 0) {
-    throw new NotFoundError('Mission not found')
-  }
-}
-```
-
-**Service Layer Integration:**
-```typescript
-// lib/services/missionService.ts
-export async function completeMission(userId: string, missionId: string): Promise<void> {
-  // 1. Get user's client_id
-  const user = await userRepository.findById(userId)
-
-  // 2. Pass client_id to repository (tenant verification)
-  await missionRepository.updateStatus(missionId, user.client_id, 'completed')
-}
-```
-
-**Why This Works:**
-1. ✅ **Database enforces isolation:** WHERE clause filters by tenant at query level
-2. ✅ **No extra SELECT:** Single UPDATE query (better performance than verification-first approach)
-3. ✅ **Secure error handling:** Returns "not found" for both missing records AND cross-tenant attempts (doesn't leak existence)
-4. ✅ **Leverages Phase 1:** Uses existing client_id columns added for multi-tenant support
-
-**Security Principle:**
-> "Defense in depth - verify tenant ownership at EVERY data access boundary"
-
-Even if application logic is bypassed, the database query will NOT modify another tenant's data.
-
----
-
-**Benefits:**
-
-- ✅ **Prevents IDOR attacks** (Insecure Direct Object Reference - OWASP #1)
-- ✅ **Zero trust architecture** - Never assume caller verified tenant
-- ✅ **Single query performance** - No extra SELECT needed
-- ✅ **Fail-safe** - Wrong client_id = zero rows updated = operation fails
-- ✅ **Audit-friendly** - Clear in logs which tenant attempted the operation
-
-**Where to Apply:**
-- ALL repository UPDATE methods (updateStatus, markComplete, softDelete, etc.)
-- ALL repository DELETE methods (remove, archive, etc.)
-- ANY mutation on tenant-scoped tables (missions, rewards, redemptions, users, etc.)
-
-**Testing Pattern:**
-```typescript
-// Test cross-tenant mutation prevention
-it('should NOT allow updating mission from different tenant', async () => {
-  const mission = await createMission({ client_id: 'tenant-A' })
-
-  // Attempt to update from Tenant B
-  await expect(
-    missionRepository.updateStatus(mission.id, 'tenant-B', 'completed')
-  ).rejects.toThrow('Mission not found')
-
-  // Verify mission unchanged
-  const unchanged = await missionRepository.findById(mission.id)
-  expect(unchanged.status).toBe('active') // Still original status
-})
-```
+👉 **Implementation:** ARCHITECTURE.md Section 10.8 (repository pattern, testing)
 
 ---
 
 ### Pattern 9: Sensitive Data Encryption (Payment Account Security)
 
-**Problem:** Sensitive payment information (Venmo handles, PayPal emails) stored in plaintext is vulnerable if database is compromised. GDPR/CCPA require protection of personal financial data.
+**Requirement:** Payment accounts (Venmo, PayPal) MUST be encrypted with AES-256-GCM before storing.
 
-**Security Risk:**
-```typescript
-// Current vulnerability - plaintext storage
-await supabase
-  .from('commission_boost_redemptions')
-  .insert({
-    payment_account: 'sara@example.com',  // ❌ Plaintext email
-    payment_method: 'paypal'
-  })
+**Apply to:**
+- Commission boost payment accounts
+- Any PII: SSN, tax IDs, bank account numbers (if added later)
+- NOT needed for: TikTok handles (public), emails (public), order IDs
 
-// Database breach → Attacker gets 500+ payment accounts immediately
-```
+**Rule:** Encrypt before INSERT/UPDATE, decrypt after SELECT. Store ENCRYPTION_KEY in environment variable (never hardcode).
 
-**Solution:** Application-level encryption using AES-256-GCM before storing in database.
+**Algorithm:** AES-256-GCM (industry standard, prevents tampering)
 
-**Implementation:**
+**Schema:** payment_account VARCHAR(255) stores encrypted string in format "iv:authTag:ciphertext"
 
-```typescript
-// lib/utils/encryption.ts
-import crypto from 'crypto'
-
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY! // 32-byte hex string
-const ALGORITHM = 'aes-256-gcm'
-
-export function encrypt(text: string): string {
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(
-    ALGORITHM,
-    Buffer.from(ENCRYPTION_KEY, 'hex'),
-    iv
-  )
-
-  let encrypted = cipher.update(text, 'utf8', 'hex')
-  encrypted += cipher.final('hex')
-
-  const authTag = cipher.getAuthTag()
-
-  // Format: iv:authTag:encrypted (all hex-encoded)
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
-}
-
-export function decrypt(encryptedText: string): string {
-  const [ivHex, authTagHex, encrypted] = encryptedText.split(':')
-
-  const iv = Buffer.from(ivHex, 'hex')
-  const authTag = Buffer.from(authTagHex, 'hex')
-  const decipher = crypto.createDecipheriv(
-    ALGORITHM,
-    Buffer.from(ENCRYPTION_KEY, 'hex'),
-    iv
-  )
-
-  decipher.setAuthTag(authTag)
-
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-  decrypted += decipher.final('utf8')
-
-  return decrypted
-}
-```
-
-**Repository Integration:**
-
-```typescript
-// lib/repositories/commissionBoostRepository.ts
-import { encrypt, decrypt } from '@/lib/utils/encryption'
-
-export const commissionBoostRepository = {
-  /**
-   * Update payment information (encrypted)
-   */
-  async updatePaymentInfo(
-    boostId: string,
-    clientId: string,
-    paymentMethod: 'venmo' | 'paypal',
-    paymentAccount: string
-  ): Promise<void> {
-    const supabase = createClient()
-
-    // Encrypt before storing
-    const encryptedAccount = encrypt(paymentAccount)
-
-    const { error } = await supabase
-      .from('commission_boost_redemptions')
-      .update({
-        payment_method: paymentMethod,
-        payment_account: encryptedAccount,
-        payment_account_confirm: encryptedAccount,
-        payment_info_collected_at: new Date().toISOString(),
-        payment_info_confirmed: true
-      })
-      .eq('id', boostId)
-      .eq('client_id', clientId)  // Tenant isolation
-
-    if (error) throw error
-  },
-
-  /**
-   * Retrieve payment information (decrypted)
-   */
-  async getPaymentInfo(boostId: string, clientId: string) {
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-      .from('commission_boost_redemptions')
-      .select('payment_method, payment_account')
-      .eq('id', boostId)
-      .eq('client_id', clientId)  // Tenant isolation
-      .single()
-
-    if (error) throw error
-
-    // Decrypt after reading
-    return {
-      payment_method: data.payment_method,
-      payment_account: decrypt(data.payment_account)
-    }
-  }
-}
-```
-
-**Environment Setup:**
-
-```bash
-# Generate encryption key (one-time setup)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Add to .env
-ENCRYPTION_KEY=a1b2c3d4e5f6...  # 64-character hex string (32 bytes)
-```
-
-**Schema Note:**
-```sql
--- No schema changes needed
--- payment_account VARCHAR(255) stores encrypted string
--- Encrypted format: "iv:authTag:ciphertext" (hex-encoded)
--- Example length: ~150-200 characters (fits in VARCHAR(255))
-```
-
----
-
-**Why This Works:**
-
-1. ✅ **AES-256-GCM is industry standard** - Used by banks, government, cloud providers
-2. ✅ **Authentication tag prevents tampering** - GCM mode detects if ciphertext modified
-3. ✅ **Random IV per encryption** - Same plaintext produces different ciphertext each time
-4. ✅ **Key stored separately** - Environment variable, not in code or database
-5. ✅ **No schema changes** - Encrypted string fits in existing VARCHAR(255)
-
-**Security Principle:**
-> "Defense in depth - encrypt sensitive PII at rest, even within trusted database"
-
-Even if attacker gains read access to database, they cannot decrypt payment accounts without the encryption key.
-
----
-
-**Benefits:**
-
-- ✅ **Prevents data breach exposure** - Encrypted payment accounts useless without key
-- ✅ **GDPR/CCPA compliance** - Personal financial data encrypted at rest
-- ✅ **Audit-friendly** - Demonstrates security best practices
-- ✅ **No performance impact** - Encrypt/decrypt is milliseconds
-- ✅ **Transparent to users** - No UX changes
-
-**Where to Apply:**
-- Commission boost payment accounts (Venmo handles, PayPal emails)
-- Any other PII: SSN, tax IDs, bank account numbers (if added later)
-- NOT needed for: TikTok handles, emails (already public), order IDs
-
-**Key Management Best Practices:**
-
-```typescript
-// ✅ CORRECT: Key from environment
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!
-
-// ❌ WRONG: Hardcoded key in code
-const ENCRYPTION_KEY = 'a1b2c3d4...'  // Never do this!
-
-// ✅ CORRECT: Validate key on startup
-if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length !== 64) {
-  throw new Error('ENCRYPTION_KEY must be 64-character hex string')
-}
-
-// ✅ CORRECT: Different keys for dev/staging/prod
-# .env.development
-ENCRYPTION_KEY=dev_key_here...
-
-# .env.production
-ENCRYPTION_KEY=prod_key_here...
-```
-
-**Testing Pattern:**
-
-```typescript
-// tests/utils/encryption.test.ts
-import { encrypt, decrypt } from '@/lib/utils/encryption'
-
-describe('encryption utilities', () => {
-  it('should encrypt and decrypt correctly', () => {
-    const plaintext = 'sara@example.com'
-    const encrypted = encrypt(plaintext)
-    const decrypted = decrypt(encrypted)
-
-    expect(decrypted).toBe(plaintext)
-    expect(encrypted).not.toBe(plaintext)
-  })
-
-  it('should produce different ciphertext for same plaintext', () => {
-    const plaintext = 'sara@example.com'
-    const encrypted1 = encrypt(plaintext)
-    const encrypted2 = encrypt(plaintext)
-
-    // Different IV means different ciphertext
-    expect(encrypted1).not.toBe(encrypted2)
-
-    // But both decrypt to same plaintext
-    expect(decrypt(encrypted1)).toBe(plaintext)
-    expect(decrypt(encrypted2)).toBe(plaintext)
-  })
-
-  it('should throw on tampered ciphertext', () => {
-    const plaintext = 'sara@example.com'
-    const encrypted = encrypt(plaintext)
-
-    // Tamper with ciphertext
-    const tampered = encrypted.replace(/.$/, '0')
-
-    expect(() => decrypt(tampered)).toThrow()
-  })
-})
-```
+👉 **Implementation:** ARCHITECTURE.md Section 10.9 (encrypt/decrypt utilities, repository pattern, key management, testing)
 
 ---
 
@@ -2228,101 +746,881 @@ describe('encryption utilities', () => {
 
 ---
 
-### Flow 3: Creator First Login
+### Discovery & Onboarding Model
 
-**Discovery:** Creator learns about program through Agency outreach (see Discovery & Onboarding Model above)
+**How creators join the program:**
 
-**Trigger:** Creator visits loyalty platform URL (shared by agency)
+#### **Path 1: Cruva-Sourced Creators (Already Created Content)**
 
-**Steps:**
-1. **Initial page:**
-   - Form asks for: TikTok handle (e.g., @sarahjohnson)
-   - Submit → Check if user exists
+These are creators who have already produced videos for the brand and appear in Cruva CSV exports.
 
-2. **User exists check:**
-   - Query: `SELECT * FROM users WHERE tiktok_handle = '@sarahjohnson'`
-   - If not found: Error "Must post video first to join program"
-   - If found: Check if `email IS NULL`
+**Journey:**
+1. **Brand outreach:** Tumi Labs reaches out via DMs/SMS to creators in Cruva CSV
+2. **Program introduction:** Explain VIP loyalty benefits (tiers, rewards, commissions)
+3. **URL sharing:** Share platform URL (e.g., loyalty.brand.com)
+4. **Database state:** Handle exists in Supabase (imported via Flow 1 - Daily Sync)
+5. **Registration flow:**
+   - **First-time (no email registered):** `/login/start` → check-handle API → `/login/signup` → OTP → `/login/loading` → `/home`
+   - **Returning (email registered):** `/login/start` → check-handle API → `/login/wb` → `/home`
+6. **Result:** Instant full platform access (dashboard, rewards, missions, tier progression)
 
-3. **Email collection (if NULL):**
-   - Show: "Welcome @sarahjohnson! Provide email to access rewards"
-   - Form: Email input + Password input
-   - Validate: Email not already used by another creator
-   - Update users table: `SET email = 'sarah@gmail.com' WHERE tiktok_handle = '@sarahjohnson'`
-
-4. **Create Supabase Auth account:**
-   - `supabase.auth.signUp({ email, password })`
-   - Store `tiktok_handle` in auth metadata
-   - Link auth user to loyalty platform user
-
-5. **Redirect to dashboard:**
-   - Show tier badge, metrics, progress
-   - Creator can now access full platform
+**Database characteristics:**
+- `users.tiktok_handle` exists (imported from Cruva)
+- `users.email` may be NULL (not registered yet) or populated (registered previously)
+- `users.email_verified` is true (if email exists)
+- Has records in `videos` table (content created for brand)
 
 ---
 
-### Flow 4: Subsequent Logins
+#### **Path 2: Word-of-Mouth Creators (No Content Yet - Sample Program)**
+
+These are prospective creators who heard about the program but haven't created any content yet.
+
+**Journey:**
+1. **Organic discovery:** Creator hears about program from peers/social media/brand mentions
+2. **Self-registration:** Visits platform URL, enters TikTok handle
+3. **Database check:** Handle NOT found in Supabase → Sample program flow triggered
+4. **Registration flow:** `/login/start` → check-handle API → `/login/signup` → OTP → `/login/loading` → `/login/welcomeunr`
+5. **Soft onboarding:** Welcome screen displays "Watch your DMs for sample request link"
+6. **Preview access:** Can explore platform features (rewards/missions shown as locked)
+7. **Content creation funnel:**
+   - Brand sends sample product via TikTok DM
+   - Creator posts video featuring product
+   - Video appears in Cruva CSV export (daily scrape)
+   - Flow 1 imports video → Creates user record in Supabase
+   - Creator becomes "recognized"
+   - Next login → Full access granted (routes to `/home`)
+
+**Database characteristics:**
+- `users.tiktok_handle` does NOT exist initially
+- Created during signup with `email` and `email_verified = true`
+- NO records in `videos` table (no content created yet)
+- After sample program: Videos imported → User becomes recognized
+
+---
+
+#### **Key Differentiator: Does handle exist in Supabase?**
+
+**Recognition check logic:**
+- **Handle EXISTS in Supabase** (imported from Cruva CSV):
+  - Creator has made videos for brand
+  - Full platform access immediately
+  - Routes to `/home` after login/signup
+
+- **Handle NOT in Supabase** (word-of-mouth):
+  - Creator has NOT made videos yet
+  - Sample program candidate
+  - Routes to `/login/welcomeunr` (sample program message)
+  - Preview mode until content created
+
+**Database check:**
+```sql
+-- Recognition check at /login/loading
+SELECT id, tiktok_handle, email
+FROM users
+WHERE tiktok_handle = '@creator_handle';
+
+-- If found → Recognized (route to /home)
+-- If NOT found → Unrecognized (route to /login/welcomeunr)
+```
+
+---
+
+### Flow 3: Creator First-Time Registration
+
+**Trigger:** Creator visits platform URL for first time (from agency outreach OR word-of-mouth discovery)
+
+**7-Page Authentication Journey:**
+
+---
+
+#### **Step 1: Handle Collection** (`/login/start`)
+
+**Page displays:**
+- Client logo (dynamic branding)
+- "Let's Get Started!" header
+- TikTok handle input with @ prefix
+- "Continue" button
+
+**Frontend validation:**
+- Only allows: letters, numbers, underscore, period
+- Max 30 characters
+- Auto-removes @ symbol if user types it
+
+**On submit:**
+```
+Store handle in sessionStorage
+Route ALL users to /login/signup (no backend check at this step)
+```
+
+**Code reference:** `/login/start/page.tsx` lines 42-60
+
+---
+
+#### **Step 2: Email & Password Collection** (`/login/signup`)
+
+**Page displays:**
+- "Welcome, @handle!" header
+- Email input (required, validated)
+- Password input (minimum 8 characters)
+- Terms & Privacy Policy checkbox with slideover sheets
+- "Sign Up" button (disabled until valid)
+- "Already have an account? Sign In" link
+
+**Frontend validation:**
+```
+Email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+Password: Minimum 8 characters
+Terms: Checkbox must be checked
+```
+
+**Terms & Privacy UI:**
+- Clicking links opens bottom sheet (90vh height)
+- Content fetched from: `GET /api/clients/{client_id}/terms` or `/privacy`
+- Cached after first load
+- Shows last updated date
+
+**On submit:**
+```
+Frontend: Route to /login/otp
+
+Backend: POST /api/auth/signup
+- Hash password (bcrypt/argon2)
+- Create user record (email_verified: false)
+- Generate 6-digit OTP code
+- Send OTP email
+- Store OTP hash + 5min expiration
+- Return success
+```
+
+**Code reference:** `/login/signup/page.tsx` lines 137-153
+
+---
+
+#### **Step 3: OTP Verification** (`/login/otp`)
+
+**Purpose:** Verify creator owns email (required for gift card/reward delivery)
+
+**Page displays:**
+- "Enter OTP Code 🔒" header
+- "We sent a code to [email]" instruction
+- 6-digit input boxes (auto-focus, auto-advance)
+- 60-second countdown timer
+- "Resend code" button (enabled after countdown)
+- Back button
+
+**Features:**
+- Auto-submit after 6th digit entered (1-second delay)
+- Robust paste handling (strips spaces/non-digits)
+- Mobile number keyboard (`inputMode="numeric"`)
+- Loading modal during verification
+
+**Frontend flow:**
+```
+User enters/pastes code
+  → Auto-submit after 6 digits
+  → Loading modal displays
+  → Success: Route to /login/loading
+  → Error: Clear inputs, show error message, allow retry (max 3 attempts)
+```
+
+**Backend verification:**
+```
+POST /api/auth/verify-otp
+Body: { otp: "123456", session_id }
+
+Process:
+- Compare code against stored hash
+- Check expiration (5 minutes)
+- Check attempts (max 3)
+- If valid:
+    Update user.email_verified = true
+    Create authenticated session
+    Return success
+- If invalid:
+    Increment attempts
+    Return error
+```
+
+**Resend logic:**
+```
+POST /api/auth/resend-otp
+- Generate new 6-digit code
+- Send new email
+- Reset countdown timer
+- Rate limit: 1 request per 60 seconds
+```
+
+**Code reference:** `/login/otp/page.tsx` lines 105-135
+
+---
+
+#### **Step 4: Loading & Recognition Routing** (`/login/loading`)
+
+**Purpose:** Central routing hub that determines user's destination based on recognition status
+
+**Page displays:**
+- Spinner animation
+- "Setting up your account..." message
+- 2-second artificial delay (smooth UX transition)
+
+**Routing logic:**
+```
+Read sessionStorage.getItem("userType")
+
+If userType === "recognized":
+  → User exists in Cruva database (has created content)
+  → Route to /home (full access)
+Else:
+  → User NOT in database yet (sample program)
+  → Route to /login/welcomeunr (preview access)
+```
+
+**Backend process during delay:**
+```
+POST /api/auth/check-recognition
+Body: { handle: "@username" }
+
+Check:
+1. Query users table: WHERE tiktok_handle = '@username'
+2. Query videos table: COUNT(*) WHERE user_id = user.id
+3. Determine recognition:
+   - Has videos: recognized = true
+   - No videos or not in users: recognized = false
+
+Return: { recognized: true/false }
+```
+
+**Recognition criteria:**
+- **Recognized:** Handle exists in `users` table AND has ≥1 video in `videos` table
+- **Unrecognized:** Handle NOT in `users` table OR user exists but 0 videos
+
+**Code reference:** `/login/loading/page.tsx` lines 19-39
+
+---
+
+#### **Step 5A: Unrecognized User Welcome** (`/login/welcomeunr`)
+
+**When shown:** Creator's TikTok handle NOT found in Supabase database (word-of-mouth user, no Cruva data)
+
+**User origin:**
+- NOT in Cruva CSV (no videos created for brand yet)
+- NOT in Supabase `users` table before signup
+- Heard about program through word-of-mouth/social media
+- Sample program candidate
+
+**Page displays:**
+- "🎉 Welcome! 🎉" header
+- "You're all set! Our onboarding begins this **coming Monday**." message
+- "👀 Watch your DMs for your sample request link." instruction
+- "Explore Program" button
+
+**Purpose:**
+- Soft onboarding for sample program participants (word-of-mouth discovery)
+- Sets expectation: Brand will send samples via TikTok DM
+- Provides preview of platform features
+- Educates creator about program benefits while awaiting sample delivery
+
+**On "Explore Program" click:**
+```
+Route to /home (dashboard in preview mode)
+
+Preview mode behavior:
+- Can view tier structure
+- Can view rewards catalog (all locked)
+- Cannot claim rewards (not eligible yet)
+- Dashboard shows "Awaiting first content creation" message
+- Missions hidden or shown as locked
+- Full access granted after video creation + Cruva import
+```
+
+**User database state:**
+```sql
+-- User record created during signup (NOT from Cruva import)
+users.tiktok_handle = '@newcreator'
+users.email = 'creator@example.com'
+users.email_verified = true
+users.current_tier = 'tier_1'
+
+-- NO records in videos table (no content created yet)
+SELECT COUNT(*) FROM videos WHERE user_id = user.id;  -- Returns 0
+```
+
+**Transition to recognized (sample program funnel):**
+```
+1. Brand sends sample product via TikTok DM
+2. Creator receives sample, creates TikTok video featuring product
+3. Video appears in Cruva CSV export (daily scrape)
+4. Flow 1 (Daily Sync) imports video to videos table
+5. Updates recognition_status = 'recognized'
+6. Next login → Full access (routes directly to /home)
+```
+
+**Code reference:** `/login/welcomeunr/page.tsx` lines 14-50
+
+---
+
+#### **Step 5B: Recognized User Dashboard** (`/home`)
+
+**When shown:** Creator's TikTok handle EXISTS in Supabase database (imported from Cruva CSV)
+
+**User origin:**
+- Has created videos for brand (appears in Cruva CSV)
+- Imported into Supabase via Flow 1 (Daily Sync)
+- May or may not have registered email previously
+- Has records in `videos` table
+
+**Page displays:**
+- Full dashboard with immediate access:
+  - Current tier badge
+  - Sales/units metrics
+  - Checkpoint progress
+  - Available missions
+  - Claimable rewards
+  - Leaderboard position
+
+**No welcome screen** - Creator has immediate full platform access
+
+**User database state:**
+```sql
+-- User exists in Supabase (imported from Cruva)
+users.tiktok_handle = '@existingcreator'
+users.email = 'creator@example.com' OR NULL (if first-time registering)
+users.email_verified = true (if email exists)
+users.current_tier = 'tier_2' (based on performance)
+
+-- Has videos in database
+SELECT COUNT(*) FROM videos WHERE user_id = user.id;  -- Returns ≥1
+```
+
+---
+
+### Flow 3 Summary: Complete Registration Journey
+
+```
+┌─────────────────────────────────────────────────────┐
+│         FIRST-TIME REGISTRATION FLOW                │
+└─────────────────────────────────────────────────────┘
+
+/login/start (Handle Entry)
+     ↓
+     Backend: POST /api/auth/check-handle
+     │
+     ├─── Handle EXISTS + Email EXISTS ────→ /login/wb (Flow 4A)
+     │
+     ├─── Handle EXISTS + Email NULL ──────→ /login/signup (continues below)
+     │
+     └─── Handle NOT EXISTS ───────────────→ /login/signup (continues below)
+     ↓
+/login/signup (Email + Password + Terms)
+     ↓
+     Backend: POST /api/auth/signup
+     ↓
+/login/otp (6-Digit Email Verification)
+     ↓
+     Backend: POST /api/auth/verify-otp
+     ↓
+/login/loading (Recognition Check)
+     ↓
+     Backend: POST /api/auth/check-recognition
+     │
+     ├──────────────────┬────────────────────┐
+     ↓                  ↓                    ↓
+  RECOGNIZED       UNRECOGNIZED
+  (In Supabase)   (NOT in Supabase)
+     ↓                  ↓
+  /home          /login/welcomeunr
+(Full access)    (Sample program +
+                  Preview access)
+```
+
+**Recognized Path:**
+- Handle exists in Supabase (imported from Cruva)
+- Has created videos for brand
+- Routes to `/home` with full access immediately
+
+**Unrecognized Path:**
+- Handle NOT in Supabase (word-of-mouth user)
+- No videos created for brand yet
+- Routes to `/login/welcomeunr` (sample program message)
+- Preview mode until content created → Cruva import → Full access
+
+**Total time:** 3-5 minutes (including email verification)
+
+**Security:** Email verified before platform access granted
+
+**Business context:** Two-tier system supports both Cruva-sourced creators (immediate access) and word-of-mouth creators (sample program funnel)
+
+---
+
+### Flow 4: Returning User Login
 
 **Trigger:** Creator returns to platform
 
-**Steps:**
-1. **Login form:**
-   - Email + Password (Supabase Auth)
-   - OR TikTok handle + Password (lookup email first)
-
-2. **Authentication:**
-   - Supabase validates credentials
-   - Returns session token
-
-3. **Dashboard load:**
-   - Query user data by email or tiktok_handle
-   - Load metrics, tier, rewards
-   - Display personalized dashboard
+**Two scenarios based on email registration status:**
 
 ---
 
-### Flow 5: Password Reset
+#### **Scenario A: Email Already Registered**
 
-**Trigger:** Creator forgets password and clicks "Forgot Password?" on login page
+**User characteristics:**
+- Handle exists in Supabase (imported from Cruva OR created via signup)
+- Has completed email + password registration previously
+- `users.email` is NOT NULL
+- `users.email_verified = true`
 
-**Steps:**
-1. **Request reset:**
-   - Creator enters email address on `/forgot-password` page
-   - Supabase sends magic link email automatically
-   - Email contains one-time reset link (expires in 1 hour)
+**Flow:** `/login/start` → **check-handle API** → `/login/wb` (password only) → `/login/loading` → `/home` or `/login/welcomeunr`
 
-2. **Click magic link:**
-   - Creator clicks link in email
-   - Redirected to `/reset-password` page with token
-   - Link is validated by Supabase Auth
+**Journey:**
+1. Enter handle at `/login/start`
+2. Backend checks: Handle exists + email populated
+3. Route to `/login/wb` (Welcome Back - password authentication)
+4. Enter password → Route to `/login/loading`
+5. Recognition check: Handle exists in Supabase?
+   - **YES** → `/home` (full access)
+   - **NO** → `/login/welcomeunr` (sample program message - continues each login until videos imported)
 
-3. **Set new password:**
-   - Creator enters new password (minimum 6 characters)
-   - Confirms password (must match)
-   - Submits form
+**Total time:** ~32-35 seconds (includes recognition check)
 
-4. **Password updated:**
-   - Supabase Auth updates password securely
-   - Creator is automatically logged in
-   - Redirected to dashboard
+**No OTP required** - Email already verified during initial signup
 
-**Security features:**
-- Magic links are one-time use (invalidated after password change)
-- 1-hour expiration (Supabase default)
-- Rate limiting: 1 request per 60 seconds per email (prevents spam)
-- HTTPS encryption for link transmission
+**Note:** Word-of-mouth users who registered but haven't created content yet will see `/login/welcomeunr` on EVERY login until their videos appear in Cruva imports
+
+---
+
+#### **Scenario B: No Email Registered (Cruva Import Only)**
+
+**User characteristics:**
+- Handle exists in Supabase (imported from Cruva via Flow 1)
+- Has created videos but never completed platform registration
+- `users.email` is NULL
+- Creator imported from Cruva CSV but hasn't logged in yet
+
+**Flow:** `/login/start` → **check-handle API** → `/login/signup` → OTP → `/home`
+
+**Journey:**
+1. Enter handle at `/login/start`
+2. Backend checks: Handle exists + email is NULL
+3. Route to `/login/signup` (collect email + password)
+4. Enter email + password → OTP verification
+5. Verify email → Direct access to `/home`
+
+**Total time:** 3-5 minutes (same as first-time registration)
+
+**Email verification required** - First time collecting email for this user
+
+---
+
+#### **Scenario A Details: Password Authentication** (`/login/wb`)
+
+**Page displays:**
+- "Welcome back, @handle!" header
+- "Let's unlock your rewards" subtext
+- Password input with show/hide toggle
+- "Continue" button
+- "Forgot password?" link
+
+**Frontend validation:**
+```
+Password: Minimum 8 characters
+Button disabled until validation passes
+```
 
 **Error handling:**
-- Email not found: "No account found with this email"
-- Link expired: "Reset link has expired. Request a new one."
-- Link already used: "Reset link is invalid. Request a new one."
-- Too many requests: "Too many requests. Try again in 60 seconds."
+```
+Invalid password:
+- Input border turns red
+- Error icon + "Incorrect password. Please try again."
+- Password field auto-clears
+- Focus returns to input
+
+Error auto-clears when user starts typing
+```
+
+**Loading state:**
+```
+Modal overlay with spinner: "Signing in..."
+Prevents duplicate submissions
+```
+
+**On submit:**
+```
+Frontend: Show loading modal
+
+Backend: POST /api/auth/login
+Body: { tiktok_handle, password }
+
+Process:
+- Query user by tiktok_handle
+- Compare password hash (bcrypt.compare)
+- Create session token (JWT)
+- Set session cookie
+- Return success
+
+Success: Route to /login/loading (recognition check)
+Error: Show inline error, clear password
+```
+
+**Code reference:** `/login/wb/page.tsx` lines 56-107
 
 ---
 
-### Flow 6: Daily Tier Calculation (Automated)
+### Flow 4 Summary
 
-**Trigger:** Runs immediately after data sync completes (part of single cron job at 3:00 PM EST / 7:00 PM UTC)
+```
+┌────────────────────────────────────────────────────┐
+│         RETURNING USER LOGIN                       │
+└────────────────────────────────────────────────────┘
+
+/login/start (Handle Entry)
+     ↓
+     Backend: POST /api/auth/check-handle
+     │
+     ├─── SCENARIO A: Handle EXISTS + Email EXISTS ───┐
+     │                                                 ↓
+     │                                         /login/wb (Password)
+     │                                                 ↓
+     │                                         /login/loading
+     │                                                 ↓
+     │                                    POST /api/auth/check-recognition
+     │                                                 ↓
+     │                                         ┌───────┴────────┐
+     │                                         ↓                ↓
+     │                                   RECOGNIZED      UNRECOGNIZED
+     │                                   (In Supabase)  (NOT in Supabase)
+     │                                         ↓                ↓
+     │                                      /home       /login/welcomeunr
+     │
+     └─── SCENARIO B: Handle EXISTS + Email NULL ─────┐
+                                                       ↓
+                                               /login/signup
+                                                       ↓
+                                               /login/otp
+                                                       ↓
+                                               /login/loading
+                                                       ↓
+                                          POST /api/auth/check-recognition
+                                                       ↓
+                                               ┌───────┴────────┐
+                                               ↓                ↓
+                                         RECOGNIZED      UNRECOGNIZED
+                                         (In Supabase)  (NOT in Supabase)
+                                               ↓                ↓
+                                            /home       /login/welcomeunr
+```
+
+**Scenario A (Email Registered):**
+- Total time: ~32-35 seconds (includes recognition check)
+- No OTP required (email already verified)
+- Password authentication + recognition check
+- Word-of-mouth users see welcomeunr until videos imported
+
+**Scenario B (Cruva Import, No Email):**
+- Total time: 3-5 minutes
+- OTP verification required (first time collecting email)
+- Same flow as first-time registration
+- Recognition check routes to home or welcomeunr
+
+---
+
+### Flow 5: Password Reset (Magic Link)
+
+**Trigger:** Creator clicks "Forgot password?" on login page (`/login/wb`)
+
+**UX Decision:** Handle-based lookup (simplified UX - user doesn't re-enter email)
+
+---
+
+#### **State 1: Request Reset** (`/login/forgotpw`)
+
+**Page displays:**
+- "Reset Your Password" header
+- "We'll send a reset link to the email associated with **@handle**"
+- "Send Reset Link" button
+- "Back to sign in" link
+
+**On submit:**
+```
+Frontend: Show loading modal "Sending reset link..."
+
+Backend: POST /api/auth/forgot-password
+Body: { tiktok_handle: "@handle" }
+
+Process:
+1. Look up user by tiktok_handle
+2. Retrieve user's email from users.email
+3. Generate JWT token:
+   Payload: { user_id, type: "password_reset", exp: 15min }
+4. Create magic link:
+   https://app.com/auth/reset-password?token=eyJhbG...
+5. Send email with button/link
+6. Store token hash in password_resets table
+7. Return masked email
+
+Response: { success: true, email_hint: "cr****@example.com" }
+
+Email template:
+- Subject: "Reset Your Password - {Client Name}"
+- Greeting: "Hi @handle,"
+- Reset button with magic link
+- Expiration notice: "This link expires in 15 minutes"
+- Security note: "If you didn't request this, ignore this email"
+```
+
+**Code reference:** `/login/forgotpw/page.tsx` lines 55-110
+
+---
+
+#### **State 2: Email Sent Confirmation** (`/login/forgotpw`)
+
+**Page displays:**
+- ✅ Green success icon
+- "Check Your Email!" header
+- "We sent a password reset link to **cr****@example.com**"
+- "The link expires in 15 minutes"
+- "Didn't receive it? **Resend link**" button
+- "Back to sign in" link
+
+**On "Resend" click:**
+```
+Return to State 1
+Generate new token (invalidate old)
+Reset 15-minute expiration
+```
+
+---
+
+#### **Step 3: Reset Password Page** (`/auth/reset-password?token=xyz`)
+
+**Page displays:**
+- "Create New Password" header
+- New password input
+- Confirm password input
+- "Reset Password" button
+
+**On submit:**
+```
+Backend: POST /api/auth/reset-password
+Body: { token: "xyz123abc", new_password }
+
+Validation:
+1. Verify JWT signature
+2. Check expiration (within 15 min)
+3. Query password_resets table:
+   - Token not used
+   - Not expired
+4. If valid:
+   - Hash new password (bcrypt)
+   - Update users.password
+   - Mark token as used
+   - Create authenticated session
+5. If invalid:
+   - Return error: "Link expired or invalid"
+
+Success: Route to /home + toast "Password updated successfully"
+Error: Show error, allow new reset request
+```
+
+**Security features:**
+- One-time use (token marked as used after reset)
+- 15-minute expiration
+- Old tokens invalidated when new reset requested
+- HTTPS required
+
+---
+
+### Flow 5 Summary
+
+```
+┌───────────────────────────────────┐
+│      PASSWORD RESET FLOW          │
+└───────────────────────────────────┘
+
+/login/wb ("Forgot password?")
+     ↓
+/login/forgotpw (Request)
+     ↓
+Email with magic link
+     ↓
+/auth/reset-password?token=xyz
+     ↓
+/home (Auto-login)
+```
+
+**Total time:** 2-3 minutes (including email retrieval)
+
+**Rate limiting:** 3 reset requests per hour per email
+
+---
+
+### Flow 6: Email Verification System (OTP)
+
+**Purpose:** Verify creator owns email address before platform access
+
+**Why required:**
+- **Gift card delivery:** Rewards sent to email ($25-$100+ value)
+- **Discount codes:** TikTok Shop integration links
+- **Payment info:** Commission boost payout details (Venmo/PayPal)
+- **Security:** Prevents typos, fake emails, account takeover
+
+**Implementation:** 6-digit OTP sent after signup, required before platform access
+
+---
+
+#### **OTP Generation**
+
+```
+Backend: Generate 6-digit code
+code = Math.floor(100000 + Math.random() * 900000).toString()
+Result: "123456" (always 6 digits)
+
+Hash and store:
+otp_hash = bcrypt.hash(code, 10)
+INSERT INTO otp_codes (user_id, code_hash, expires_at, attempts)
+VALUES (user_id, otp_hash, NOW() + INTERVAL '5 minutes', 0)
+
+Send email:
+Subject: "Verify Your Email - {Client Name}"
+Body: "Your verification code is: 123456"
+      "This code expires in 5 minutes."
+```
+
+---
+
+#### **OTP Verification**
+
+```
+Backend: Verify submitted code
+
+Retrieve OTP record:
+WHERE user_id = ? AND used = false AND expires_at > NOW()
+
+Check attempts (max 3):
+IF attempts >= 3 THEN
+  RETURN error "Too many attempts. Request new code."
+
+Verify code:
+isValid = bcrypt.compare(submittedCode, record.code_hash)
+
+IF isValid THEN
+  UPDATE users SET email_verified = true WHERE id = user_id
+  UPDATE otp_codes SET used = true WHERE id = record.id
+  RETURN success
+ELSE
+  UPDATE otp_codes SET attempts = attempts + 1 WHERE id = record.id
+  RETURN error "Invalid code"
+```
+
+---
+
+#### **Security Features**
+
+- **5-minute expiration:** Short window prevents delayed attacks
+- **3 attempt limit:** Prevents brute force (6-digit = 1M combinations)
+- **One-time use:** Code invalidated after successful verification
+- **Rate limiting:** 1 resend per 60 seconds (prevents spam)
+- **Hashed storage:** Codes never stored in plaintext
+
+---
+
+#### **Resend Logic**
+
+```
+User clicks "Resend code" (after 60-second countdown)
+
+Backend: POST /api/auth/resend-otp
+- Generate new 6-digit code
+- Invalidate old code (mark as used)
+- Send new email
+- Reset frontend timer
+
+Rate limit: 1 request per 60 seconds per user
+```
+
+**Code reference:** `/login/otp/page.tsx`
+
+---
+
+### Visual Authentication Flow Map
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│            COMPLETE AUTHENTICATION SYSTEM                    │
+└─────────────────────────────────────────────────────────────┘
+
+                    ENTRY POINT
+                         │
+               /login/start (Handle)
+                         │
+            ┌────────────┴────────────┐
+            │                         │
+     FIRST-TIME USER           RETURNING USER
+            │                         │
+    /login/signup              /login/wb
+  (Email + Password)        (Password only)
+            │                         │
+      /login/otp                      │
+   (6-digit verify)                   │
+            │                         │
+    /login/loading ◄──────────────────┘
+            │
+            │ [Backend: Check recognition]
+            │
+   ┌────────┴────────┐
+   │                 │
+RECOGNIZED      UNRECOGNIZED
+   │                 │
+/home          /login/welcomeunr
+(Full         (Sample program +
+access)        Preview access)
+                     │
+              "Explore Program"
+                     │
+                  /home
+            (Preview mode)
+
+
+ALTERNATIVE PATH: Password Reset
+
+/login/wb → "Forgot password?" → /login/forgotpw
+                                       ↓
+                                  Email sent
+                                       ↓
+                          [User clicks magic link]
+                                       ↓
+                        /auth/reset-password?token=xyz
+                                       ↓
+                                    /home
+```
+
+---
+
+### Authentication Pages Inventory
+
+**Complete list of auth pages with descriptions:**
+
+| Route | File | Purpose | When Shown | Key Features |
+|-------|------|---------|------------|--------------|
+| `/login/start` | `app/login/start/page.tsx` | Collect TikTok handle | All users (entry point) | Frontend validation, @ sanitization |
+| `/login/signup` | `app/login/signup/page.tsx` | Email + password collection | First-time users | Terms/Privacy sheets, validation |
+| `/login/wb` | `app/login/wb/page.tsx` | Password authentication | Returning users | Inline errors, loading modal |
+| `/login/otp` | `app/login/otp/page.tsx` | Email verification | After signup (first-time) | Auto-submit, paste handling, timer |
+| `/login/loading` | `app/login/loading/page.tsx` | Recognition routing | After OTP verification | Conditional routing logic |
+| `/login/welcomeunr` | `app/login/welcomeunr/page.tsx` | Unrecognized user welcome | Sample program signups | Preview access messaging |
+| `/login/forgotpw` | `app/login/forgotpw/page.tsx` | Password reset request | "Forgot password?" click | Magic link email, two-state |
+| `/auth/reset-password` | (TO BE CREATED) | Set new password | Magic link click | Token validation |
+
+**Mobile-first design:**
+- All pages optimized for 375px viewport
+- Touch targets minimum 44px
+- Number keyboard for OTP (`inputMode="numeric"`)
+- Loading modals prevent double-submission
+
+---
+
+### Flow 7: Daily Tier Calculation (Automated)
+
+**Trigger:** Runs immediately after data sync completes (part of single cron job at 6:00 PM EST / 11:00 PM UTC)
 
 **Steps:**
 
@@ -2838,9 +2136,9 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
      ```
    - Example display (Commission Boost):
      ```
-     🔔 TODAY at 3:00 PM (in 15 minutes) - EST
+     🔔 TODAY at 6:00 PM (in 15 minutes) - EST
      @creator5 - Pay Boost: {reward.value_data.percent}% for {reward.value_data.duration_days} days
-     Scheduled: Jan 6, 3:00 PM EST
+     Scheduled: Jan 6, 6:00 PM EST
      Claimed: Jan 3, 11:00 AM
      📅 View in Google Calendar
      Task: Activate {reward.value_data.percent}% commission boost in TikTok Seller Center

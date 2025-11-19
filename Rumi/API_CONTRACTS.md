@@ -31,9 +31,154 @@
 
 **Page:** `/app/login/start/page.tsx`
 
-### Endpoints
+### POST /api/auth/check-handle
 
-_To be defined_
+**Purpose:** Validate TikTok handle and determine routing based on user existence and email registration status
+
+#### Request
+
+```http
+POST /api/auth/check-handle
+Content-Type: application/json
+```
+
+#### Request Body Schema
+
+```typescript
+interface CheckHandleRequest {
+  handle: string              // TikTok handle (without @ symbol, already stripped by frontend)
+}
+```
+
+#### Response Schema
+
+```typescript
+interface CheckHandleResponse {
+  exists: boolean             // Does this handle exist in Supabase users table?
+  has_email: boolean          // Does user have email registered?
+  route: 'signup' | 'login'   // Where to send the user next
+  handle: string              // Normalized handle with @ prefix
+}
+```
+
+#### Example Request
+
+```json
+{
+  "handle": "creatorpro"
+}
+```
+
+#### Example Responses
+
+**Success - Scenario A (User Exists + Email Registered):**
+```json
+{
+  "exists": true,
+  "has_email": true,
+  "route": "login",
+  "handle": "@creatorpro"
+}
+```
+
+**Success - Scenario B (User Exists + No Email):**
+```json
+{
+  "exists": true,
+  "has_email": false,
+  "route": "signup",
+  "handle": "@creatorpro"
+}
+```
+
+**Success - Scenario C (User Does Not Exist):**
+```json
+{
+  "exists": false,
+  "has_email": false,
+  "route": "signup",
+  "handle": "@creatorpro"
+}
+```
+
+#### Business Logic
+
+**Backend responsibilities:**
+
+1. **Normalize handle** (add @ prefix if missing):
+   ```typescript
+   const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+   ```
+
+2. **Query database:**
+   ```sql
+   SELECT id, email, email_verified
+   FROM users
+   WHERE tiktok_handle = $normalizedHandle
+   LIMIT 1;
+   ```
+
+3. **Determine routing based on three scenarios:**
+
+   **Scenario A: Handle EXISTS + Email NOT NULL**
+   - User is a returning user (has registered previously)
+   - Response: `{ exists: true, has_email: true, route: 'login', handle: '@creatorpro' }`
+   - Frontend routes to `/login/wb` (password authentication)
+
+   **Scenario B: Handle EXISTS + Email IS NULL**
+   - User imported from Cruva (has videos) but never registered email
+   - Response: `{ exists: true, has_email: false, route: 'signup', handle: '@creatorpro' }`
+   - Frontend routes to `/login/signup` (collect email + password)
+
+   **Scenario C: Handle NOT FOUND**
+   - Word-of-mouth user (not in Cruva, no videos yet)
+   - Response: `{ exists: false, has_email: false, route: 'signup', handle: '@creatorpro' }`
+   - Frontend routes to `/login/signup` (new user registration)
+
+4. **Return response**
+
+#### Error Responses
+
+**400 Bad Request - Missing Handle:**
+```json
+{
+  "error": "HANDLE_REQUIRED",
+  "message": "TikTok handle is required"
+}
+```
+
+**400 Bad Request - Invalid Handle:**
+```json
+{
+  "error": "INVALID_HANDLE",
+  "message": "Handle can only contain letters, numbers, underscores, and periods"
+}
+```
+
+**400 Bad Request - Handle Too Long:**
+```json
+{
+  "error": "HANDLE_TOO_LONG",
+  "message": "Handle must be 30 characters or less"
+}
+```
+
+#### Security Notes
+
+- Handle validation regex: `^[a-zA-Z0-9_.]{1,30}$`
+- Rate limiting: Max 20 requests per IP per minute (prevent account enumeration)
+- Do NOT expose sensitive user data (tier, sales, videos count, etc.)
+- Only return minimal routing information
+
+#### Database Tables Used
+
+**Primary:**
+- `users` (SchemaFinalv2.md:131-170)
+
+**Fields Referenced:**
+- `users.tiktok_handle` - VARCHAR(100) NOT NULL
+- `users.email` - VARCHAR(255) NULLABLE
+- `users.email_verified` - BOOLEAN DEFAULT false
 
 ---
 
@@ -1832,11 +1977,11 @@ interface RewardsPageResponse {
     // Core reward data
     id: string                          // UUID from rewards.id
     type: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
-    name: string                        // From rewards.name (auto-generated)
-    description: string                 // From rewards.description (15 char max for physical_gift/experience)
+    name: string                        // Backend-generated (see Formatting Rules below)
+    description: string                 // From rewards.description (12 char max for physical_gift/experience)
 
     // PRE-FORMATTED display text (backend handles all formatting)
-    displayText: string                 // "+5% Pay boost for 30 Days" | "$50 Gift Card" | "Win a Wireless Headphones"
+    displayText: string                 // Backend-generated (see Formatting Rules below)
 
     // Structured data (camelCase transformed from value_data JSONB)
     valueData: {
@@ -1848,10 +1993,11 @@ interface RewardsPageResponse {
       requiresSize?: boolean            // For physical_gift
       sizeCategory?: string             // For physical_gift
       sizeOptions?: string[]            // For physical_gift
+      displayText?: string              // For physical_gift, experience (client-provided, max 27 chars)
     } | null
 
     // COMPUTED status (backend derives from multiple tables)
-    status: 'clearing' | 'sending' | 'active' | 'scheduled' |
+    status: 'clearing' | 'sending' | 'active' | 'pending_info' | 'scheduled' |
             'redeeming_physical' | 'redeeming' | 'claimable' |
             'limit_reached' | 'locked'
 
@@ -1896,6 +2042,32 @@ interface RewardsPageResponse {
 }
 ```
 
+### Backend Formatting Rules
+
+The backend generates `name` and `displayText` fields dynamically based on reward type:
+
+| Type | `name` Generation | `displayText` Generation |
+|------|-------------------|--------------------------|
+| **gift_card** | `"$" + amount + " Gift Card"` | `"Amazon Gift Card"` |
+| **commission_boost** | `percent + "% Pay Boost"` | `"Higher earnings (" + durationDays + "d)"` |
+| **spark_ads** | `"$" + amount + " Ads Boost"` | `"Spark Ads Promo"` |
+| **discount** | `percent + "% Deal Boost"` | `"Follower Discount (" + durationDays + "d)"` |
+| **physical_gift** | `"Gift Drop: " + description` | `valueData.displayText \|\| description` |
+| **experience** | `description` | `valueData.displayText \|\| description` |
+
+**Examples:**
+- `gift_card` with `amount: 50` → name: `"$50 Gift Card"`, displayText: `"Amazon Gift Card"`
+- `commission_boost` with `percent: 5, durationDays: 30` → name: `"5% Pay Boost"`, displayText: `"Higher earnings (30d)"`
+- `spark_ads` with `amount: 100` → name: `"$100 Ads Boost"`, displayText: `"Spark Ads Promo"`
+- `discount` with `percent: 15, durationDays: 7` → name: `"15% Deal Boost"`, displayText: `"Follower Discount (7d)"`
+- `physical_gift` with `description: "Headphones"`, `valueData.displayText: "Premium wireless earbuds"` → name: `"Gift Drop: Headphones"`, displayText: `"Premium wireless earbuds"`
+- `experience` with `description: "Mystery Trip"`, `valueData.displayText: "A hidden adventure"` → name: `"Mystery Trip"`, displayText: `"A hidden adventure"`
+
+**Character Limits:**
+- `name`: VARCHAR(255) - auto-generated
+- `description`: VARCHAR(12) - client admin input (physical_gift/experience only)
+- `valueData.displayText`: max 27 chars - client admin input (physical_gift/experience only)
+
 ### Example Response
 
 ```json
@@ -1912,9 +2084,9 @@ interface RewardsPageResponse {
     {
       "id": "reward-boost-5pct",
       "type": "commission_boost",
-      "name": "5% Commission Boost",
-      "description": "Temporary commission increase",
-      "displayText": "+5% Pay boost for 30 Days",
+      "name": "5% Pay Boost",
+      "description": "",
+      "displayText": "Higher earnings (30d)",
       "valueData": {
         "percent": 5,
         "durationDays": 30
@@ -2928,9 +3100,178 @@ interface ClaimRewardResponse {
 
 **Page:** `/app/rewards/rewardshistory/page.tsx`
 
+## GET /api/user/payment-info
+
+**Purpose:** Retrieve user's saved payment information for pre-filling payment modals (commission boost payouts).
+
+### Request
+
+```http
+GET /api/user/payment-info
+Authorization: Bearer <supabase-jwt-token>
+```
+
+### Response Schema
+
+```typescript
+interface PaymentInfoResponse {
+  hasPaymentInfo: boolean                    // Whether user has saved payment info
+  paymentMethod: 'paypal' | 'venmo' | null   // Saved payment method
+  paymentAccount: string | null              // Full unmasked account (user is authenticated)
+}
+```
+
+### Example Response
+
+**With Saved Info:**
+```json
+{
+  "hasPaymentInfo": true,
+  "paymentMethod": "paypal",
+  "paymentAccount": "john@example.com"
+}
+```
+
+**No Saved Info:**
+```json
+{
+  "hasPaymentInfo": false,
+  "paymentMethod": null,
+  "paymentAccount": null,
+  "paymentAccountLast4": null
+}
+```
+
+---
+
+## POST /api/rewards/:id/payment-info
+
+**Purpose:** Submit payment information for a commission boost payout. Updates both the specific redemption and optionally saves as user's default payment method.
+
+### Request
+
+```http
+POST /api/rewards/:id/payment-info
+Authorization: Bearer <supabase-jwt-token>
+Content-Type: application/json
+```
+
+### Request Body
+
+```typescript
+interface PaymentInfoRequest {
+  paymentMethod: 'paypal' | 'venmo'          // Payment platform
+  paymentAccount: string                     // PayPal email or Venmo handle
+  paymentAccountConfirm: string              // Confirmation (must match)
+  saveAsDefault: boolean                     // Save to users.default_payment_* for future use
+}
+```
+
+### Request Body Examples
+
+**PayPal:**
+```json
+{
+  "paymentMethod": "paypal",
+  "paymentAccount": "john@example.com",
+  "paymentAccountConfirm": "john@example.com",
+  "saveAsDefault": true
+}
+```
+
+**Venmo:**
+```json
+{
+  "paymentMethod": "venmo",
+  "paymentAccount": "@johndoe",
+  "paymentAccountConfirm": "@johndoe",
+  "saveAsDefault": false
+}
+```
+
+### Response Schema
+
+```typescript
+interface PaymentInfoSubmitResponse {
+  success: boolean
+  message: string
+  redemption: {
+    id: string
+    status: string                           // Updated to 'fulfilled'
+    paymentMethod: 'paypal' | 'venmo'
+    paymentInfoCollectedAt: string           // ISO 8601 timestamp
+  }
+  userPaymentUpdated: boolean                // Whether default payment was saved to users table
+}
+```
+
+### Example Response
+
+**Success:**
+```json
+{
+  "success": true,
+  "message": "Payment information saved successfully",
+  "redemption": {
+    "id": "redemption-abc-123",
+    "status": "fulfilled",
+    "paymentMethod": "paypal",
+    "paymentInfoCollectedAt": "2025-01-18T15:30:00Z"
+  },
+  "userPaymentUpdated": true
+}
+```
+
+### Error Responses
+
+**400 Bad Request - Accounts Don't Match:**
+```json
+{
+  "error": "PAYMENT_ACCOUNT_MISMATCH",
+  "message": "Payment account confirmation does not match"
+}
+```
+
+**400 Bad Request - Invalid Email (PayPal):**
+```json
+{
+  "error": "INVALID_PAYPAL_EMAIL",
+  "message": "Please provide a valid PayPal email address"
+}
+```
+
+**400 Bad Request - Invalid Handle (Venmo):**
+```json
+{
+  "error": "INVALID_VENMO_HANDLE",
+  "message": "Venmo handle must start with @ (e.g., @username)"
+}
+```
+
+**403 Forbidden - Not Pending Info:**
+```json
+{
+  "error": "PAYMENT_INFO_NOT_REQUIRED",
+  "message": "This reward is not awaiting payment information",
+  "currentStatus": "active"
+}
+```
+
+**404 Not Found:**
+```json
+{
+  "error": "REWARD_NOT_FOUND",
+  "message": "Reward not found or not accessible"
+}
+```
+
+---
+
 ## GET /api/rewards/history
 
-**Purpose:** Returns history of claimed and fulfilled rewards.
+**Purpose:** Retrieve user's concluded reward redemptions (archived/completed history). Shows ONLY rewards that have reached terminal "concluded" state and been moved to history archive.
+
+**Page:** `/app/rewards/rewardshistory/page.tsx`
 
 ### Request
 
@@ -2939,9 +3280,132 @@ GET /api/rewards/history
 Authorization: Bearer <supabase-jwt-token>
 ```
 
+### Backend Query
+
+```sql
+SELECT
+  r.id,
+  r.reward_id,
+  rw.type,
+  rw.name,
+  rw.description,
+  r.claimed_at,
+  r.concluded_at
+FROM redemptions r
+JOIN rewards rw ON r.reward_id = rw.id
+WHERE r.user_id = current_user_id
+  AND r.status = 'concluded'  -- ONLY concluded rewards in history
+ORDER BY r.concluded_at DESC
+```
+
 ### Response Schema
 
-_To be defined_
+```typescript
+interface RedemptionHistoryResponse {
+  user: {
+    id: string
+    handle: string
+    currentTier: string        // e.g., "tier_3"
+    currentTierName: string    // e.g., "Gold"
+    currentTierColor: string   // Hex color (e.g., "#F59E0B")
+  }
+
+  history: Array<{
+    id: string                 // redemptions.id
+    rewardId: string           // redemptions.reward_id (FK)
+    name: string               // Backend-formatted name (follows same rules as GET /api/rewards)
+    description: string        // Backend-formatted displayText
+    type: RewardType           // 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+    claimedAt: string          // ISO 8601 timestamp - when user claimed
+    concludedAt: string        // ISO 8601 timestamp - when moved to history
+    status: 'concluded'        // Always 'concluded' in history
+  }>
+}
+```
+
+### Backend Formatting Rules
+
+The backend generates `name` and `description` fields using the SAME formatting logic as `GET /api/rewards`:
+
+| Type | `name` Generation | `description` (displayText) Generation |
+|------|-------------------|----------------------------------------|
+| **gift_card** | `"$" + amount + " Gift Card"` | `"Amazon Gift Card"` |
+| **commission_boost** | `percent + "% Pay Boost"` | `"Higher earnings (" + durationDays + "d)"` |
+| **spark_ads** | `"$" + amount + " Ads Boost"` | `"Spark Ads Promo"` |
+| **discount** | `percent + "% Deal Boost"` | `"Follower Discount (" + durationDays + "d)"` |
+| **physical_gift** | `"Gift Drop: " + description` | `valueData.displayText \|\| description` |
+| **experience** | `description` | `valueData.displayText \|\| description` |
+
+### Example Response
+
+```json
+{
+  "user": {
+    "id": "user-123",
+    "handle": "creator_jane",
+    "currentTier": "tier_3",
+    "currentTierName": "Gold",
+    "currentTierColor": "#F59E0B"
+  },
+  "history": [
+    {
+      "id": "redemption-abc-123",
+      "rewardId": "reward-def-456",
+      "name": "$50 Gift Card",
+      "description": "Amazon Gift Card",
+      "type": "gift_card",
+      "claimedAt": "2024-01-15T10:00:00Z",
+      "concludedAt": "2024-01-16T14:00:00Z",
+      "status": "concluded"
+    },
+    {
+      "id": "redemption-xyz-789",
+      "rewardId": "reward-ghi-012",
+      "name": "5% Pay Boost",
+      "description": "Higher earnings (30d)",
+      "type": "commission_boost",
+      "claimedAt": "2024-01-10T09:15:00Z",
+      "concludedAt": "2024-01-11T10:30:00Z",
+      "status": "concluded"
+    },
+    {
+      "id": "redemption-qrs-345",
+      "rewardId": "reward-tuv-678",
+      "name": "Gift Drop: Headphones",
+      "description": "Premium wireless earbuds",
+      "type": "physical_gift",
+      "claimedAt": "2023-12-28T16:45:00Z",
+      "concludedAt": "2023-12-30T18:00:00Z",
+      "status": "concluded"
+    }
+  ]
+}
+```
+
+### Frontend Display Notes
+
+- **Status display:** Frontend shows "Completed" badge (user-friendly) instead of "Concluded" (database status)
+- **Timestamp display:** "Completed on [date]" using `concludedAt` field
+- **Empty state:** Show "No redemption history yet" message when `history` array is empty
+- **Sorting:** Backend returns sorted by `concludedAt DESC` (most recent first)
+
+### Error Responses
+
+**401 Unauthorized:**
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Authentication required"
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "SERVER_ERROR",
+  "message": "Failed to retrieve redemption history"
+}
+```
 
 ---
 

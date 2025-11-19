@@ -7,28 +7,22 @@
     import Link from "next/link"
     import { useState } from "react"
     import * as React from "react"
+    import type { RedemptionHistoryScenario } from "@/types/redemption-history"
 
     /**
      * REDEMPTION HISTORY PAGE
      *
-     * Shows creator's FULFILLED rewards ONLY (completed deliveries)
+     * Shows creator's CONCLUDED rewards ONLY (archived/completed)
      *
      * Backend Query:
      * SELECT * FROM redemptions
      * WHERE user_id = current_user_id
-     * AND status = 'fulfilled'
-     * ORDER BY fulfilled_at DESC
+     * AND status = 'concluded'
+     * ORDER BY concluded_at DESC
      */
 
-    interface RedemptionHistoryItem {
-      id: string // UUID from redemptions table
-      benefit_id: string // FK to benefits table
-      benefit_name: string // From benefits.name (e.g., "Gift Card: $50")
-      benefit_description: string // From benefits.description
-      claimed_at: string // ISO timestamp from redemptions.claimed_at
-      status: "fulfilled" // ONLY fulfilled in history
-      fulfilled_at: string // When admin completed fulfillment
-    }
+    // Interfaces now imported from @/types/redemption-history
+    // Using: RedemptionHistoryResponse from API contract
 
     export default function RedemptionHistoryPage() {
       // ============================================
@@ -37,230 +31,286 @@
       const [activeScenario, setActiveScenario] = useState("scenario-1")
       const [debugPanelOpen, setDebugPanelOpen] = useState(false)
 
-      const currentTier = "tier_3" // Gold (dynamic from backend)
-
-      const tierColors = {
-        tier_1: "#CD7F32",
-        tier_2: "#94a3b8",
-        tier_3: "#F59E0B",
-        tier_4: "#818CF8",
-      }
-
-      const currentTierColor = tierColors[currentTier as keyof typeof tierColors]
+      // Tier data now comes from mockData.user (will come from API)
 
       // ============================================
       // TEST SCENARIOS - Comprehensive Reward Coverage
       // ============================================
-      const scenarios = {
+      const scenarios: Record<string, RedemptionHistoryScenario> = {
         "scenario-1": {
           name: "All 6 Reward Types",
-          redemptionHistory: [
-            {
-              id: "r1",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $50",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2024-01-15T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-16T14:00:00Z",
+          mockData: {
+            user: {
+              id: "user-123",
+              handle: "creator_jane",
+              currentTier: "tier_3",
+              currentTierName: "Gold",
+              currentTierColor: "#F59E0B"
             },
-            {
-              id: "r2",
-              benefit_id: "b2",
-              benefit_name: "Pay Boost: 5%",
-              benefit_description: "More commission for 30 days",
-              claimed_at: "2024-01-10T09:15:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-11T10:30:00Z",
-            },
-            {
-              id: "r3",
-              benefit_id: "b3",
-              benefit_name: "Reach Boost: $100",
-              benefit_description: "In Spark Ads for more visibility",
-              claimed_at: "2024-01-05T14:20:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-06T09:00:00Z",
-            },
-            {
-              id: "r4",
-              benefit_id: "b4",
-              benefit_name: "Wireless Headphones",
-              benefit_description: "Gift Drop",
-              claimed_at: "2023-12-28T16:45:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-30T18:00:00Z",
-            },
-            {
-              id: "r5",
-              benefit_id: "b5",
-              benefit_name: "Deal Boost: 10%",
-              benefit_description: "Earn a discount for your viewers",
-              claimed_at: "2023-12-20T11:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-21T14:00:00Z",
-            },
-            {
-              id: "r6",
-              benefit_id: "b6",
-              benefit_name: "VIP Event",
-              benefit_description: "Mystery Trip",
-              claimed_at: "2023-12-15T08:30:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-16T12:00:00Z",
-            },
-          ],
+            history: [
+              {
+                id: "r1",
+                rewardId: "b1",
+                name: "$50 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2024-01-15T10:00:00Z",
+                concludedAt: "2024-01-16T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r2",
+                rewardId: "b2",
+                name: "5% Pay Boost",
+                description: "Higher earnings (30d)",
+                type: "commission_boost",
+                claimedAt: "2024-01-10T09:15:00Z",
+                concludedAt: "2024-01-11T10:30:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r3",
+                rewardId: "b3",
+                name: "$100 Ads Boost",
+                description: "Spark Ads Promo",
+                type: "spark_ads",
+                claimedAt: "2024-01-05T14:20:00Z",
+                concludedAt: "2024-01-06T09:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r4",
+                rewardId: "b4",
+                name: "Gift Drop: Headphones",
+                description: "Premium wireless earbuds",
+                type: "physical_gift",
+                claimedAt: "2023-12-28T16:45:00Z",
+                concludedAt: "2023-12-30T18:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r5",
+                rewardId: "b5",
+                name: "10% Deal Boost",
+                description: "Follower Discount (7d)",
+                type: "discount",
+                claimedAt: "2023-12-20T11:00:00Z",
+                concludedAt: "2023-12-21T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r6",
+                rewardId: "b6",
+                name: "Mystery Trip",
+                description: "A hidden adventure",
+                type: "experience",
+                claimedAt: "2023-12-15T08:30:00Z",
+                concludedAt: "2023-12-16T12:00:00Z",
+                status: "concluded" as const,
+              },
+            ],
+          },
         },
         "scenario-2": {
           name: "Empty History",
-          redemptionHistory: [],
+          mockData: {
+            user: {
+              id: "user-123",
+              handle: "creator_jane",
+              currentTier: "tier_3",
+              currentTierName: "Gold",
+              currentTierColor: "#F59E0B"
+            },
+            history: [],
+          },
         },
         "scenario-3": {
           name: "Single Item",
-          redemptionHistory: [
-            {
-              id: "r1",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $25",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2024-01-15T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-16T14:00:00Z",
+          mockData: {
+            user: {
+              id: "user-123",
+              handle: "creator_jane",
+              currentTier: "tier_3",
+              currentTierName: "Gold",
+              currentTierColor: "#F59E0B"
             },
-          ],
+            history: [
+              {
+                id: "r1",
+                rewardId: "b1",
+                name: "$25 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2024-01-15T10:00:00Z",
+                concludedAt: "2024-01-16T14:00:00Z",
+                status: "concluded" as const,
+              },
+            ],
+          },
         },
         "scenario-4": {
           name: "Multiple Gift Cards",
-          redemptionHistory: [
-            {
-              id: "r1",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $100",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2024-01-20T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-21T14:00:00Z",
+          mockData: {
+            user: {
+              id: "user-123",
+              handle: "creator_jane",
+              currentTier: "tier_3",
+              currentTierName: "Gold",
+              currentTierColor: "#F59E0B"
             },
-            {
-              id: "r2",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $50",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2024-01-10T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-11T14:00:00Z",
-            },
-            {
-              id: "r3",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $25",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2023-12-25T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-26T14:00:00Z",
-            },
-          ],
+            history: [
+              {
+                id: "r1",
+                rewardId: "b1",
+                name: "$100 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2024-01-20T10:00:00Z",
+                concludedAt: "2024-01-21T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r2",
+                rewardId: "b1",
+                name: "$50 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2024-01-10T10:00:00Z",
+                concludedAt: "2024-01-11T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r3",
+                rewardId: "b1",
+                name: "$25 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2023-12-25T10:00:00Z",
+                concludedAt: "2023-12-26T14:00:00Z",
+                status: "concluded" as const,
+              },
+            ],
+          },
         },
         "scenario-5": {
           name: "Long History (10 Items)",
-          redemptionHistory: [
-            {
-              id: "r1",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $50",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2024-02-01T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-02-02T14:00:00Z",
+          mockData: {
+            user: {
+              id: "user-123",
+              handle: "creator_jane",
+              currentTier: "tier_3",
+              currentTierName: "Gold",
+              currentTierColor: "#F59E0B"
             },
-            {
-              id: "r2",
-              benefit_id: "b2",
-              benefit_name: "Pay Boost: 5%",
-              benefit_description: "More commission for 30 days",
-              claimed_at: "2024-01-25T09:15:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-26T10:30:00Z",
-            },
-            {
-              id: "r3",
-              benefit_id: "b3",
-              benefit_name: "Reach Boost: $100",
-              benefit_description: "In Spark Ads for more visibility",
-              claimed_at: "2024-01-20T14:20:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-21T09:00:00Z",
-            },
-            {
-              id: "r4",
-              benefit_id: "b4",
-              benefit_name: "Wireless Headphones",
-              benefit_description: "Gift Drop",
-              claimed_at: "2024-01-15T16:45:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-17T18:00:00Z",
-            },
-            {
-              id: "r5",
-              benefit_id: "b5",
-              benefit_name: "Deal Boost: 10%",
-              benefit_description: "Earn a discount for your viewers",
-              claimed_at: "2024-01-10T11:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-11T14:00:00Z",
-            },
-            {
-              id: "r6",
-              benefit_id: "b6",
-              benefit_name: "VIP Event",
-              benefit_description: "Mystery Trip",
-              claimed_at: "2024-01-05T08:30:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2024-01-06T12:00:00Z",
-            },
-            {
-              id: "r7",
-              benefit_id: "b1",
-              benefit_name: "Gift Card: $25",
-              benefit_description: "Redeem for Amazon gift card",
-              claimed_at: "2023-12-30T10:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-31T14:00:00Z",
-            },
-            {
-              id: "r8",
-              benefit_id: "b2",
-              benefit_name: "Pay Boost: 7%",
-              benefit_description: "More commission for 30 days",
-              claimed_at: "2023-12-25T09:15:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-26T10:30:00Z",
-            },
-            {
-              id: "r9",
-              benefit_id: "b3",
-              benefit_name: "Reach Boost: $200",
-              benefit_description: "In Spark Ads for more visibility",
-              claimed_at: "2023-12-20T14:20:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-21T09:00:00Z",
-            },
-            {
-              id: "r10",
-              benefit_id: "b5",
-              benefit_name: "Deal Boost: 15%",
-              benefit_description: "Earn a discount for your viewers",
-              claimed_at: "2023-12-15T11:00:00Z",
-              status: "fulfilled" as const,
-              fulfilled_at: "2023-12-16T14:00:00Z",
-            },
-          ],
+            history: [
+              {
+                id: "r1",
+                rewardId: "b1",
+                name: "$50 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2024-02-01T10:00:00Z",
+                concludedAt: "2024-02-02T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r2",
+                rewardId: "b2",
+                name: "5% Pay Boost",
+                description: "Higher earnings (30d)",
+                type: "commission_boost",
+                claimedAt: "2024-01-25T09:15:00Z",
+                concludedAt: "2024-01-26T10:30:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r3",
+                rewardId: "b3",
+                name: "$100 Ads Boost",
+                description: "Spark Ads Promo",
+                type: "spark_ads",
+                claimedAt: "2024-01-20T14:20:00Z",
+                concludedAt: "2024-01-21T09:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r4",
+                rewardId: "b4",
+                name: "Gift Drop: Headphones",
+                description: "Premium wireless earbuds",
+                type: "physical_gift",
+                claimedAt: "2024-01-15T16:45:00Z",
+                concludedAt: "2024-01-17T18:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r5",
+                rewardId: "b5",
+                name: "10% Deal Boost",
+                description: "Follower Discount (7d)",
+                type: "discount",
+                claimedAt: "2024-01-10T11:00:00Z",
+                concludedAt: "2024-01-11T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r6",
+                rewardId: "b6",
+                name: "Mystery Trip",
+                description: "A hidden adventure",
+                type: "experience",
+                claimedAt: "2024-01-05T08:30:00Z",
+                concludedAt: "2024-01-06T12:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r7",
+                rewardId: "b1",
+                name: "$25 Gift Card",
+                description: "Amazon Gift Card",
+                type: "gift_card",
+                claimedAt: "2023-12-30T10:00:00Z",
+                concludedAt: "2023-12-31T14:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r8",
+                rewardId: "b2",
+                name: "7% Pay Boost",
+                description: "Higher earnings (30d)",
+                type: "commission_boost",
+                claimedAt: "2023-12-25T09:15:00Z",
+                concludedAt: "2023-12-26T10:30:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r9",
+                rewardId: "b3",
+                name: "$200 Ads Boost",
+                description: "Spark Ads Promo",
+                type: "spark_ads",
+                claimedAt: "2023-12-20T14:20:00Z",
+                concludedAt: "2023-12-21T09:00:00Z",
+                status: "concluded" as const,
+              },
+              {
+                id: "r10",
+                rewardId: "b5",
+                name: "15% Deal Boost",
+                description: "Follower Discount (7d)",
+                type: "discount",
+                claimedAt: "2023-12-15T11:00:00Z",
+                concludedAt: "2023-12-16T14:00:00Z",
+                status: "concluded" as const,
+              },
+            ],
+          },
         },
       }
 
       // Get current scenario data
       const currentScenario = scenarios[activeScenario as keyof typeof scenarios]
-      const redemptionHistory = currentScenario.redemptionHistory
+      const { user, history } = currentScenario.mockData
 
       return (
         <>
@@ -313,7 +363,7 @@
                   <span className="font-semibold">Active:</span> {currentScenario.name}
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {redemptionHistory.length} {redemptionHistory.length === 1 ? 'item' : 'items'}
+                  {history.length} {history.length === 1 ? 'item' : 'items'}
                 </p>
               </div>
             </div>
@@ -323,9 +373,9 @@
             title="Redemption History"
             headerContent={
               <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/30">
-                <Trophy className="w-5 h-5" style={{ color: currentTierColor }} />
+                <Trophy className="w-5 h-5" style={{ color: user.currentTierColor }} />
                 <span className="text-base font-semibold text-white">
-                  {currentTier === "tier_1" ? "Bronze" : currentTier === "tier_2" ? "Silver" : currentTier === "tier_3" ? "Gold" : "Platinum"}
+                  {user.currentTierName}
                 </span>
               </div>
             }
@@ -343,20 +393,20 @@
 
             {/* History List */}
             <div className="space-y-3">
-              {redemptionHistory.map((item) => (
+              {history.map((item) => (
                 <div key={item.id} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      {/* Benefit name from benefits table */}
-                      <h3 className="font-semibold text-slate-900">{item.benefit_name}</h3>
+                      {/* Reward name (backend-formatted) */}
+                      <h3 className="font-semibold text-slate-900">{item.name}</h3>
 
-                      {/* Description from benefits table */}
-                      <p className="text-sm text-slate-600 mt-1">{item.benefit_description}</p>
+                      {/* Description (backend-formatted displayText) */}
+                      <p className="text-sm text-slate-600 mt-1">{item.description}</p>
 
-                      {/* Fulfilled timestamp */}
+                      {/* Concluded timestamp */}
                       <p className="text-xs text-slate-500 mt-2">
-                        Fulfilled on{" "}
-                        {new Date(item.fulfilled_at).toLocaleDateString("en-US", {
+                        Completed on{" "}
+                        {new Date(item.concludedAt).toLocaleDateString("en-US", {
                           year: "numeric",
                           month: "long",
                           day: "numeric",
@@ -365,10 +415,10 @@
                     </div>
 
                     <div className="ml-4">
-                      {/* All items in history are fulfilled */}
+                      {/* All items in history are concluded (show as "Completed" to user) */}
                       <div className="flex items-center gap-1.5 text-green-600">
                         <CheckCircle2 className="h-4 w-4" />
-                        <span className="text-sm font-medium">Fulfilled</span>
+                        <span className="text-sm font-medium">Completed</span>
                       </div>
                     </div>
                   </div>
@@ -377,10 +427,10 @@
             </div>
 
             {/* Empty State */}
-            {redemptionHistory.length === 0 && (
+            {history.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-slate-500">No redemption history yet</p>
-                <p className="text-xs text-slate-400 mt-2">Fulfilled rewards will appear here</p>
+                <p className="text-xs text-slate-400 mt-2">Concluded rewards will appear here</p>
               </div>
             )}
           </PageLayout>
