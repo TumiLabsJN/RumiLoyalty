@@ -3,6 +3,14 @@
   import { useState, useEffect, useRef } from "react"
   import { ArrowLeft, Loader2 } from "lucide-react"
   import { useRouter } from "next/navigation"
+  import type {
+    VerifyOtpRequest,
+    VerifyOtpResponse,
+    VerifyOtpErrorResponse,
+    ResendOtpRequest,
+    ResendOtpResponse,
+    AuthErrorResponse
+  } from "@/types/auth"
 
   /**
    * OTP VERIFICATION PAGE - With Loading Modal & Robust Paste
@@ -24,12 +32,26 @@
     const [countdown, setCountdown] = useState(60)
     const [canResend, setCanResend] = useState(false)
     const [isVerifying, setIsVerifying] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null)
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([])
     const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-    const email = "creator@example.com"
-    const clientName = "Stateside Growers"
+    // Get email from sessionStorage (set by signup page)
+    const [email, setEmail] = useState<string>("")
+    const clientName = process.env.NEXT_PUBLIC_CLIENT_NAME || "Rumi Loyalty"
+
+    // Get email from session on mount
+    useEffect(() => {
+      const storedEmail = sessionStorage.getItem('userEmail')
+      if (storedEmail) {
+        setEmail(storedEmail)
+      } else {
+        // No email found, redirect to start
+        router.push('/login/start')
+      }
+    }, [router])
 
     useEffect(() => {
       if (countdown > 0) {
@@ -104,31 +126,46 @@
 
     const handleVerify = async (code: string) => {
       setIsVerifying(true)
-
-      console.log("Verifying OTP:", code)
+      setError(null)  // Clear previous errors
+      setAttemptsRemaining(null)
 
       try {
-        // TODO: Replace with actual API call
-        // Backend endpoint: POST /api/auth/verify-otp
-        // Request body: { otp: "123456", session_id: "from_cookie" }
-        //
-        // Success response: { verified: true, user_id: "uuid", session_token: "jwt" }
-        // Error response: { verified: false, error: "Invalid or expired code" }
+        // API call: POST /api/auth/verify-otp
+        const response = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code } satisfies VerifyOtpRequest)
+        })
 
-        // Simulate API call (remove in production)
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        if (!response.ok) {
+          const errorData = (await response.json()) as VerifyOtpErrorResponse
 
-        // On success, redirect to loading page
-        router.push("/login/loading")
+          // Show error message from backend
+          setError(errorData.message || 'Verification failed')
 
-      } catch (error) {
-        console.error("Verification error:", error)
+          // Show attempts remaining if provided
+          if (errorData.attemptsRemaining !== undefined) {
+            setAttemptsRemaining(errorData.attemptsRemaining)
+          }
 
+          throw new Error(errorData.message || 'Verification failed')
+        }
+
+        const data = (await response.json()) as VerifyOtpResponse
+
+        // Success - OTP verified, session created
+        if (data.verified) {
+          // Backend sets auth cookie, route to loading page
+          router.push("/login/loading")
+        } else {
+          throw new Error("Verification failed")
+        }
+
+      } catch (err) {
+        console.error('OTP verification failed:', err)
         setIsVerifying(false)
 
-        // TODO: Replace alert with better error UI (toast/inline message)
-        alert("Invalid code. Please try again.")
-
+        // Clear OTP inputs
         setOtp(["", "", "", "", "", ""])
         inputRefs.current[0]?.focus()
       }
@@ -137,17 +174,43 @@
     const handleResend = async () => {
       if (!canResend) return
 
-      console.log("Resending OTP to:", email)
+      setError(null)  // Clear any previous errors
 
-      // TODO: Send to backend
-      // Backend endpoint: POST /api/auth/resend-otp
-      // Request body: { session_id: "from_cookie" }
-      // Response: { sent: true }
+      try {
+        // API call: POST /api/auth/resend-otp
+        const response = await fetch('/api/auth/resend-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({} satisfies ResendOtpRequest)  // Empty body
+        })
 
-      setCountdown(60)
-      setCanResend(false)
-      setOtp(["", "", "", "", "", ""])
-      inputRefs.current[0]?.focus()
+        if (!response.ok) {
+          const errorData = (await response.json()) as AuthErrorResponse
+          throw new Error(errorData.message || 'Failed to resend code')
+        }
+
+        const data = (await response.json()) as ResendOtpResponse
+
+        if (data.sent) {
+          // Use remainingSeconds from API (not hardcoded 60)
+          setCountdown(data.remainingSeconds)
+          setCanResend(false)
+          setOtp(["", "", "", "", "", ""])
+          inputRefs.current[0]?.focus()
+
+          // Optional: Log success
+          console.log('New code sent! Expires at:', data.expiresAt)
+        }
+
+      } catch (err) {
+        console.error('Resend OTP failed:', err)
+
+        if (err instanceof Error) {
+          setError(err.message)  // Backend formatted: "Please wait 25 seconds..."
+        } else {
+          setError('Failed to resend code. Please try again.')
+        }
+      }
     }
 
     const handleBack = () => {
@@ -197,6 +260,18 @@
               />
             ))}
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600 text-center">{error}</p>
+              {attemptsRemaining !== null && attemptsRemaining > 0 && (
+                <p className="text-xs text-red-500 text-center mt-1">
+                  {attemptsRemaining} attempt{attemptsRemaining === 1 ? '' : 's'} remaining
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="text-center space-y-3">
             {!canResend ? (

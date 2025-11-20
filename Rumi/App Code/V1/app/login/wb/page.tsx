@@ -5,7 +5,8 @@
   import { AuthLayout } from "@/components/authlayout"
   import { Loader2, AlertCircle } from "lucide-react"
   import { useRouter } from "next/navigation"
-  import { useState } from "react"
+  import { useState, useEffect } from "react"
+  import type { LoginRequest, LoginResponse, AuthErrorResponse } from "@/types/auth"
 
   /**
    * LOGIN PAGE - User Authentication
@@ -35,16 +36,21 @@
     const [isSigningIn, setIsSigningIn] = useState(false)
     const [error, setError] = useState("")
 
+    // Get handle from sessionStorage (client-side only)
+    const [handle, setHandle] = useState<string>("")
+
+    useEffect(() => {
+      const storedHandle = sessionStorage.getItem('userHandle')
+      if (!storedHandle) {
+        // No handle found, redirect to start page
+        router.push('/login/start')
+      } else {
+        setHandle(storedHandle)
+      }
+    }, [router])
+
     // Form validation: Only password length check
-    const isFormValid = password.length >= 8
-
-    // ============================================
-    // DYNAMIC DATA - Replace with backend values
-    // ============================================
-
-    // Dynamic: TikTok handle from server-side session
-    // TODO: Replace with actual session fetch
-    const handle = "@creatorpro" // ← MOCK DATA: From server session
+    const isFormValid = password.length >= 8 && handle !== ""
 
     const logoUrl = "/images/fizee-logo.png"
     const privacyPolicyUrl = "/privacy-policy"
@@ -53,53 +59,42 @@
     // FORM SUBMISSION
     // ============================================
 
-    const handleContinue = async () => {
+    const handleContinue = async (e?: React.FormEvent) => {
+      if (e) e.preventDefault()
       if (!isFormValid) return
 
       setIsSigningIn(true)
       setError("") // Clear any previous errors
 
-      console.log("Login attempt:", { handle, password: "***" })
-
       try {
-        // TODO: Replace with actual API call
-        // Backend endpoint: POST /api/auth/login
-        // Request body:
-        // {
-        //   tiktok_handle: handle, // From session
-        //   password: "plaintext_password", // Backend will hash and compare
-        //   session_id: "from_cookie"
-        // }
-        //
-        // Success response:
-        // {
-        //   success: true,
-        //   user_id: "uuid",
-        //   session_token: "jwt_token"
-        // }
-        //
-        // Error response:
-        // {
-        //   success: false,
-        //   error: "Invalid password"
-        // }
+        // API call: POST /api/auth/login
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ handle, password } satisfies LoginRequest)
+        })
 
-        // Simulate API call (remove in production)
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        if (!response.ok) {
+          const errorData = (await response.json()) as AuthErrorResponse
+          throw new Error(errorData.message || 'Login failed')
+        }
 
-        // Uncomment to test error state:
-        // throw new Error("Invalid password")
+        const data = (await response.json()) as LoginResponse
 
-        // On success, redirect to home
-        router.push("/home")
+        // Success - session created, backend sets auth cookie
+        if (data.success) {
+          // Route to home page (or loading page for smooth transition)
+          router.push("/login/loading")
+        } else {
+          throw new Error("Login failed")
+        }
 
       } catch (err) {
-        console.error("Login error:", err)
-
+        console.error('Login failed:', err)
         setIsSigningIn(false)
 
-        // Show inline error message
-        setError("Incorrect password. Please try again.")
+        // Show backend-formatted error message
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
 
         // Clear password field
         setPassword("")
@@ -147,12 +142,26 @@
             </p>
           </div>
 
-          {/* Form */}
-          <div className="space-y-5">
+          {/* Form with browser password manager support */}
+          <form onSubmit={handleContinue} className="space-y-5">
+            {/* Hidden email field for password managers - browsers recognize email + password pairs */}
+            <input
+              type="email"
+              name="email"
+              autoComplete="email"
+              value=""
+              onChange={() => {}}
+              style={{ display: 'none' }}
+              tabIndex={-1}
+              aria-hidden="true"
+            />
+
             {/* Password Input */}
             <div>
               <PasswordInput
                 id="password"
+                name="current-password"
+                autoComplete="current-password"
                 value={password}
                 onChange={handlePasswordChange}
                 placeholder="Enter password"
@@ -176,18 +185,18 @@
                 <p className="text-xs text-slate-500 mt-2">Minimum 8 characters</p>
               )}
             </div>
-          </div>
 
-          {/* Continue Button */}
-          <div className="mt-8">
-            <Button
-              onClick={handleContinue}
-              disabled={!isFormValid}
-              className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Continue
-            </Button>
-          </div>
+            {/* Continue Button */}
+            <div className="mt-8">
+              <Button
+                type="submit"
+                disabled={!isFormValid}
+                className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue
+              </Button>
+            </div>
+          </form>
 
           {/* Forgot Password Link */}
           <div className="mt-6 text-center">

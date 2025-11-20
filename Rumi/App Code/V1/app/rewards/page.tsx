@@ -552,6 +552,53 @@ export default function RewardsPage() {
             statusDetails: null,
             redemptionFrequency: "monthly",
             redemptionType: "instant"
+          },
+          // TEST 1: Discount - Claimable (opens schedule discount modal)
+          {
+            id: "reward-test-discount-1",
+            type: "discount",
+            name: "20% Deal Boost",
+            description: "",
+            displayText: "Follower discount",
+            valueData: {
+              percent: 20,
+              durationDays: 14,
+              couponCode: "",
+              maxUses: 500
+            },
+            status: "claimable",
+            canClaim: true,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 0,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 11,
+            statusDetails: null,
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
+          },
+          // TEST 2: Commission Boost - Claimable (opens schedule payboost modal)
+          {
+            id: "reward-test-payboost-1",
+            type: "commission_boost",
+            name: "15% Pay Boost",
+            description: "",
+            displayText: "Higher earnings (30d)",
+            valueData: { percent: 15, durationDays: 30 },
+            status: "claimable",
+            canClaim: true,
+            isLocked: false,
+            isPreview: false,
+            usedCount: 0,
+            totalQuantity: 1,
+            tierEligibility: "tier_3",
+            requiredTierName: null,
+            displayOrder: 12,
+            statusDetails: null,
+            redemptionFrequency: "monthly",
+            redemptionType: "scheduled"
           }
         ]
       };

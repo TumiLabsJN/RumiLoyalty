@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import type { UserStatusResponse } from "@/types/auth"
 
 /**
  * LOADING PAGE - Transition screen after OTP verification
@@ -17,25 +18,41 @@ export default function LoadingPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // Get user type from sessionStorage (set in start page)
-    const userType = sessionStorage.getItem("userType")
-    const handle = sessionStorage.getItem("userHandle")
+    const fetchUserStatus = async () => {
+      try {
+        // API call: GET /api/auth/user-status
+        const response = await fetch('/api/auth/user-status', {
+          method: 'GET',
+          credentials: 'include'  // Include HTTP-only cookie
+        })
 
-    console.log("Loading page - User type:", userType, "Handle:", handle)
+        if (!response.ok) {
+          // Not authenticated or error - redirect to login
+          console.error('User status check failed:', response.status)
+          router.push('/login/start')
+          return
+        }
 
-    // Simulate loading delay (2 seconds)
-    const timer = setTimeout(() => {
-      if (userType === "recognized") {
-        // Recognized user flow: redirect to home
-        router.push("/home")
-      } else {
-        // Unrecognized user flow: redirect to welcomeunr page
-        router.push("/login/welcomeunr")
+        const data = (await response.json()) as UserStatusResponse
+
+        // Log for debugging
+        console.log('User status:', {
+          userId: data.userId,
+          isRecognized: data.isRecognized,
+          redirectTo: data.redirectTo
+        })
+
+        // Backend determines where to route
+        router.push(data.redirectTo)
+
+      } catch (err) {
+        console.error('Failed to get user status:', err)
+        // On error, redirect to login
+        router.push('/login/start')
       }
-    }, 2000)
+    }
 
-    // Cleanup timeout on unmount
-    return () => clearTimeout(timer)
+    fetchUserStatus()
   }, [router])
 
   return (

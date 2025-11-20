@@ -186,9 +186,252 @@ interface CheckHandleResponse {
 
 **Page:** `/app/login/signup/page.tsx`
 
-### Endpoints
+### POST /api/auth/signup
 
-_To be defined_
+**Purpose:** Create new user account with email + password, send OTP verification email
+
+#### Request
+
+```http
+POST /api/auth/signup
+Content-Type: application/json
+```
+
+#### Request Body Schema
+
+```typescript
+interface SignupRequest {
+  handle: string          // TikTok handle with @ prefix (from check-handle flow)
+  email: string           // User's email address
+  password: string        // Plaintext password (min 8, max 128 chars, hashed server-side)
+  agreedToTerms: boolean  // Must be true
+}
+```
+
+#### Response Schema
+
+```typescript
+interface SignupResponse {
+  success: boolean
+  otpSent: boolean        // Confirms OTP email sent
+  sessionId: string       // OTP session tracking (stored in HTTP-only cookie)
+  userId: string          // UUID of created user
+}
+```
+
+#### Example Request
+
+```json
+{
+  "handle": "@creatorpro",
+  "email": "creator@example.com",
+  "password": "securePassword123",
+  "agreedToTerms": true
+}
+```
+
+#### Example Response
+
+**Success:**
+```json
+{
+  "success": true,
+  "otpSent": true,
+  "sessionId": "otp-session-abc-123",
+  "userId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+#### Business Logic
+
+**Backend responsibilities:**
+
+1. **Validate input:**
+   ```typescript
+   // Email format
+   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+     return { error: "INVALID_EMAIL", message: "Invalid email format" }
+   }
+
+   // Password length
+   if (password.length < 8) {
+     return { error: "PASSWORD_TOO_SHORT", message: "Password must be at least 8 characters" }
+   }
+   if (password.length > 128) {
+     return { error: "PASSWORD_TOO_LONG", message: "Password must be less than 128 characters" }
+   }
+
+   // Terms agreement
+   if (!agreedToTerms) {
+     return { error: "TERMS_NOT_ACCEPTED", message: "You must agree to the terms" }
+   }
+   ```
+
+2. **Check for existing user:**
+   ```sql
+   SELECT id FROM users
+   WHERE email = $email
+   LIMIT 1;
+   ```
+   If exists: Return `EMAIL_ALREADY_EXISTS` error
+
+3. **Hash password:**
+   ```typescript
+   import bcrypt from 'bcryptjs'
+   const passwordHash = await bcrypt.hash(password, 10);  // rounds=10
+   ```
+
+4. **Create user record:**
+   ```sql
+   INSERT INTO users (
+     client_id,
+     tiktok_handle,
+     email,
+     password_hash,
+     email_verified,
+     terms_accepted_at,
+     terms_version,
+     current_tier,
+     created_at,
+     updated_at
+   ) VALUES (
+     $clientId,                -- From app config
+     $handle,                  -- From request
+     $email,                   -- From request
+     $passwordHash,            -- Bcrypt hash
+     false,                    -- Email not verified yet
+     NOW(),                    -- Consent timestamp
+     '2025-01-18',            -- Current terms version
+     'tier_1',                -- Default tier
+     NOW(),
+     NOW()
+   ) RETURNING id;
+   ```
+
+5. **Generate 6-digit OTP code:**
+   ```typescript
+   const otpCode = String(Math.floor(100000 + Math.random() * 900000));  // 6 digits
+   const otpHash = await bcrypt.hash(otpCode, 10);
+   const sessionId = crypto.randomUUID();
+   ```
+
+6. **Store OTP in database:**
+   ```sql
+   INSERT INTO otp_codes (
+     user_id,
+     session_id,
+     code_hash,
+     expires_at,
+     attempts,
+     used,
+     created_at
+   ) VALUES (
+     $userId,
+     $sessionId,
+     $otpHash,
+     NOW() + INTERVAL '5 minutes',
+     0,
+     false,
+     NOW()
+   );
+   ```
+
+7. **Send OTP email:**
+   ```typescript
+   // Using Resend or similar email service
+   await sendEmail({
+     to: email,
+     subject: "Verify Your Email - [Client Name]",
+     html: `Your verification code is: <strong>${otpCode}</strong>. Valid for 5 minutes.`
+   })
+   ```
+
+8. **Set HTTP-only cookie for session tracking:**
+   ```typescript
+   return Response.json(response, {
+     headers: {
+       'Set-Cookie': `otp_session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=300`
+     }
+   })
+   ```
+
+#### Error Responses
+
+**400 Bad Request - Email Already Exists:**
+```json
+{
+  "error": "EMAIL_ALREADY_EXISTS",
+  "message": "An account with this email already exists"
+}
+```
+
+**400 Bad Request - Invalid Email:**
+```json
+{
+  "error": "INVALID_EMAIL",
+  "message": "Invalid email format"
+}
+```
+
+**400 Bad Request - Password Too Short:**
+```json
+{
+  "error": "PASSWORD_TOO_SHORT",
+  "message": "Password must be at least 8 characters"
+}
+```
+
+**400 Bad Request - Password Too Long:**
+```json
+{
+  "error": "PASSWORD_TOO_LONG",
+  "message": "Password must be less than 128 characters"
+}
+```
+
+**400 Bad Request - Terms Not Accepted:**
+```json
+{
+  "error": "TERMS_NOT_ACCEPTED",
+  "message": "You must agree to the terms and conditions"
+}
+```
+
+**500 Internal Server Error - OTP Send Failed:**
+```json
+{
+  "error": "OTP_SEND_FAILED",
+  "message": "Failed to send verification email. Please try again."
+}
+```
+
+#### Security Notes
+
+- Password hashed with bcrypt (rounds=10) before storage - NEVER store plaintext
+- OTP code also hashed before storage (never store plaintext OTP)
+- OTP expires in 5 minutes from creation
+- Session ID stored in HTTP-only cookie (XSS protection)
+- Rate limiting: Max 5 signup attempts per IP per hour (prevent abuse)
+- Terms consent timestamp + version stored for legal compliance
+
+#### Database Tables Used
+
+**Primary:**
+- `users` (SchemaFinalv2.md:131-162) - Create user record with auth fields
+- `otp_codes` (SchemaFinalv2.md:175-210) - Store OTP verification data
+
+**Fields Referenced:**
+- `users.client_id` - Multi-tenant isolation
+- `users.tiktok_handle` - VARCHAR(100) NOT NULL
+- `users.email` - VARCHAR(255) NULLABLE
+- `users.password_hash` - VARCHAR(255) NOT NULL (bcrypt hash)
+- `users.email_verified` - BOOLEAN DEFAULT false
+- `users.terms_accepted_at` - TIMESTAMP NULLABLE
+- `users.terms_version` - VARCHAR(50) NULLABLE
+- `users.current_tier` - VARCHAR(50) DEFAULT 'tier_1'
+- `otp_codes.session_id` - VARCHAR(100) NOT NULL UNIQUE
+- `otp_codes.code_hash` - VARCHAR(255) NOT NULL
+- `otp_codes.expires_at` - TIMESTAMP NOT NULL
 
 ---
 
@@ -196,9 +439,501 @@ _To be defined_
 
 **Page:** `/app/login/otp/page.tsx`
 
-### Endpoints
+### POST /api/auth/verify-otp
 
-_To be defined_
+**Purpose:** Verify 6-digit OTP code and create authenticated session
+
+#### Request
+
+```http
+POST /api/auth/verify-otp
+Content-Type: application/json
+Cookie: otp_session={sessionId}
+```
+
+#### Request Body Schema
+
+```typescript
+interface VerifyOtpRequest {
+  code: string           // 6-digit OTP code entered by user
+}
+```
+
+#### Response Schema
+
+```typescript
+interface VerifyOtpResponse {
+  success: boolean
+  verified: boolean      // True if OTP is valid
+  userId: string         // UUID of authenticated user
+  sessionToken: string   // JWT token for authenticated session (stored in HTTP-only cookie)
+}
+```
+
+#### Example Request
+
+```json
+{
+  "code": "123456"
+}
+```
+
+#### Example Response
+
+**Success:**
+```json
+{
+  "success": true,
+  "verified": true,
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "sessionToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### Business Logic
+
+**Backend responsibilities:**
+
+1. **Get session ID from HTTP-only cookie:**
+   ```typescript
+   const sessionId = cookies.get('otp_session')?.value
+
+   if (!sessionId) {
+     return { error: "SESSION_NOT_FOUND", message: "OTP session expired. Please sign up again." }
+   }
+   ```
+
+2. **Validate input:**
+   ```typescript
+   // Code format (6 digits)
+   if (!/^\d{6}$/.test(code)) {
+     return { error: "INVALID_CODE_FORMAT", message: "Code must be 6 digits" }
+   }
+   ```
+
+3. **Query OTP record:**
+   ```sql
+   SELECT
+     id,
+     user_id,
+     code_hash,
+     expires_at,
+     attempts,
+     used
+   FROM otp_codes
+   WHERE session_id = $sessionId
+     AND used = false
+   LIMIT 1;
+   ```
+
+4. **Check if OTP exists and not used:**
+   ```typescript
+   if (!otpRecord) {
+     return {
+       error: "INVALID_SESSION",
+       message: "OTP session not found or already used. Please sign up again."
+     }
+   }
+
+   if (otpRecord.used) {
+     return {
+       error: "OTP_ALREADY_USED",
+       message: "This code has already been used. Please request a new one."
+     }
+   }
+   ```
+
+5. **Check expiration:**
+   ```typescript
+   if (new Date() > new Date(otpRecord.expires_at)) {
+     return {
+       error: "OTP_EXPIRED",
+       message: "This code has expired. Please request a new one."
+     }
+   }
+   ```
+
+6. **Check max attempts:**
+   ```typescript
+   if (otpRecord.attempts >= 3) {
+     // Mark as used to prevent further attempts
+     await db.execute(`
+       UPDATE otp_codes
+       SET used = true
+       WHERE id = $otpRecordId
+     `)
+
+     return {
+       error: "MAX_ATTEMPTS_EXCEEDED",
+       message: "Too many incorrect attempts. Please sign up again."
+     }
+   }
+   ```
+
+7. **Verify OTP code:**
+   ```typescript
+   import bcrypt from 'bcryptjs'
+   const isValid = await bcrypt.compare(code, otpRecord.code_hash)
+
+   if (!isValid) {
+     // Increment attempts
+     const newAttempts = otpRecord.attempts + 1
+     await db.execute(`
+       UPDATE otp_codes
+       SET attempts = $newAttempts
+       WHERE id = $otpRecordId
+     `)
+
+     const attemptsRemaining = 3 - newAttempts
+
+     return {
+       error: "INVALID_OTP",
+       message: attemptsRemaining > 0
+         ? `Incorrect code. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining.`
+         : "Too many incorrect attempts. Please sign up again.",
+       attemptsRemaining
+     }
+   }
+   ```
+
+8. **Mark OTP as used:**
+   ```sql
+   UPDATE otp_codes
+   SET used = true
+   WHERE id = $otpRecordId;
+   ```
+
+9. **Update user email verification status:**
+   ```sql
+   UPDATE users
+   SET email_verified = true,
+       updated_at = NOW()
+   WHERE id = $userId;
+   ```
+
+10. **Create authenticated session (Supabase Auth):**
+    ```typescript
+    const { data: session, error } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: temporaryPassword  // Or create session directly
+    })
+
+    const sessionToken = session.access_token
+    ```
+
+11. **Set session cookie and clear OTP cookie:**
+    ```typescript
+    return Response.json(response, {
+      headers: {
+        'Set-Cookie': [
+          `auth_token=${sessionToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000`, // 30 days
+          `otp_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0` // Clear OTP cookie
+        ].join(', ')
+      }
+    })
+    ```
+
+#### Error Responses
+
+**400 Bad Request - Invalid Code Format:**
+```json
+{
+  "error": "INVALID_CODE_FORMAT",
+  "message": "Code must be 6 digits"
+}
+```
+
+**400 Bad Request - Invalid OTP:**
+```json
+{
+  "error": "INVALID_OTP",
+  "message": "Incorrect code. 2 attempts remaining.",
+  "attemptsRemaining": 2
+}
+```
+
+**400 Bad Request - OTP Expired:**
+```json
+{
+  "error": "OTP_EXPIRED",
+  "message": "This code has expired. Please request a new one."
+}
+```
+
+**400 Bad Request - OTP Already Used:**
+```json
+{
+  "error": "OTP_ALREADY_USED",
+  "message": "This code has already been used. Please request a new one."
+}
+```
+
+**400 Bad Request - Max Attempts Exceeded:**
+```json
+{
+  "error": "MAX_ATTEMPTS_EXCEEDED",
+  "message": "Too many incorrect attempts. Please sign up again."
+}
+```
+
+**400 Bad Request - Session Not Found:**
+```json
+{
+  "error": "SESSION_NOT_FOUND",
+  "message": "OTP session expired. Please sign up again."
+}
+```
+
+**400 Bad Request - Invalid Session:**
+```json
+{
+  "error": "INVALID_SESSION",
+  "message": "OTP session not found or already used. Please sign up again."
+}
+```
+
+#### Security Notes
+
+- OTP code hashed with bcrypt (rounds=10) - NEVER store plaintext
+- OTP expires in 5 minutes from creation
+- Max 3 verification attempts per OTP
+- One-time use (marked as used after successful verification)
+- Session ID in HTTP-only cookie (XSS protection)
+- OTP session cookie cleared after successful verification
+- Auth session cookie set with 30-day expiration
+- Rate limiting: Max 10 verify attempts per IP per minute
+
+#### Database Tables Used
+
+**Primary:**
+- `otp_codes` (SchemaFinalv2.md:175-210) - OTP verification data
+- `users` (SchemaFinalv2.md:131-162) - Update email_verified status
+
+**Fields Referenced:**
+- `otp_codes.session_id` - VARCHAR(100) NOT NULL UNIQUE
+- `otp_codes.user_id` - UUID REFERENCES users(id)
+- `otp_codes.code_hash` - VARCHAR(255) NOT NULL (bcrypt hash)
+- `otp_codes.expires_at` - TIMESTAMP NOT NULL
+- `otp_codes.attempts` - INTEGER DEFAULT 0 (max 3)
+- `otp_codes.used` - BOOLEAN DEFAULT false
+- `users.email_verified` - BOOLEAN DEFAULT false
+
+---
+
+### POST /api/auth/resend-otp
+
+**Purpose:** Invalidate old OTP and send new verification code to user's email
+
+#### Request
+
+```http
+POST /api/auth/resend-otp
+Content-Type: application/json
+Cookie: otp_session={sessionId}
+```
+
+#### Request Body Schema
+
+```typescript
+interface ResendOtpRequest {
+  // Empty body - session_id from HTTP-only cookie
+}
+```
+
+#### Response Schema
+
+```typescript
+interface ResendOtpResponse {
+  success: boolean
+  sent: boolean              // Confirms new OTP email was sent
+  expiresAt: string          // ISO timestamp when new OTP expires
+  remainingSeconds: number   // Seconds until expiration (for countdown timer)
+}
+```
+
+#### Example Request
+
+```json
+{}
+```
+
+#### Example Response
+
+**Success:**
+```json
+{
+  "success": true,
+  "sent": true,
+  "expiresAt": "2025-01-19T10:40:00Z",
+  "remainingSeconds": 300
+}
+```
+
+#### Business Logic
+
+**Backend responsibilities:**
+
+1. **Get session ID from HTTP-only cookie:**
+   ```typescript
+   const sessionId = cookies.get('otp_session')?.value
+
+   if (!sessionId) {
+     return { error: "SESSION_NOT_FOUND", message: "OTP session expired. Please sign up again." }
+   }
+   ```
+
+2. **Query existing OTP record:**
+   ```sql
+   SELECT
+     id,
+     user_id,
+     created_at
+   FROM otp_codes
+   WHERE session_id = $sessionId
+   LIMIT 1;
+   ```
+
+3. **Check if session exists:**
+   ```typescript
+   if (!otpRecord) {
+     return {
+       error: "INVALID_SESSION",
+       message: "OTP session not found. Please sign up again."
+     }
+   }
+   ```
+
+4. **Rate limiting - Check last resend time:**
+   ```typescript
+   const timeSinceCreation = Date.now() - new Date(otpRecord.created_at).getTime()
+   const minimumWaitTime = 30000 // 30 seconds
+
+   if (timeSinceCreation < minimumWaitTime) {
+     const waitSeconds = Math.ceil((minimumWaitTime - timeSinceCreation) / 1000)
+     return {
+       error: "RESEND_TOO_SOON",
+       message: `Please wait ${waitSeconds} seconds before requesting a new code.`
+     }
+   }
+   ```
+
+5. **Get user details:**
+   ```sql
+   SELECT email FROM users WHERE id = $userId LIMIT 1;
+   ```
+
+6. **Invalidate old OTP (mark as used):**
+   ```sql
+   UPDATE otp_codes
+   SET used = true
+   WHERE session_id = $sessionId;
+   ```
+
+7. **Generate new 6-digit OTP code:**
+   ```typescript
+   const newOtpCode = String(Math.floor(100000 + Math.random() * 900000))  // 6 digits
+   const newOtpHash = await bcrypt.hash(newOtpCode, 10)
+   const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
+   ```
+
+8. **Create new OTP record (reuse same session_id):**
+   ```sql
+   INSERT INTO otp_codes (
+     user_id,
+     session_id,
+     code_hash,
+     expires_at,
+     attempts,
+     used,
+     created_at
+   ) VALUES (
+     $userId,
+     $sessionId,          -- Reuse same session ID
+     $newOtpHash,
+     $expiresAt,
+     0,
+     false,
+     NOW()
+   );
+   ```
+
+9. **Send new OTP email:**
+   ```typescript
+   await sendEmail({
+     to: user.email,
+     subject: "Your New Verification Code",
+     html: `Your new verification code is: <strong>${newOtpCode}</strong>. Valid for 5 minutes.`
+   })
+   ```
+
+10. **Return response:**
+    ```typescript
+    return Response.json({
+      success: true,
+      sent: true,
+      expiresAt: expiresAt.toISOString(),
+      remainingSeconds: 300
+    })
+    ```
+
+#### Error Responses
+
+**400 Bad Request - Session Not Found:**
+```json
+{
+  "error": "SESSION_NOT_FOUND",
+  "message": "OTP session expired. Please sign up again."
+}
+```
+
+**400 Bad Request - Invalid Session:**
+```json
+{
+  "error": "INVALID_SESSION",
+  "message": "OTP session not found. Please sign up again."
+}
+```
+
+**429 Too Many Requests - Resend Too Soon:**
+```json
+{
+  "error": "RESEND_TOO_SOON",
+  "message": "Please wait 25 seconds before requesting a new code."
+}
+```
+
+**500 Internal Server Error - Email Send Failed:**
+```json
+{
+  "error": "EMAIL_SEND_FAILED",
+  "message": "Failed to send verification email. Please try again."
+}
+```
+
+#### Security Notes
+
+- New OTP code hashed with bcrypt (rounds=10)
+- Old OTP marked as used (prevents reuse)
+- Same session ID reused (no need to reset cookie)
+- New OTP expires in 5 minutes from creation
+- Rate limiting: Min 30 seconds between resend requests
+- Rate limiting: Max 5 resend requests per session (total)
+- Email sending uses secure SMTP connection
+
+#### Database Tables Used
+
+**Primary:**
+- `otp_codes` (SchemaFinalv2.md:175-210) - Create new OTP record
+- `users` (SchemaFinalv2.md:131-162) - Get email address
+
+**Fields Referenced:**
+- `otp_codes.session_id` - VARCHAR(100) NOT NULL UNIQUE (reused)
+- `otp_codes.user_id` - UUID REFERENCES users(id)
+- `otp_codes.code_hash` - VARCHAR(255) NOT NULL
+- `otp_codes.expires_at` - TIMESTAMP NOT NULL
+- `otp_codes.used` - BOOLEAN DEFAULT false
+- `otp_codes.created_at` - TIMESTAMP DEFAULT NOW()
+- `users.email` - VARCHAR(255) NULLABLE
 
 ---
 
@@ -208,7 +943,355 @@ _To be defined_
 
 ### Endpoints
 
-_To be defined_
+#### POST /api/auth/login
+
+**Purpose:** Authenticates existing user with handle and password, creates authenticated session.
+
+**Route:** `POST /api/auth/login`
+
+**Authentication:** None required (public endpoint)
+
+**Request Body:**
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| handle | string | ✅ Yes | Must start with @, 3-30 chars | TikTok handle (from sessionStorage, set by check-handle) |
+| password | string | ✅ Yes | 8-128 chars | User's plaintext password (hashed server-side for comparison) |
+
+**TypeScript Interface:**
+```typescript
+export interface LoginRequest {
+  handle: string      // TikTok handle with @ prefix (e.g., "@jazzyjayna")
+  password: string    // Plaintext password (validated by backend with bcrypt)
+}
+```
+
+**Example Request:**
+```json
+{
+  "handle": "@jazzyjayna",
+  "password": "SecureP@ss123"
+}
+```
+
+**Success Response (200 OK):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| success | boolean | Always true on success |
+| userId | string | UUID of authenticated user |
+| sessionToken | string | JWT token for authenticated session (also set in HTTP-only cookie) |
+
+**TypeScript Interface:**
+```typescript
+export interface LoginResponse {
+  success: boolean
+  userId: string         // UUID of authenticated user
+  sessionToken: string   // JWT token (stored in HTTP-only cookie)
+}
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "userId": "123e4567-e89b-12d3-a456-426614174000",
+  "sessionToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Business Logic:**
+
+```sql
+-- Step 1: Find user by handle
+SELECT
+  id,
+  handle,
+  email,
+  email_verified,
+  password_hash
+FROM users
+WHERE handle = $1  -- e.g., '@jazzyjayna'
+LIMIT 1;
+
+-- Step 2: Verify password (server-side bcrypt comparison)
+-- bcrypt.compare(plaintext_password, password_hash_from_db)
+-- Returns: boolean (true if match, false if no match)
+
+-- Step 3: If password valid, create authenticated session
+-- Uses Supabase Auth: supabase.auth.signInWithPassword()
+-- Or custom JWT creation with user_id payload
+
+-- Step 4: Set HTTP-only cookie with sessionToken
+-- Cookie name: 'auth-token' or 'session-token'
+-- Flags: HttpOnly, Secure (HTTPS only), SameSite=Strict
+-- Expiration: 7 days (configurable)
+
+-- Step 5: Return success response
+```
+
+**Backend Implementation Notes:**
+
+1. **Retrieve User:**
+   - Query users table by handle
+   - If no user found → 401 INVALID_CREDENTIALS (don't reveal "user not found")
+
+2. **Validate Password:**
+   - Use bcrypt.compare(password, password_hash)
+   - If invalid → 401 INVALID_CREDENTIALS
+   - Rate limit: Lock account after 5 failed attempts in 15 minutes
+
+3. **Check Email Verification:**
+   - If email_verified = false → 403 EMAIL_NOT_VERIFIED
+   - Provide helpful message: "Please verify your email before logging in."
+
+4. **Create Session:**
+   - Generate JWT token with payload: { userId, handle, email, iat, exp }
+   - Set HTTP-only cookie: auth-token
+   - Store session in database (optional: sessions table for tracking)
+
+5. **Response:**
+   - Return { success: true, userId, sessionToken }
+   - Frontend routes to /home (or /login/loading for smooth transition)
+
+#### Error Responses
+
+**400 Bad Request - Missing Fields:**
+```json
+{
+  "error": "MISSING_FIELDS",
+  "message": "Please provide both handle and password."
+}
+```
+
+**400 Bad Request - Invalid Handle Format:**
+```json
+{
+  "error": "INVALID_HANDLE",
+  "message": "Handle must start with @ and be 3-30 characters."
+}
+```
+
+**401 Unauthorized - Invalid Credentials:**
+```json
+{
+  "error": "INVALID_CREDENTIALS",
+  "message": "Incorrect handle or password. Please try again."
+}
+```
+
+**403 Forbidden - Email Not Verified:**
+```json
+{
+  "error": "EMAIL_NOT_VERIFIED",
+  "message": "Please verify your email before logging in. Check your inbox for the verification link."
+}
+```
+
+**429 Too Many Requests - Account Locked:**
+```json
+{
+  "error": "ACCOUNT_LOCKED",
+  "message": "Too many failed login attempts. Please try again in 15 minutes or reset your password."
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "INTERNAL_ERROR",
+  "message": "Something went wrong. Please try again."
+}
+```
+
+#### Security Notes
+
+- Passwords validated with bcrypt.compare (NOT plain text comparison)
+- HTTP-only cookie prevents XSS attacks (JavaScript cannot access token)
+- SameSite=Strict prevents CSRF attacks
+- Rate limiting: Max 5 failed attempts per handle in 15 minutes
+- No user enumeration: Same error message for "user not found" and "wrong password"
+- Email verification required before login (email_verified = true)
+- Session token expires after 7 days (configurable)
+- JWT payload includes: userId, handle, email, issued_at, expires_at
+- Login attempts logged for security auditing
+
+#### Database Tables Used
+
+**Primary:**
+- `users` (SchemaFinalv2.md:131-172) - Authenticate user credentials
+
+**Fields Referenced:**
+- `users.id` - UUID PRIMARY KEY
+- `users.handle` - VARCHAR(31) UNIQUE NOT NULL
+- `users.email` - VARCHAR(255) NULLABLE
+- `users.email_verified` - BOOLEAN DEFAULT false
+- `users.password_hash` - VARCHAR(255) NOT NULL
+- `users.created_at` - TIMESTAMP DEFAULT NOW()
+- `users.last_login` - TIMESTAMP NULLABLE (updated on successful login)
+
+---
+
+## Loading Page
+
+**Page:** `/app/login/loading/page.tsx`
+
+### Endpoints
+
+#### GET /api/auth/user-status
+
+**Purpose:** Determine authenticated user's recognition status and routing destination after successful login/OTP verification.
+
+**Route:** `GET /api/auth/user-status`
+
+**Authentication:** Required (session cookie from login or OTP verification)
+
+**Query Parameters:** None
+
+**Request Headers:**
+- Cookie: `auth-token` (HTTP-only session cookie set by login or verify-otp endpoints)
+
+**Success Response (200 OK):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| userId | string | UUID of authenticated user |
+| isRecognized | boolean | Has user logged in before? (checks last_login_at field) |
+| redirectTo | string | Backend-determined route ("/home" or "/login/welcomeunr") |
+| emailVerified | boolean | Email verification status (for debugging/logging) |
+
+**TypeScript Interface:**
+```typescript
+export interface UserStatusResponse {
+  userId: string         // UUID of authenticated user
+  isRecognized: boolean  // Has logged in before (last_login_at IS NOT NULL)
+  redirectTo: string     // Backend-determined route
+  emailVerified: boolean // Email verification status
+}
+```
+
+**Example Response (First-time user):**
+```json
+{
+  "userId": "123e4567-e89b-12d3-a456-426614174000",
+  "isRecognized": false,
+  "redirectTo": "/login/welcomeunr",
+  "emailVerified": true
+}
+```
+
+**Example Response (Returning user):**
+```json
+{
+  "userId": "987e6543-e21b-12d3-a456-426614174111",
+  "isRecognized": true,
+  "redirectTo": "/home",
+  "emailVerified": true
+}
+```
+
+**Business Logic:**
+
+```sql
+-- Step 1: Get authenticated user from session token
+-- (JWT decode or session lookup from HTTP-only cookie)
+
+-- Step 2: Query user info
+SELECT
+  id,
+  email_verified,
+  last_login_at,
+  created_at
+FROM users
+WHERE id = $1;  -- From authenticated session
+
+-- Step 3: Determine recognition status
+-- Recognition logic:
+-- - If last_login_at IS NULL → First login (unrecognized)
+-- - If last_login_at IS NOT NULL → Returning user (recognized)
+
+-- Step 4: Determine routing destination
+-- If isRecognized = false → redirectTo = "/login/welcomeunr"
+-- If isRecognized = true → redirectTo = "/home"
+
+-- Step 5: Update last_login_at timestamp
+UPDATE users
+SET last_login_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1;
+
+-- IMPORTANT: Update AFTER checking recognition status
+-- This ensures first login is properly detected before updating timestamp
+
+-- Step 6: Return response with routing instruction
+```
+
+**Backend Implementation Notes:**
+
+1. **Authentication Check:**
+   - Verify session token from HTTP-only cookie
+   - If invalid/missing → 401 Unauthorized
+   - Redirect frontend to `/login/start`
+
+2. **Recognition Logic:**
+   - Query `last_login_at` field from users table
+   - NULL = first login → `isRecognized: false`, `redirectTo: "/login/welcomeunr"`
+   - NOT NULL = returning user → `isRecognized: true`, `redirectTo: "/home"`
+
+3. **Update Last Login:**
+   - Set `last_login_at = NOW()` and `updated_at = NOW()`
+   - **Critical:** Do this AFTER checking recognition status
+   - This ensures first-time users are properly routed to welcome page
+
+4. **Routing Determination:**
+   - Backend owns all routing logic
+   - Frontend just follows `redirectTo` instruction
+   - Allows backend to add new routing rules without frontend changes
+
+5. **Future Extensibility:**
+   - Can add: If `email_verified = false` → `redirectTo: "/verify-email"`
+   - Can add: If `account_status = 'suspended'` → `redirectTo: "/account/suspended"`
+   - Can add: If `onboarding_completed = false` → `redirectTo: "/onboarding"`
+   - Can add: If `profile_incomplete = true` → `redirectTo: "/profile/setup"`
+
+#### Error Responses
+
+**401 Unauthorized - Not Authenticated:**
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Please log in to continue."
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "INTERNAL_ERROR",
+  "message": "Something went wrong. Please try again."
+}
+```
+
+#### Security Notes
+
+- Requires valid session token (HTTP-only cookie)
+- No sensitive data exposed (no password_hash, payment info, etc.)
+- Updates last_login_at timestamp for audit trail
+- Can be called multiple times (idempotent after first call)
+- Session token validated before any database queries
+- No PII exposed beyond userId (UUID)
+
+#### Database Tables Used
+
+**Primary:**
+- `users` (SchemaFinalv2.md:131-172) - Check recognition status, update last_login_at
+
+**Fields Referenced:**
+- `users.id` - UUID PRIMARY KEY
+- `users.email_verified` - BOOLEAN DEFAULT false
+- `users.last_login_at` - TIMESTAMP (line 161) - Key field for recognition logic
+- `users.created_at` - TIMESTAMP DEFAULT NOW()
+- `users.updated_at` - TIMESTAMP DEFAULT NOW()
 
 ---
 
@@ -1404,7 +2487,7 @@ const hasMoreBenefits = totalRewardsCount > 4  // Use backend count
 
 ## GET /api/missions
 
-**Purpose:** Returns all active and available missions for the current user.
+**Purpose:** Returns all missions for the Missions page with pre-computed status, progress tracking, and formatted display text.
 
 ### Request
 
@@ -1415,15 +2498,508 @@ Authorization: Bearer <supabase-jwt-token>
 
 ### Response Schema
 
-_To be defined_
+```typescript
+interface MissionsPageResponse {
+  // User & Tier Info (for header badge)
+  user: {
+    id: string                          // UUID from users.id
+    handle: string                      // From users.tiktok_handle (without @)
+    currentTier: string                 // From users.current_tier (tier_3)
+    currentTierName: string             // From tiers.tier_name ("Gold")
+    currentTierColor: string            // From tiers.tier_color (hex, e.g., "#F59E0B")
+  }
+
+  // Featured mission ID (for home page sync)
+  featuredMissionId: string             // ID of highest priority mission
+
+  // Missions list (sorted by status priority + mission type)
+  missions: Array<{
+    // Core mission data
+    id: string                          // UUID from missions.id
+    missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
+    displayName: string                 // Backend-generated from missions.display_name
+    targetUnit: 'dollars' | 'units' | 'count'  // From missions.target_unit
+    tierEligibility: string             // From missions.tier_eligibility
+
+    // Reward information
+    rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+    rewardDescription: string           // Backend-generated (see Formatting Rules)
+
+    // PRE-COMPUTED status (backend derives from multiple tables)
+    status: 'in_progress' | 'default_claim' | 'default_schedule' |
+            'scheduled' | 'active' | 'redeeming' | 'redeeming_physical' | 'sending' |
+            'pending_payment' | 'clearing' |
+            'dormant' | 'raffle_available' | 'raffle_processing' | 'raffle_claim' | 'raffle_won' |
+            'locked'
+
+    // Progress tracking (null for raffles and locked missions)
+    progress: {
+      currentValue: number              // Raw value from mission_progress.current_value
+      currentFormatted: string          // Backend-formatted ("$350" or "35 units")
+      targetValue: number               // Raw value from missions.target_value
+      targetFormatted: string           // Backend-formatted ("$500" or "50 units")
+      percentage: number                // Backend-calculated (currentValue / targetValue * 100)
+      remainingText: string             // Backend-formatted ("$150 more to go!" or "15 more units to go!")
+      progressText: string              // Backend-formatted combined text ("$350 of $500")
+    } | null
+
+    // Deadline information
+    deadline: {
+      checkpointEnd: string             // ISO 8601 from mission_progress.checkpoint_end
+      checkpointEndFormatted: string    // Backend-formatted "March 15, 2025"
+      daysRemaining: number             // Backend-calculated
+    } | null
+
+    // Reward value data (for modals/forms)
+    valueData: {
+      percent?: number                  // For commission_boost/discount
+      durationDays?: number             // For commission_boost/discount
+      amount?: number                   // For gift_card/spark_ads
+      displayText?: string              // For physical_gift/experience
+      requiresSize?: boolean            // For physical_gift
+      sizeCategory?: string             // For physical_gift
+      sizeOptions?: string[]            // For physical_gift
+    } | null
+
+    // Scheduling data (for Scheduled/Active states)
+    scheduling: {
+      scheduledActivationDate: string   // Date only (YYYY-MM-DD)
+      scheduledActivationTime: string   // Time only (HH:MM:SS) in EST
+      scheduledActivationFormatted: string  // Backend-formatted "Feb 15, 2025 6:00 PM EST"
+      activationDate: string | null     // ISO 8601, set when activated
+      activationDateFormatted: string | null  // Backend-formatted "Started: Feb 15, 6:00 PM"
+      expirationDate: string | null     // ISO 8601
+      expirationDateFormatted: string | null  // Backend-formatted "Expires: Mar 17, 6:00 PM"
+      durationText: string              // Backend-formatted "Active for 30 days"
+    } | null
+
+    // Raffle-specific data (null for non-raffles)
+    raffleData: {
+      raffleEndDate: string             // ISO 8601 from missions.raffle_end_date
+      raffleEndFormatted: string        // Backend-formatted "Feb 20, 2025"
+      daysUntilDraw: number             // Backend-calculated
+      isWinner: boolean | null          // From raffle_participations.is_winner
+      prizeName: string                 // Backend-generated with article ("an iPhone 16 Pro")
+    } | null
+
+    // Locked state data (null if not locked)
+    lockedData: {
+      requiredTier: string              // e.g., "tier_4"
+      requiredTierName: string          // Backend-formatted "Platinum"
+      requiredTierColor: string         // Hex color "#818CF8"
+      unlockMessage: string             // Backend-formatted "Unlock at Platinum"
+      previewFromTier: string | null    // From missions.preview_from_tier
+    } | null
+
+    // Flippable card content (null if not flippable state)
+    flippableCard: {
+      backContentType: 'dates' | 'message'
+      message: string | null
+      dates: Array<{
+        label: string
+        value: string
+      }> | null
+    } | null
+  }>
+}
+```
+
+### Backend Formatting Rules
+
+**Mission Display Names:**
+
+| mission_type | displayName |
+|--------------|-------------|
+| sales_dollars | "Unlock Payday" |
+| sales_units | "Unlock Payday" |
+| videos | "Lights, Camera, Go!" |
+| likes | "Fan Favorite" |
+| views | "Road to Viral" |
+| raffle | "VIP Raffle" |
+
+**Reward Descriptions (VIP Metric Mode-Aware):**
+
+| reward_type | Description Format | Example |
+|-------------|-------------------|---------|
+| gift_card | `"Win a $${amount} Gift Card!"` | "Win a $50 Gift Card!" |
+| commission_boost | `"Win +${percent}% commission for ${durationDays} days!"` | "Win +5% commission for 30 days!" |
+| spark_ads | `"Win a $${amount} Ads Boost!"` | "Win a $100 Ads Boost!" |
+| discount | `"Win a Follower Discount of ${percent}% for ${durationDays} days!"` | "Win a Follower Discount of 10% for 1 days!" |
+| physical_gift | `"Win ${addArticle(displayText)}!"` | "Win an iPhone 16 Pro!" |
+| experience | `"Win ${addArticle(displayText)}!"` | "Win a Mystery Trip!" |
+
+**Progress Text by VIP Metric Mode:**
+
+| Mode | Mission Type | Current Format | Target Format | Remaining Format |
+|------|-------------|----------------|---------------|------------------|
+| Sales | sales_dollars | "$350" | "$500" | "$150 more to go!" |
+| Units | sales_units | "35 units" | "50 units" | "15 more units to go!" |
+| Both | videos | "8 videos" | "15 videos" | "7 more videos to post!" |
+| Both | likes | "800 likes" | "1,000 likes" | "200 more likes!" |
+| Both | views | "25,000 views" | "50,000 views" | "25,000 more views!" |
+
+### Example Response
+
+```json
+{
+  "user": {
+    "id": "user-abc-123",
+    "handle": "creatorpro",
+    "currentTier": "tier_3",
+    "currentTierName": "Gold",
+    "currentTierColor": "#F59E0B"
+  },
+  "featuredMissionId": "mission-sales-500",
+  "missions": [
+    {
+      "id": "mission-sales-500",
+      "missionType": "sales_dollars",
+      "displayName": "Unlock Payday",
+      "targetUnit": "dollars",
+      "tierEligibility": "tier_3",
+      "rewardType": "gift_card",
+      "rewardDescription": "Win a $50 Gift Card!",
+      "status": "in_progress",
+      "progress": {
+        "currentValue": 350,
+        "currentFormatted": "$350",
+        "targetValue": 500,
+        "targetFormatted": "$500",
+        "percentage": 70,
+        "remainingText": "$150 more to go!",
+        "progressText": "$350 of $500"
+      },
+      "deadline": {
+        "checkpointEnd": "2025-03-15T23:59:59Z",
+        "checkpointEndFormatted": "March 15, 2025",
+        "daysRemaining": 23
+      },
+      "valueData": {"amount": 50},
+      "scheduling": null,
+      "raffleData": null,
+      "lockedData": null,
+      "flippableCard": null
+    },
+    {
+      "id": "mission-boost-30d",
+      "missionType": "videos",
+      "displayName": "Lights, Camera, Go!",
+      "targetUnit": "count",
+      "tierEligibility": "tier_3",
+      "rewardType": "commission_boost",
+      "rewardDescription": "Win +5% commission for 30 days!",
+      "status": "scheduled",
+      "progress": null,
+      "deadline": null,
+      "valueData": {"percent": 5, "durationDays": 30},
+      "scheduling": {
+        "scheduledActivationDate": "2025-02-15",
+        "scheduledActivationTime": "18:00:00",
+        "scheduledActivationFormatted": "Feb 15, 2025 6:00 PM EST",
+        "activationDate": null,
+        "activationDateFormatted": null,
+        "expirationDate": null,
+        "expirationDateFormatted": null,
+        "durationText": "Active for 30 days"
+      },
+      "raffleData": null,
+      "lockedData": null,
+      "flippableCard": {
+        "backContentType": "dates",
+        "message": null,
+        "dates": [
+          {"label": "Scheduled", "value": "Feb 15, 2025 6:00 PM EST"},
+          {"label": "Duration", "value": "Active for 30 days"}
+        ]
+      }
+    },
+    {
+      "id": "mission-raffle-iphone",
+      "missionType": "raffle",
+      "displayName": "VIP Raffle",
+      "targetUnit": "count",
+      "tierEligibility": "tier_3",
+      "rewardType": "physical_gift",
+      "rewardDescription": "Win an iPhone 16 Pro!",
+      "status": "raffle_available",
+      "progress": null,
+      "deadline": null,
+      "valueData": {
+        "displayText": "iPhone 16 Pro",
+        "requiresSize": false
+      },
+      "scheduling": null,
+      "raffleData": {
+        "raffleEndDate": "2025-02-20T23:59:59Z",
+        "raffleEndFormatted": "Feb 20, 2025",
+        "daysUntilDraw": 15,
+        "isWinner": null,
+        "prizeName": "an iPhone 16 Pro"
+      },
+      "lockedData": null,
+      "flippableCard": null
+    },
+    {
+      "id": "mission-platinum-exclusive",
+      "missionType": "sales_dollars",
+      "displayName": "Unlock Payday",
+      "targetUnit": "dollars",
+      "tierEligibility": "tier_4",
+      "rewardType": "gift_card",
+      "rewardDescription": "Win a $200 Gift Card!",
+      "status": "locked",
+      "progress": null,
+      "deadline": null,
+      "valueData": {"amount": 200},
+      "scheduling": null,
+      "raffleData": null,
+      "lockedData": {
+        "requiredTier": "tier_4",
+        "requiredTierName": "Platinum",
+        "requiredTierColor": "#818CF8",
+        "unlockMessage": "Unlock at Platinum",
+        "previewFromTier": "tier_3"
+      },
+      "flippableCard": null
+    }
+  ]
+}
+```
+
+### Business Logic
+
+#### **Status Computation (Backend Derives from Multiple Tables)**
+
+**Priority Rank 1 - Completed Missions (Show First):**
+
+```typescript
+// Mission completed but not claimed yet
+if (mission_progress.status === 'completed' && redemption === null) {
+  if (reward.redemption_type === 'scheduled') {
+    status = 'default_schedule';  // Commission boost or discount
+  } else {
+    status = 'default_claim';  // Gift card, spark_ads, experience, physical_gift
+  }
+}
+
+// Mission completed and claimed
+if (redemption?.status === 'claimed') {
+  // Check reward type for specific states
+  if (reward.type === 'commission_boost') {
+    switch (boost_redemption.boost_status) {
+      case 'scheduled': status = 'scheduled'; break;
+      case 'active': status = 'active'; break;
+      case 'pending_info': status = 'pending_payment'; break;
+      case 'pending_payout': status = 'clearing'; break;
+    }
+  } else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';
+  } else if (reward.type === 'physical_gift') {
+    if (physical_gift_redemption.shipped_at !== null) status = 'sending';
+    else if (physical_gift_redemption.shipping_city !== null) status = 'redeeming_physical';
+  } else if (reward.type IN ('gift_card', 'spark_ads', 'experience')) {
+    status = 'redeeming';
+  }
+}
+```
+
+**Priority Rank 2 - Active Missions (In Progress):**
+
+```typescript
+// User making progress toward goal
+if (mission_progress.status === 'active' &&
+    mission_progress.current_value < mission.target_value) {
+  status = 'in_progress';
+}
+```
+
+**Priority Rank 3 - Raffle States:**
+
+```typescript
+// Raffle dormant (not accepting entries)
+if (mission.mission_type === 'raffle' &&
+    mission.activated === false) {
+  status = 'dormant';
+}
+
+// Raffle available (can participate)
+if (mission.mission_type === 'raffle' &&
+    mission.activated === true &&
+    !raffle_participation) {
+  status = 'raffle_available';
+}
+
+// Raffle processing (waiting for draw)
+if (raffle_participation?.is_winner === null) {
+  status = 'raffle_processing';
+}
+
+// Raffle claim (user won, needs to claim)
+if (raffle_participation?.is_winner === true &&
+    redemption.status === 'claimable') {
+  status = 'raffle_claim';
+}
+
+// Raffle won (user claimed prize)
+if (raffle_participation?.is_winner === true &&
+    redemption.status === 'claimed') {
+  status = 'raffle_won';
+}
+```
+
+**Priority Rank 4 - Locked Missions:**
+
+```typescript
+// Preview from higher tier
+if (mission.tier_eligibility !== user.current_tier &&
+    mission.preview_from_tier !== null &&
+    user.current_tier >= mission.preview_from_tier) {
+  status = 'locked';
+}
+```
+
+#### **Text Generation**
+
+**Reward Description with Article Grammar:**
+
+```typescript
+function addArticle(text: string): string {
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  const firstLetter = text.charAt(0).toLowerCase();
+
+  // Special cases
+  if (text.toLowerCase().startsWith('hour')) return `an ${text}`;
+  if (text.toLowerCase().startsWith('uni')) return `a ${text}`;
+
+  // General rule
+  return vowels.includes(firstLetter) ? `an ${text}` : `a ${text}`;
+}
+
+function generateRewardDescription(reward) {
+  switch (reward.type) {
+    case 'gift_card':
+      return `Win a $${reward.value_data.amount} Gift Card!`;
+    case 'commission_boost':
+      return `Win +${reward.value_data.percent}% commission for ${reward.value_data.duration_days} days!`;
+    case 'spark_ads':
+      return `Win a $${reward.value_data.amount} Ads Boost!`;
+    case 'discount':
+      const days = Math.floor(reward.value_data.duration_minutes / 1440);
+      return `Win a Follower Discount of ${reward.value_data.percent}% for ${days} days!`;
+    case 'physical_gift':
+    case 'experience':
+      const text = reward.value_data.display_text || reward.description;
+      return `Win ${addArticle(text)}!`;
+  }
+}
+```
+
+**Progress Text with VIP Metric Mode:**
+
+```typescript
+function generateProgressText(currentValue, targetValue, missionType, vipMetric) {
+  // Sales mode (dollars)
+  if (missionType === 'sales_dollars' && vipMetric === 'sales') {
+    return {
+      currentFormatted: `$${currentValue.toLocaleString()}`,
+      targetFormatted: `$${targetValue.toLocaleString()}`,
+      progressText: `$${currentValue.toLocaleString()} of $${targetValue.toLocaleString()}`,
+      remainingText: `$${(targetValue - currentValue).toLocaleString()} more to go!`
+    };
+  }
+
+  // Units mode (quantity)
+  if (missionType === 'sales_units' && vipMetric === 'units') {
+    const remaining = targetValue - currentValue;
+    const unitWord = remaining === 1 ? 'unit' : 'units';
+    return {
+      currentFormatted: `${currentValue.toLocaleString()} units`,
+      targetFormatted: `${targetValue.toLocaleString()} units`,
+      progressText: `${currentValue.toLocaleString()} of ${targetValue.toLocaleString()} units`,
+      remainingText: `${remaining.toLocaleString()} more ${unitWord} to go!`
+    };
+  }
+
+  // Videos
+  if (missionType === 'videos') {
+    const remaining = targetValue - currentValue;
+    const videoWord = remaining === 1 ? 'video' : 'videos';
+    return {
+      currentFormatted: `${currentValue} videos`,
+      targetFormatted: `${targetValue} videos`,
+      progressText: `${currentValue} of ${targetValue} videos`,
+      remainingText: `${remaining} more ${videoWord} to post!`
+    };
+  }
+
+  // Likes/Views (with thousands separators)
+  const metricName = missionType; // 'likes' or 'views'
+  return {
+    currentFormatted: `${currentValue.toLocaleString()} ${metricName}`,
+    targetFormatted: `${targetValue.toLocaleString()} ${metricName}`,
+    progressText: `${currentValue.toLocaleString()} of ${targetValue.toLocaleString()} ${metricName}`,
+    remainingText: `${(targetValue - currentValue).toLocaleString()} more ${metricName}!`
+  };
+}
+```
+
+---
+
+## GET /api/dashboard/featured-mission
+
+**Purpose:** Returns the highest-priority mission for home page circular progress display.
+
+### Request
+
+```http
+GET /api/dashboard/featured-mission
+Authorization: Bearer <supabase-jwt-token>
+```
+
+### Response Schema
+
+```typescript
+interface FeaturedMissionResponse {
+  user: {
+    id: string
+    currentTier: string
+    currentTierName: string
+    currentTierColor: string
+  }
+
+  // Featured mission (same structure as missions array above)
+  mission: {
+    // ... (all fields from GET /api/missions mission object)
+  } | null
+
+  // Empty state (if no missions available)
+  emptyStateMessage: string | null  // "No active missions. Check back soon!"
+}
+```
+
+### Business Logic
+
+**Selection Priority Order:**
+
+1. **Raffle** - ONLY if `activated=true` AND user hasn't participated
+2. **Sales Dollars** (if `clients.vip_metric='sales'`)
+3. **Sales Units** (if `clients.vip_metric='units'`)
+4. **Videos**
+5. **Likes**
+6. **Views**
+
+**Filtering Criteria:**
+- ✅ `mission.tier_eligibility = user.current_tier`
+- ✅ `mission.enabled = true`
+- ✅ `mission_progress.status IN ('active', 'completed')`
+- ✅ For raffles: `activated=true` AND no existing `raffle_participation`
 
 ---
 
 ## POST /api/missions/:id/claim
 
-**Purpose:** Creator claims a completed mission reward. Transitions mission_progress status from `completed` to `completed` (stays same) and creates a redemption record with status `claimed`.
-
-**Source:** Flow documented in MissionsRewardsFlows.md (Standard Missions Flow Step 4, Discount Flow Step 3, Commission Boost Flow Step 3, Physical Gift Flow Step 3)
+**Purpose:** Creator claims a completed mission reward.
 
 ### Request
 
@@ -1436,469 +3012,59 @@ Content-Type: application/json
 ### Request Body Schema
 
 ```typescript
-interface ClaimMissionRequest {
-  // Optional: Only required for scheduled reward types (discount, commission_boost)
-  scheduled_activation_at?: string  // ISO 8601 timestamp
-                                    // Required if reward type is 'discount' or 'commission_boost'
-                                    // Not used for: gift_card, spark_ads, physical_gift, experience
-}
-```
-
-### Request Body Examples
-
-**Instant Reward (Gift Card, Spark Ads, Experience):**
-```json
+// Instant rewards (gift_card, spark_ads, experience)
 {}
-```
 
-**Physical Gift (No scheduling needed):**
-```json
-{}
-```
-
-**Discount (Requires scheduling):**
-```json
+// Scheduled rewards (commission_boost, discount)
 {
-  "scheduled_activation_at": "2025-01-15T14:00:00Z"
+  "scheduledActivationDate": "2025-02-15",  // Date (YYYY-MM-DD)
+  "scheduledActivationTime": "18:00:00"     // Time (HH:MM:SS) in EST
 }
-```
 
-**Commission Boost (Requires activation date, time auto-set to 6 PM EST):**
-```json
+// Physical gifts (no size required)
 {
-  "scheduled_activation_at": "2025-01-20T23:00:00Z"
+  "shippingAddress": {
+    "line1": string,
+    "line2": string,
+    "city": string,
+    "state": string,
+    "postalCode": string,
+    "country": string,
+    "phone": string
+  }
+}
+
+// Physical gifts (size required)
+{
+  "size": string,  // From reward.valueData.sizeOptions
+  "shippingAddress": { /* same as above */ }
 }
 ```
 
 ### Response Schema
 
 ```typescript
-interface ClaimMissionResponse {
-  success: boolean
-  message: string  // User-facing success message
-
-  // Created redemption record
-  redemption: {
-    id: string                        // UUID of created redemption
-    status: "claimed"                 // Always "claimed" immediately after claim
-    reward_type: "gift_card" | "commission_boost" | "discount" | "spark_ads" | "physical_gift" | "experience"
-    claimed_at: string                // ISO 8601 timestamp
-
-    // Reward details (for confirmation display)
-    reward: {
-      id: string
-      name: string                    // e.g., "$25 Gift Card", "5% Commission Boost"
-      type: string
-      value_data: {
-        amount?: number               // For gift_card, spark_ads
-        percent?: number              // For commission_boost, discount
-        duration_days?: number        // For commission_boost, discount
-      } | null
-    }
-
-    // Scheduling info (only present for discount, commission_boost)
-    scheduled_activation_at?: string  // ISO 8601 timestamp
-
-    // Next steps (UI hints based on reward type)
-    next_steps: {
-      action: "wait_fulfillment" | "schedule_activation" | "provide_shipping" | "provide_size_and_shipping"
-      message: string                 // User-facing instruction
-    }
-  }
-
-  // Next featured mission (replaces claimed one on home page)
-  nextFeaturedMission: {
-    status: 'active' | 'completed' | 'no_missions'
-    mission: {
-      id: string
-      type: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views'
-      displayName: string
-      currentProgress: number
-      targetValue: number
-      progressPercentage: number
-      rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
-      rewardAmount: number | null
-      rewardCustomText: string | null
-      unitText: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views'
-    } | null
-    tier: {
-      name: string
-      color: string
-    }
-  }
-
-  // Info about claimed mission (for notification)
-  claimedMission: {
-    displayName: string              // e.g., "Unlock Payday"
-    rewardName: string               // e.g., "$25 Gift Card"
-    visibleOnMissionsPage: true      // Always true - mission still shows on Missions page with "Claimed" badge
+{
+  "success": boolean,
+  "message": string,  // "Reward claimed successfully!"
+  "redemptionId": string,
+  "nextAction": {
+    "type": "show_confirmation" | "navigate_to_missions",
+    "status": string,  // New status after claim
+    "message": string  // Next steps for user
   }
 }
 ```
 
-### Response Examples
+### Backend Validation
 
-**Success - Gift Card Claimed:**
-```json
-{
-  "success": true,
-  "message": "Reward claimed! You'll receive your $25 Gift Card soon.",
-  "redemption": {
-    "id": "redemption-abc-123",
-    "status": "claimed",
-    "reward_type": "gift_card",
-    "claimed_at": "2025-01-14T15:30:00Z",
-    "reward": {
-      "id": "reward-xyz-789",
-      "name": "$25 Amazon Gift Card",
-      "type": "gift_card",
-      "value_data": {
-        "amount": 25
-      }
-    },
-    "next_steps": {
-      "action": "wait_fulfillment",
-      "message": "Your reward is being processed. You'll receive an email when it's ready!"
-    }
-  },
-  "nextFeaturedMission": {
-    "status": "active",
-    "mission": {
-      "id": "mission-videos-20",
-      "type": "videos",
-      "displayName": "Lights, Camera, Go!",
-      "currentProgress": 8,
-      "targetValue": 20,
-      "progressPercentage": 40,
-      "rewardType": "commission_boost",
-      "rewardAmount": 5,
-      "rewardCustomText": null,
-      "unitText": "videos"
-    },
-    "tier": {
-      "name": "Gold",
-      "color": "#F59E0B"
-    }
-  },
-  "claimedMission": {
-    "displayName": "Unlock Payday",
-    "rewardName": "$25 Amazon Gift Card",
-    "visibleOnMissionsPage": true
-  }
-}
-```
-
-**Success - Discount Scheduled:**
-```json
-{
-  "success": true,
-  "message": "Discount scheduled for Jan 15 at 2:00 PM ET",
-  "redemption": {
-    "id": "redemption-def-456",
-    "status": "claimed",
-    "reward_type": "discount",
-    "claimed_at": "2025-01-14T15:30:00Z",
-    "reward": {
-      "id": "reward-discount-10",
-      "name": "10% Follower Discount",
-      "type": "discount",
-      "value_data": {
-        "percent": 10,
-        "duration_days": 1,
-        "coupon_code": "SAVE10"
-      }
-    },
-    "scheduled_activation_at": "2025-01-15T19:00:00Z",
-    "next_steps": {
-      "action": "wait_fulfillment",
-      "message": "We'll activate your discount code at the scheduled time!"
-    }
-  },
-  "mission": {
-    "id": "mission-sales-1000",
-    "status": "completed",
-    "canClaim": false,
-    "buttonText": "Claimed",
-    "buttonDisabled": true
-  }
-}
-```
-
-**Success - Commission Boost Scheduled:**
-```json
-{
-  "success": true,
-  "message": "Commission boost scheduled to activate on Jan 20 at 6:00 PM ET",
-  "redemption": {
-    "id": "redemption-ghi-789",
-    "status": "claimed",
-    "reward_type": "commission_boost",
-    "claimed_at": "2025-01-14T15:30:00Z",
-    "reward": {
-      "id": "reward-boost-5pct",
-      "name": "5% Commission Boost",
-      "type": "commission_boost",
-      "value_data": {
-        "percent": 5,
-        "duration_days": 30
-      }
-    },
-    "scheduled_activation_at": "2025-01-20T23:00:00Z",
-    "next_steps": {
-      "action": "wait_fulfillment",
-      "message": "Your boost will activate automatically at 6 PM ET on the scheduled date!"
-    }
-  },
-  "mission": {
-    "id": "mission-videos-20",
-    "status": "completed",
-    "canClaim": false,
-    "buttonText": "Claimed",
-    "buttonDisabled": true
-  }
-}
-```
-
-**Success - Physical Gift Claimed:**
-```json
-{
-  "success": true,
-  "message": "Please provide your shipping information to complete your claim.",
-  "redemption": {
-    "id": "redemption-jkl-012",
-    "status": "claimed",
-    "reward_type": "physical_gift",
-    "claimed_at": "2025-01-14T15:30:00Z",
-    "reward": {
-      "id": "reward-headphones",
-      "name": "Wireless Headphones",
-      "type": "physical_gift",
-      "value_data": {
-        "requires_size": false
-      }
-    },
-    "next_steps": {
-      "action": "provide_shipping",
-      "message": "Please provide your shipping address to receive your gift!"
-    }
-  },
-  "mission": {
-    "id": "mission-likes-5k",
-    "status": "completed",
-    "canClaim": false,
-    "buttonText": "Claimed",
-    "buttonDisabled": true
-  }
-}
-```
-
-### Business Logic
-
-#### **Validation Checks (in order):**
-
-1. **Authentication:** Valid JWT token required
-2. **Mission Exists:** Mission ID must exist in database
-3. **User Owns Mission:** mission_progress.user_id must match authenticated user
-4. **Mission Completed:** mission_progress.status must be `completed`
-5. **Not Already Claimed:** No existing redemption with this mission_progress_id
-6. **Scheduling Required:** If reward type is `discount` or `commission_boost`, `scheduled_activation_at` must be provided
-7. **Scheduling Validation (Discount):**
-   - Date must be weekday (Mon-Fri)
-   - Time must be between 09:00-16:00 EST
-   - Date must be in future
-8. **Scheduling Validation (Commission Boost):**
-   - Date must be in future
-   - Time automatically set to 18:00:00 EST (6 PM) regardless of input
-
-#### **Database Operations:**
-
-```sql
--- Step 1: Verify mission is claimable
-SELECT
-  mp.id as mission_progress_id,
-  mp.status as mission_status,
-  mp.user_id,
-  m.reward_id,
-  r.type as reward_type,
-  r.name as reward_name,
-  r.value_data,
-  r.redemption_type
-FROM mission_progress mp
-JOIN missions m ON mp.mission_id = m.id
-JOIN rewards r ON m.reward_id = r.id
-WHERE mp.id = $missionProgressId
-  AND mp.user_id = $userId
-  AND mp.status = 'completed';
-
--- Step 2: Check if already claimed
-SELECT id FROM redemptions
-WHERE mission_progress_id = $missionProgressId;
--- Must return 0 rows
-
--- Step 3: Create redemption
-INSERT INTO redemptions (
-  user_id,
-  client_id,
-  reward_id,
-  mission_progress_id,
-  status,
-  claimed_at,
-  redemption_type,
-  scheduled_activation_date,
-  scheduled_activation_time
-) VALUES (
-  $userId,
-  $clientId,
-  $rewardId,
-  $missionProgressId,
-  'claimed',
-  NOW(),
-  $redemptionType,  -- 'instant' or 'scheduled'
-  $scheduledDate,   -- Only for discount/commission_boost
-  $scheduledTime    -- Only for discount/commission_boost
-) RETURNING *;
-
--- Step 4: For scheduled rewards, create sub-state record
--- Discount: No sub-state table (uses redemptions.scheduled_activation_*)
--- Commission Boost: Create commission_boost_redemptions row
-INSERT INTO commission_boost_redemptions (
-  redemption_id,
-  client_id,
-  boost_status,
-  scheduled_activation_date
-) VALUES (
-  $redemptionId,
-  $clientId,
-  'scheduled',
-  $scheduledDate
-);
-
--- Step 5: Mission status stays 'completed' (no update needed)
-```
-
-#### **Flow by Reward Type (from MissionsRewardsFlows.md):**
-
-| Reward Type | Scheduling Required? | Sub-State Table | Next Frontend Action |
-|-------------|---------------------|-----------------|---------------------|
-| **gift_card** | ❌ No | None | Wait for fulfillment |
-| **spark_ads** | ❌ No | None | Wait for fulfillment |
-| **experience** | ❌ No | None | Wait for fulfillment |
-| **physical_gift** | ❌ No | physical_gift_redemptions | Open shipping modal |
-| **discount** | ✅ Yes | None (uses redemptions table) | Show confirmation |
-| **commission_boost** | ✅ Yes | commission_boost_redemptions | Show confirmation |
-
-**From MissionsRewardsFlows.md:**
-- Standard Missions Flow Step 4 (lines 150): User claims reward → redemption created with status='claimed'
-- Discount Flow Step 3 (lines 485): User schedules activation time slot (9 AM - 4 PM EST, weekdays)
-- Commission Boost Flow Step 3 (lines 415): User schedules activation date (time fixed at 6 PM EST)
-- Physical Gift Flow Step 3a/3b (lines 314-315): User provides size (if needed) and shipping info
-
----
-
-#### **Frontend Flow After Successful Claim:**
-
-**On Home Page (`/app/home/page.tsx`):**
-
-1. ✅ **User clicks "Claim" button** on completed mission
-2. ✅ **POST /api/missions/:id/claim** executes
-3. ✅ **Success response received** with `nextFeaturedMission` data
-4. ✅ **Update UI immediately** using response data (no refetch needed):
-   ```typescript
-   // Use nextFeaturedMission from response to update circular progress
-   setFeaturedMission(response.nextFeaturedMission)
-   ```
-5. ✅ **Show success toast** with reward name:
-   ```typescript
-   toast.success("Reward claimed! You'll receive your $25 Gift Card soon.")
-   ```
-6. ✅ **Show info toast** about mission location:
-   ```typescript
-   toast.info("Your completed mission is viewable in Mission History", {
-     duration: 4000,
-     action: {
-       label: "View",
-       onClick: () => router.push('/missions/missionhistory')
-     }
-   })
-   ```
-
-**On Missions Page (`/app/missions/page.tsx`):**
-- ✅ Mission REMAINS visible with "Claimed" badge
-- ✅ Same mission shows same progress (not duplicated)
-- ❌ No "moved from Home" notification needed (mission was always on Missions page)
-
-**Key UX Note:**
-- The mission exists in ONE place in the database (mission_progress table)
-- Home page shows it IF status is `active` or `completed` (not yet claimed)
-- Missions page shows it ALWAYS (with appropriate status badge)
-- This prevents user confusion about "two rewards" - it's the same mission, different views
-
----
-
-### Error Responses
-
-**400 Bad Request - Already Claimed:**
-```json
-{
-  "error": "ALREADY_CLAIMED",
-  "message": "This mission reward has already been claimed"
-}
-```
-
-**400 Bad Request - Missing Scheduled Date:**
-```json
-{
-  "error": "SCHEDULING_REQUIRED",
-  "message": "This reward requires a scheduled activation date",
-  "reward_type": "discount"
-}
-```
-
-**400 Bad Request - Invalid Schedule (Weekend):**
-```json
-{
-  "error": "INVALID_SCHEDULE",
-  "message": "Discounts can only be scheduled on weekdays (Monday-Friday)",
-  "allowed_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-}
-```
-
-**400 Bad Request - Invalid Time Slot:**
-```json
-{
-  "error": "INVALID_TIME_SLOT",
-  "message": "Discounts must be scheduled between 9 AM - 4 PM EST",
-  "allowed_hours": "09:00 - 16:00 EST"
-}
-```
-
-**403 Forbidden - Mission Not Completed:**
-```json
-{
-  "error": "MISSION_NOT_COMPLETED",
-  "message": "This mission has not been completed yet",
-  "current_progress": 450,
-  "target_value": 500
-}
-```
-
-**404 Not Found - Mission Not Found:**
-```json
-{
-  "error": "NOT_FOUND",
-  "message": "Mission not found or you don't have access to it"
-}
-```
-
-**500 Internal Server Error:**
-```json
-{
-  "error": "CLAIM_FAILED",
-  "message": "Failed to process reward claim. Please try again or contact support."
-}
-```
-
----
+1. ✅ Verify `mission_progress.status='completed'`
+2. ✅ Check `redemptions.status='claimable'` (not already claimed)
+3. ✅ Verify `mission.tier_eligibility = user.current_tier`
+4. ✅ Validate request body based on reward type
+5. ✅ Update `redemptions.status` from 'claimable' → 'claimed'
+6. ✅ Create sub-state records if needed
+7. ✅ Log audit trail
 
 ---
 
@@ -1911,22 +3077,48 @@ INSERT INTO commission_boost_redemptions (
 ```http
 POST /api/missions/550e8400-e29b-41d4-a716-446655440000/participate
 Authorization: Bearer <supabase-jwt-token>
-Content-Type: application/json
+```
+
+### Request Body
+
+```typescript
+{}  // Empty body
 ```
 
 ### Response Schema
 
-_To be defined_
+```typescript
+{
+  "success": boolean,
+  "message": string,  // "You're entered in the raffle!"
+  "raffleData": {
+    "drawDate": string,  // ISO 8601
+    "drawDateFormatted": string,  // "Feb 20, 2025"
+    "daysUntilDraw": number,
+    "prizeName": string  // "an iPhone 16 Pro"
+  }
+}
+```
+
+### Backend Processing
+
+1. ✅ Verify `mission.mission_type='raffle'`
+2. ✅ Check `mission.activated=true`
+3. ✅ Verify user hasn't already participated
+4. ✅ Verify tier eligibility
+5. ✅ Update `mission_progress.status` from 'active' → 'completed'
+6. ✅ Create `redemptions` row (`status='claimable'`)
+7. ✅ Create `raffle_participations` row (`is_winner=NULL`)
+8. ✅ Log audit trail
 
 ---
-
 # Mission History
 
 **Page:** `/app/missions/missionhistory/page.tsx`
 
 ## GET /api/missions/history
 
-**Purpose:** Returns historical missions (fulfilled, cancelled, lost raffles).
+**Purpose:** Returns concluded missions for mission history page (completed rewards + lost raffles).
 
 ### Request
 
@@ -1937,10 +3129,214 @@ Authorization: Bearer <supabase-jwt-token>
 
 ### Response Schema
 
-_To be defined_
+```typescript
+interface MissionHistoryResponse {
+  user: {
+    id: string
+    currentTier: string
+    currentTierName: string
+    currentTierColor: string
+  }
+
+  history: Array<{
+    // Mission identity
+    id: string
+    missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
+    displayName: string             // "Unlock Payday", "VIP Raffle", etc.
+
+    // Status (only concluded or rejected)
+    status: 'concluded' | 'rejected_raffle'
+
+    // Reward information (focus on what was earned/lost)
+    rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+    rewardName: string              // Backend-formatted "$50 Gift Card"
+    rewardSubtitle: string          // Backend-formatted "From: Unlock Payday mission"
+
+    // Completion timeline
+    completedAt: string             // ISO 8601
+    completedAtFormatted: string    // "Jan 10, 2025"
+    claimedAt: string | null        // ISO 8601
+    claimedAtFormatted: string | null  // "Jan 10, 2025"
+    deliveredAt: string | null      // ISO 8601
+    deliveredAtFormatted: string | null  // "Jan 12, 2025"
+
+    // Raffle-specific (null for non-raffles)
+    raffleData: {
+      isWinner: boolean             // true | false
+      drawDate: string              // ISO 8601
+      drawDateFormatted: string     // "Jan 20, 2025"
+      prizeName: string             // "an iPhone 16 Pro"
+    } | null
+  }>
+}
+```
+
+### Backend Formatting Rules
+
+**Reward Names (Focused on Reward, Not Mission):**
+
+| reward_type | Name Format | Example |
+|-------------|-------------|---------|
+| gift_card | `"$${amount} Gift Card"` | "$50 Gift Card" |
+| commission_boost | `"${percent}% Pay Boost"` | "5% Pay Boost" |
+| spark_ads | `"$${amount} Ads Boost"` | "$100 Ads Boost" |
+| discount | `"${percent}% Deal Boost"` | "15% Deal Boost" |
+| physical_gift | `reward.value_data.display_text \|\| reward.description` | "Premium Headphones" |
+| experience | `reward.value_data.display_text \|\| reward.description` | "Mystery Trip" |
+
+**Subtitle Format:**
+```typescript
+rewardSubtitle = `From: ${mission.displayName} mission`
+```
+
+Examples:
+- "From: Unlock Payday mission"
+- "From: VIP Raffle mission"
+- "From: Lights, Camera, Go! mission"
+
+### Example Response
+
+```json
+{
+  "user": {
+    "id": "user-abc-123",
+    "currentTier": "tier_3",
+    "currentTierName": "Gold",
+    "currentTierColor": "#F59E0B"
+  },
+  "history": [
+    {
+      "id": "mission-sales-500",
+      "missionType": "sales_dollars",
+      "displayName": "Unlock Payday",
+      "status": "concluded",
+      "rewardType": "gift_card",
+      "rewardName": "$50 Gift Card",
+      "rewardSubtitle": "From: Unlock Payday mission",
+      "completedAt": "2025-01-10T14:30:00Z",
+      "completedAtFormatted": "Jan 10, 2025",
+      "claimedAt": "2025-01-10T14:35:00Z",
+      "claimedAtFormatted": "Jan 10, 2025",
+      "deliveredAt": "2025-01-12T10:00:00Z",
+      "deliveredAtFormatted": "Jan 12, 2025",
+      "raffleData": null
+    },
+    {
+      "id": "mission-raffle-iphone",
+      "missionType": "raffle",
+      "displayName": "VIP Raffle",
+      "status": "rejected_raffle",
+      "rewardType": "physical_gift",
+      "rewardName": "iPhone 16 Pro",
+      "rewardSubtitle": "From: VIP Raffle mission",
+      "completedAt": "2025-01-15T12:00:00Z",
+      "completedAtFormatted": "Jan 15, 2025",
+      "claimedAt": null,
+      "claimedAtFormatted": null,
+      "deliveredAt": null,
+      "deliveredAtFormatted": null,
+      "raffleData": {
+        "isWinner": false,
+        "drawDate": "2025-01-20T23:59:59Z",
+        "drawDateFormatted": "Jan 20, 2025",
+        "prizeName": "an iPhone 16 Pro"
+      }
+    },
+    {
+      "id": "mission-boost-30d",
+      "missionType": "videos",
+      "displayName": "Lights, Camera, Go!",
+      "status": "concluded",
+      "rewardType": "commission_boost",
+      "rewardName": "5% Pay Boost",
+      "rewardSubtitle": "From: Lights, Camera, Go! mission",
+      "completedAt": "2024-12-15T09:00:00Z",
+      "completedAtFormatted": "Dec 15, 2024",
+      "claimedAt": "2024-12-15T09:05:00Z",
+      "claimedAtFormatted": "Dec 15, 2024",
+      "deliveredAt": "2025-01-20T15:00:00Z",
+      "deliveredAtFormatted": "Jan 20, 2025",
+      "raffleData": null
+    }
+  ]
+}
+```
+
+### Business Logic
+
+**Query Filtering:**
+
+```sql
+SELECT
+  m.*,
+  mp.completed_at,
+  r.type as reward_type,
+  r.value_data,
+  r.description as reward_description,
+  red.status as redemption_status,
+  red.claimed_at,
+  red.fulfilled_at,
+  red.concluded_at,
+  rp.is_winner,
+  rp.winner_selected_at
+FROM missions m
+INNER JOIN mission_progress mp ON (
+  mp.mission_id = m.id
+  AND mp.user_id = $userId
+)
+INNER JOIN rewards r ON r.id = m.reward_id
+INNER JOIN redemptions red ON (
+  red.mission_progress_id = mp.id
+  AND red.user_id = $userId
+  AND red.status IN ('concluded', 'rejected')  -- Only completed missions
+)
+LEFT JOIN raffle_participations rp ON (
+  rp.mission_id = m.id
+  AND rp.user_id = $userId
+)
+WHERE m.client_id = $clientId
+  AND mp.status != 'cancelled'  -- Exclude cancelled missions
+ORDER BY
+  COALESCE(red.concluded_at, red.rejected_at) DESC
+```
+
+**Status Determination:**
+
+```typescript
+function determineHistoryStatus(redemption, raffle_participation) {
+  if (redemption.status === 'concluded') {
+    return 'concluded';
+  }
+
+  if (redemption.status === 'rejected' &&
+      raffle_participation?.is_winner === false) {
+    return 'rejected_raffle';
+  }
+
+  // Should never reach here if query filters correctly
+  return null;
+}
+```
+
+**Date Fields:**
+
+```typescript
+// For concluded missions
+{
+  completedAt: mission_progress.completed_at,
+  claimedAt: redemptions.claimed_at,
+  deliveredAt: redemptions.concluded_at  // When reward fully delivered
+}
+
+// For rejected raffles
+{
+  completedAt: raffle_participations.participated_at,
+  claimedAt: null,  // Never claimed (lost raffle)
+  deliveredAt: null
+}
+```
 
 ---
-
 # Rewards
 
 **Page:** `/app/rewards/page.tsx`

@@ -138,6 +138,9 @@ clients (root)
 - `tiktok_handle` - VARCHAR(100) NOT NULL - Primary identifier from Cruva CSV
 - `email` - VARCHAR(255) NULLABLE - Collected on first login
 - `email_verified` - BOOLEAN DEFAULT false
+- `password_hash` - VARCHAR(255) NOT NULL - Bcrypt hash of user password (rounds=10)
+- `terms_accepted_at` - TIMESTAMP NULLABLE - When user agreed to Terms of Use
+- `terms_version` - VARCHAR(50) NULLABLE - Version of terms accepted (e.g., "2025-01-18")
 - `is_admin` - BOOLEAN DEFAULT false
 - `current_tier` - VARCHAR(50) DEFAULT 'tier_1'
 - `tier_achieved_at` - TIMESTAMP - When reached current tier (start of checkpoint period)
@@ -169,7 +172,46 @@ clients (root)
 
 ---
 
-### 1.3 metrics Table - **REMOVED** ❌
+### 1.3 otp_codes Table
+
+**Purpose:** Email verification via one-time passwords during signup
+
+**Current Attributes:**
+- `id` - UUID PRIMARY KEY DEFAULT uuid_generate_v4()
+- `user_id` - UUID REFERENCES users(id) ON DELETE CASCADE
+- `session_id` - VARCHAR(100) NOT NULL UNIQUE - Tracked via HTTP-only cookie
+- `code_hash` - VARCHAR(255) NOT NULL - Bcrypt hash of 6-digit OTP code
+- `expires_at` - TIMESTAMP NOT NULL - 5 minutes from creation
+- `attempts` - INTEGER DEFAULT 0 - Max 3 attempts before code becomes invalid
+- `used` - BOOLEAN DEFAULT false - One-time use only (cannot reuse same code)
+- `created_at` - TIMESTAMP DEFAULT NOW()
+
+**Indexes:**
+```sql
+CREATE INDEX idx_otp_session ON otp_codes(session_id);
+CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
+```
+
+**Status:** **KEEP** ✅
+
+**Rationale:**
+- Required for secure email verification during signup (POST /api/auth/signup, POST /api/auth/verify-otp)
+- Session tracked via HTTP-only cookie (XSS protection)
+- Code stored as bcrypt hash (even if DB breached, OTP codes are secure)
+- Expires in 5 minutes (short-lived, reduces attack window)
+- Rate limited to 3 attempts per code (brute-force protection)
+- One-time use prevents replay attacks
+
+**Security Features:**
+- Session ID in HTTP-only cookie (cannot be accessed by JavaScript)
+- OTP code hashed with bcrypt before storage (never plaintext)
+- Automatic expiration after 5 minutes
+- Attempt counter for rate limiting
+- Used flag prevents code reuse
+
+---
+
+### 1.4 metrics Table - **REMOVED** ❌
 
 **Previous Purpose:** Consolidated user-level aggregates from Cruva affiliates.csv + videos.csv
 
@@ -355,7 +397,7 @@ clients (root)
 | id | UUID | PRIMARY KEY DEFAULT uuid_generate_v4() | missions | Mission templates | |
 | client_id | UUID | REFERENCES clients(id) ON DELETE CASCADE | missions | Multi-tenant isolation | |
 | title | VARCHAR(255) | NOT NULL | missions | Internal admin reference (NOT shown to creators) | |
-| display_name | VARCHAR(255) | NOT NULL | missions | User-facing mission name | Static per mission_type: 'Unlock Payday' (sales), 'Fan Favorite' (likes), 'Road to Viral' (views), 'Lights, Camera, Go!' (videos), 'VIP Raffle' (raffle) |
+| display_name | VARCHAR(255) | NOT NULL | missions | User-facing mission name | Static per mission_type: 'Sales Sprint' (sales), 'Fan Favorite' (likes), 'Road to Viral' (views), 'Lights, Camera, Go!' (videos), 'VIP Raffle' (raffle) |
 | description | TEXT | | missions | Admin notes | |
 | mission_type | VARCHAR(50) | NOT NULL | missions | Mission configuration | Options: 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle' |
 | target_value | INTEGER | NOT NULL | missions | Target to achieve | Set to 0 for raffle type |
