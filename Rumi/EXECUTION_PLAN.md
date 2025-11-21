@@ -373,7 +373,7 @@
 ## Step 2.3: Utility Functions
 - [ ] **Task 2.3.1:** Create auth utility
     - **Action:** Create `/lib/utils/auth.ts` with getUserFromRequest, validateClientId
-    - **References:** ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1028-1063), Section 10 (Authorization & Security Checklists, lines 1064-1337)
+    - **References:** ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137), Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Acceptance Criteria:** Functions extract user from JWT, validate client_id presence, follow security patterns from Section 10
 
 - [ ] **Task 2.3.2:** Create encryption utility
@@ -381,12 +381,23 @@
     - **References:** Loyalty.md Pattern 9 (Sensitive Data Encryption)
     - **Acceptance Criteria:** Encrypt/decrypt functions work, use ENCRYPTION_KEY from env
 
-- [ ] **Task 2.3.3:** Create validation utility
+- [ ] **Task 2.3.3:** Create data transformation utility
+    - **Action:** Create `/lib/utils/transformers.ts` with functions for snake_case → camelCase conversion and special case transformations
+    - **References:** ARCHITECTURE.md Section 7 (Data Transformation Conventions, lines 954-1024), API_CONTRACTS.md (all response schemas)
+    - **Implementation Guide:** Include `transformToCamelCase()` for general field name conversion, `transformDurationMinutesToDays()` for discount duration fields, `transformNestedJson()` for JSONB columns, ensure encrypted fields are handled per lines 1008-1017
+    - **Acceptance Criteria:** MUST transform all snake_case database fields to camelCase for API responses, MUST handle special cases (duration_minutes → durationDays, nested JSON keys, encrypted fields), follows Section 7 transformation patterns
+
+- [ ] **Task 2.3.4:** Add transformation tests
+    - **Action:** Create `/tests/unit/utils/transformers.test.ts` with test cases for all transformation patterns
+    - **References:** ARCHITECTURE.md Section 7 (lines 960-1017 for transformation examples)
+    - **Acceptance Criteria:** Tests cover snake_case → camelCase conversion, discount duration transformation (10080 minutes → 7 days), nested JSON transformations, encrypted field handling
+
+- [ ] **Task 2.3.5:** Create validation utility
     - **Action:** Create `/lib/utils/validation.ts` with Zod schemas for common validations
     - **References:** API_CONTRACTS.md (request schemas)
     - **Acceptance Criteria:** Schemas for email, handle, UUID formats
 
-- [ ] **Task 2.3.4:** Create error handling utility
+- [ ] **Task 2.3.6:** Create error handling utility
     - **Action:** Create `/lib/utils/errors.ts` with AppError class and error response formatter
     - **References:** API_CONTRACTS.md (error responses)
     - **Acceptance Criteria:** Standard error format matching API contracts
@@ -405,23 +416,23 @@
 
 - [ ] **Task 3.1.2:** Implement findByHandle function
     - **Action:** Add function with signature `findByHandle(clientId: string, handle: string)`
-    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 8 (Multi-Tenant Query Isolation), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1028-1063)
+    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 8 (Multi-Tenant Query Isolation), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** Query MUST filter by client_id AND tiktok_handle, follows tenant isolation rules from Section 9
 
 - [ ] **Task 3.1.3:** Implement findByEmail function
     - **Action:** Add function with signature `findByEmail(clientId: string, email: string)`
-    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9
-    - **Acceptance Criteria:** MUST decrypt encrypted_email for comparison, filter by client_id
+    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST decrypt encrypted_email for comparison (Section 9 checklist item 6), MUST filter by client_id (Section 9 Critical Rule #1)
 
 - [ ] **Task 3.1.4:** Implement create function
     - **Action:** Add function to insert new user with encrypted fields
-    - **References:** Loyalty.md Flow 3 (Signup), Pattern 9
-    - **Acceptance Criteria:** MUST encrypt email/phone before insert, return created user
+    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST encrypt email/phone before INSERT (Section 9 checklist item 6), MUST validate client_id is provided (Section 9 Critical Rule #2), return created user
 
 - [ ] **Task 3.1.5:** Implement updateLastLogin function
-    - **Action:** Add function to update last_login_at timestamp
-    - **References:** Loyalty.md Flow 5 (Login)
-    - **Acceptance Criteria:** Updates users.last_login_at to now()
+    - **Action:** Add function to update last_login_at timestamp for user
+    - **References:** SchemaFinalv2.md (users table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id AND user_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5)
 
 - [ ] **Task 3.1.6:** Create OTP repository file
     - **Action:** Create `/lib/repositories/otpRepository.ts`
@@ -429,9 +440,9 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 3.1.7:** Implement OTP CRUD functions
-    - **Action:** Add create, findValid, markUsed, deleteExpired
-    - **References:** Loyalty.md Flow 3/4 (OTP verification)
-    - **Acceptance Criteria:** Functions enforce expiration check, single-use
+    - **Action:** Add create, findValid, markUsed, deleteExpired functions for OTP fields on users table
+    - **References:** SchemaFinalv2.md (users table otp fields), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), functions enforce expiration check and single-use, UPDATE operations MUST verify count > 0 (Section 9 checklist item 4)
 
 - [ ] **Task 3.1.8:** Create client repository file
     - **Action:** Create `/lib/repositories/clientRepository.ts`
@@ -441,7 +452,7 @@
 - [ ] **Task 3.1.9:** Implement findById function
     - **Action:** Add function to fetch client by UUID
     - **References:** SchemaFinalv2.md (clients table)
-    - **Acceptance Criteria:** Returns client or null
+    - **Acceptance Criteria:** Queries clients table (no client_id filter needed - this IS the tenant table per Section 9 exception), returns client or null
 
 ## Step 3.2: Auth Services
 - [ ] **Task 3.2.1:** Create auth service file
@@ -487,38 +498,56 @@
 ## Step 3.3: Auth API Routes
 - [ ] **Task 3.3.1:** Create check-handle route
     - **Action:** Create `/app/api/auth/check-handle/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/check-handle, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Security Checklists, lines 1269-1292)
-    - **Acceptance Criteria:** Zod validates request, calls authService, returns 200 with { available }, follows route pattern from Section 5
+    - **References:** API_CONTRACTS.md lines 34-184 (POST /api/auth/check-handle), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 3-scenario routing logic (lines 104-137): (A) exists+email→login, (B) exists+no email→signup, (C) not found→signup. Normalize handle with @ prefix (line 108-111). Validate handle regex `^[a-zA-Z0-9_.]{1,30}$` (line 168). Return errors: HANDLE_REQUIRED, INVALID_HANDLE, HANDLE_TOO_LONG (lines 142-164)
+    - **Acceptance Criteria:** MUST return `{ exists: boolean, has_email: boolean, route: 'signup'|'login', handle: string }` per lines 56-62, implements all 3 routing scenarios per lines 123-136, validates handle format per Section 10.3 line 168, returns 200 for valid requests or 400 for validation errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.2:** Create signup route
     - **Action:** Create `/app/api/auth/signup/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/signup, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Security Checklists, lines 1318-1324)
-    - **Acceptance Criteria:** Validates request, calls authService.initiateSignup, returns 201 or 400/409, follows validation patterns from Section 10
+    - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.4 (Validation Checklist Template, lines 1396-1401)
+    - **Implementation Guide:** MUST implement 8-step workflow (lines 247-356): (1) validate input (email format line 252, password 8-128 chars lines 257-262, agreedToTerms line 265), (2) check existing email line 271-276, (3) hash password with bcrypt rounds=10 line 281, (4) create user with client_id + default tier 'tier_1' + terms version '2025-01-18' lines 286-308, (5) generate 6-digit OTP line 312-315, (6) store OTP in otp_codes table expires 5 min lines 319-336, (7) send OTP email via Resend lines 340-346, (8) set HTTP-only cookie lines 350-355. Return errors: EMAIL_ALREADY_EXISTS, INVALID_EMAIL, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, TERMS_NOT_ACCEPTED, OTP_SEND_FAILED (lines 360-406)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, otpSent: boolean, sessionId: string, userId: string }` per lines 214-219, implements all 8 steps of signup workflow per lines 247-356, validates per Section 10.4 checklist, hashes password with bcrypt rounds=10 (line 281), stores hashed OTP in otp_codes table (line 319-336), sends email via Resend (line 340-346), sets HTTP-only secure cookie with Max-Age=300 (line 353), returns 201 for success or 400/500 for errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.3:** Create verify-otp route
     - **Action:** Create `/app/api/auth/verify-otp/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/verify-otp, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Validates OTP, returns 200 with session or 400/401, follows route structure from Section 5
+    - **References:** API_CONTRACTS.md lines 442-722 (POST /api/auth/verify-otp), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 11-step workflow (lines 495-634): (1) get session ID from otp_session HTTP-only cookie line 498-503, (2) validate code format 6 digits line 508-511, (3) query OTP record by session_id + used=false lines 515-527, (4) check OTP exists and not used lines 530-543, (5) check expiration 5 minutes lines 547-553, (6) check max 3 attempts lines 557-570, (7) verify OTP with bcrypt compare lines 574-596 incrementing attempts on failure, (8) mark OTP as used lines 600-603, (9) update users.email_verified=true lines 607-611, (10) create authenticated session with Supabase Auth lines 614-621, (11) set auth_token cookie Max-Age=2592000 (30 days) and clear otp_session cookie lines 625-633. Return errors: INVALID_CODE_FORMAT, INVALID_OTP (with attemptsRemaining), OTP_EXPIRED, OTP_ALREADY_USED, MAX_ATTEMPTS_EXCEEDED, SESSION_NOT_FOUND, INVALID_SESSION (lines 638-693)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, verified: boolean, userId: string, sessionToken: string }` per lines 465-470, implements all 11 steps of OTP verification workflow per lines 495-634, reads otp_session cookie (line 499), validates 6-digit format (line 509), queries otp_codes by session_id + used=false (line 524-526), checks expiration and max 3 attempts (lines 548, 558), verifies with bcrypt compare (line 576), increments attempts on failure (line 583), marks used=true on success (line 602), updates email_verified=true (line 609), creates Supabase Auth session (line 616-621), sets auth_token HTTP-only cookie Max-Age=2592000 (line 629), clears otp_session cookie Max-Age=0 (line 630), returns 200 for success or 400 for errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.4:** Create resend-otp route
     - **Action:** Create `/app/api/auth/resend-otp/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/resend-otp, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Rate limiting pattern)
-    - **Acceptance Criteria:** Rate limit applied, returns 200 or 429
+    - **References:** API_CONTRACTS.md lines 722-939 (POST /api/auth/resend-otp), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Defense in Depth Pattern, lines 1371-1380)
+    - **Implementation Guide:** MUST implement 10-step workflow (lines 774-877): (1) get session ID from otp_session HTTP-only cookie lines 777-782, (2) query existing OTP record by session_id lines 786-794, (3) check session exists lines 797-803, (4) rate limiting check min 30 seconds since created_at lines 807-817, (5) get user email lines 821-822, (6) invalidate old OTP mark used=true lines 826-829, (7) generate new 6-digit OTP with bcrypt rounds=10 lines 833-836, (8) create new OTP record reusing same session_id expires 5 min lines 840-857, (9) send new OTP email via Resend lines 861-866, (10) return response with expiresAt ISO timestamp and remainingSeconds=300 lines 870-876. Return errors: SESSION_NOT_FOUND, INVALID_SESSION, RESEND_TOO_SOON (429), EMAIL_SEND_FAILED (lines 881-911). Security: max 5 resend requests per session (line 920)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, sent: boolean, expiresAt: string, remainingSeconds: number }` per lines 746-751, implements all 10 steps of resend workflow per lines 774-877, reads otp_session cookie (line 778), queries existing OTP record (line 792), enforces min 30 seconds wait time between resends (line 809), marks old OTP used=true (line 828), generates new 6-digit OTP with bcrypt rounds=10 (line 835), creates new OTP record with same session_id (line 851), expires in 5 minutes (line 836), sends email via Resend (line 862-865), returns expiresAt as ISO timestamp (line 874) and remainingSeconds=300 (line 875), returns 200 for success or 429 for RESEND_TOO_SOON or 400/500 for other errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.5:** Create login route
     - **Action:** Create `/app/api/auth/login/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/login, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Validates credentials, sends OTP, returns 200 or 401
+    - **References:** API_CONTRACTS.md lines 946-1118 (POST /api/auth/login with error responses), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 5-step workflow (lines 1003-1056): (1) find user by handle lines 1006-1015, return 401 INVALID_CREDENTIALS if not found (line 1037 + 1113 - don't reveal "user not found"), (2) verify password with bcrypt.compare lines 1018-1019 and 1040-1042, return 401 INVALID_CREDENTIALS if invalid (line 1113 same error for both cases), rate limit 5 failed attempts in 15 minutes return 429 ACCOUNT_LOCKED (lines 1042, 1091-1096, 1112), (3) check email_verified=true lines 1044-1046, return 403 EMAIL_NOT_VERIFIED if false (lines 1083-1088), (4) create authenticated session with JWT token payload {userId, handle, email, issued_at, expires_at} lines 1048-1051 and 1116, (5) set HTTP-only cookie auth-token with 7 days expiration (lines 1028, 1115), Secure + SameSite=Strict flags (line 1027, 1111), return response lines 1053-1055. Return errors: MISSING_FIELDS (400), INVALID_HANDLE (400), INVALID_CREDENTIALS (401), EMAIL_NOT_VERIFIED (403), ACCOUNT_LOCKED (429), INTERNAL_ERROR (500) (lines 1059-1105). Log login attempts for security auditing (line 1117)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, userId: string, sessionToken: string }` per lines 987-991, implements all 5 steps of login workflow per lines 1003-1056, validates handle format starts with @ 3-30 chars (line 1071), returns 400 MISSING_FIELDS if handle or password missing (line 1062-1064), queries users by handle (line 1014), verifies password with bcrypt.compare (lines 1018-1019, 1109), returns 401 INVALID_CREDENTIALS for invalid handle OR password with SAME error message for both (lines 1037, 1041, 1113 - no user enumeration), rate limits 5 failed attempts per handle in 15 minutes (line 1112), returns 429 ACCOUNT_LOCKED after 5 failed attempts (lines 1091-1096), checks email_verified=true (line 1045, 1114), returns 403 EMAIL_NOT_VERIFIED if false (lines 1083-1088), creates JWT token with payload {userId, handle, email, issued_at, expires_at} (lines 1049, 1116), sets HTTP-only cookie auth-token with Secure + SameSite=Strict + 7 days expiration (lines 1027-1028, 1110-1111, 1115), logs login attempts for auditing (line 1117), returns 200 for success or 400/401/403/429/500 for errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.6:** Create forgot-password route
     - **Action:** Create `/app/api/auth/forgot-password/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/forgot-password, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Sends reset email, returns 200
+    - **References:** API_CONTRACTS.md lines 1462-1614 (POST /api/auth/forgot-password), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 6-step workflow (lines 1522-1556): (1) lookup user by email OR handle (identifier field accepts either) lines 1524-1527 and 1474, (2) CRITICAL anti-enumeration: if user not found still return success 200 but don't send email (prevent account enumeration) lines 1529-1530 and 1576, (3) if user found generate secure token with crypto.randomBytes(32).toString('base64url') 44 chars lines 1532-1534, (4) hash token with bcrypt before storing in password_reset_tokens table (user_id, token_hash, expires_at NOW + 15 minutes) lines 1536-1538 and 1578-1579, (5) send email via SendGrid/AWS SES with reset link https://app.com/login/resetpw?token={token} expires in 15 minutes lines 1540-1551, (6) mask email for response (first 2 chars + **** + @ + domain) lines 1553-1555. Return errors: MISSING_IDENTIFIER (400), INVALID_IDENTIFIER (400), TOO_MANY_REQUESTS (429 - 3 requests per hour), EMAIL_SEND_FAILED (500) (lines 1560-1573). Security: rate limit 3 requests per hour per identifier (lines 1564, 1577), token stored as bcrypt hash not plaintext (line 1578), one-time use marked as used_at after reset (line 1580), HTTPS only links (line 1581). Database: requires password_reset_tokens table with schema (id, user_id, token_hash, created_at, expires_at, used_at, ip_address) lines 1589-1602
+    - **Acceptance Criteria:** MUST return `{ sent: boolean, emailHint: string, expiresIn: number }` per lines 1506-1510, implements all 6 steps of forgot-password workflow per lines 1522-1556, accepts identifier field as email OR handle (line 1474), validates identifier format (email or handle starting with @) per Section 10.3, ALWAYS returns 200 success even if user not found to prevent enumeration (lines 1529-1530, 1576), queries users by email OR handle (line 1526), generates secure token with crypto.randomBytes(32).toString('base64url') 44 chars (lines 1533-1534), hashes token with bcrypt before storing (line 1536, 1578), stores in password_reset_tokens table with expires_at NOW + 15 minutes (lines 1537-1538, 1579), sends email via SendGrid/AWS SES with reset link (lines 1540-1551), masks email response first 2 chars + **** + @ + domain (lines 1553-1555, 1501), returns expiresIn=15 minutes (line 1502, 1518), rate limits 3 requests per hour per identifier (lines 1564, 1577), ensures one-time use with used_at field (line 1580), uses HTTPS only for reset links (line 1581), returns 200 for success or 400/429/500 for errors, follows route pattern from Section 5
 
 - [ ] **Task 3.3.7:** Create reset-password route
     - **Action:** Create `/app/api/auth/reset-password/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /auth/reset-password, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Validation patterns)
-    - **Acceptance Criteria:** Validates token, resets password, returns 200 or 400
+    - **References:** API_CONTRACTS.md /auth/reset-password, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Acceptance Criteria:** Validates token and password strength server-side (Section 10.3), resets password, returns 200 or 400
+
+- [ ] **Task 3.3.8:** Create user-status route
+    - **Action:** Create `/app/api/auth/user-status/route.ts` with GET handler
+    - **References:** API_CONTRACTS.md lines 1141-1297 (GET /api/auth/user-status with error responses and security notes), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 6-step workflow (lines 1193-1227): (1) validate session token BEFORE any database queries (line 1281), get authenticated user from JWT decode or session lookup from HTTP-only cookie auth-token lines 1196-1197 and 1152, return 401 UNAUTHORIZED if invalid/missing lines 1232-1234 and 1259-1264, (2) query user info (id, email_verified, last_login_at, created_at) lines 1200-1206, (3) determine recognition status based on last_login_at: NULL=first login (isRecognized=false), NOT NULL=returning user (isRecognized=true) lines 1208-1211 and 1236-1239, (4) determine routing destination: isRecognized=false → redirectTo="/login/welcomeunr", isRecognized=true → redirectTo="/home" lines 1213-1215 and 1238-1239, (5) update last_login_at=NOW() and updated_at=NOW() AFTER checking recognition status lines 1217-1224 (CRITICAL: update after check to detect first-time users), (6) return response with routing instruction lines 1226-1227. Backend owns all routing logic, frontend follows redirectTo instruction lines 1246-1249. Security: idempotent after first call (line 1280), no sensitive data exposed like password_hash or payment info (line 1278), only userId UUID returned (line 1282). Return errors: UNAUTHORIZED (401), INTERNAL_ERROR (500) (lines 1259-1272)
+    - **Acceptance Criteria:** MUST return `{ userId: string, isRecognized: boolean, redirectTo: string, emailVerified: boolean }` per lines 1165-1170, implements all 6 steps of user-status workflow per lines 1193-1227, validates session token BEFORE database queries (line 1281), returns 401 UNAUTHORIZED with "Please log in to continue" if invalid/missing (lines 1259-1264), queries users table for id/email_verified/last_login_at/created_at (lines 1200-1206, 1290-1294), sets isRecognized=false if last_login_at IS NULL (lines 1210, 1238), sets isRecognized=true if last_login_at IS NOT NULL (lines 1211, 1239), sets redirectTo="/login/welcomeunr" for first-time users (lines 1214, 1238), sets redirectTo="/home" for returning users (lines 1215, 1239), updates last_login_at=NOW() AFTER checking status to preserve first-login detection (lines 1217-1224, 1241-1244, 1279), is idempotent after first call (line 1280), does NOT expose sensitive data like password_hash or payment info (line 1278), only exposes userId UUID (line 1282), returns 200 for success or 401/500 for errors, follows route pattern from Section 5
+
+- [ ] **Task 3.3.9:** Create onboarding-info route
+    - **Action:** Create `/app/api/auth/onboarding-info/route.ts` with GET handler
+    - **References:** API_CONTRACTS.md lines 1304-1455 (GET /api/auth/onboarding-info), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 5-step workflow (lines 1356-1379): (1) get authenticated user from session token JWT decode or session lookup from HTTP-only cookie auth-token lines 1359-1360, return 401 UNAUTHORIZED if invalid/missing lines 1415-1420, (2) get user's client_id from users table lines 1363-1365, (3) get client-specific onboarding configuration - MVP: return hardcoded default response for single client lines 1368-1369 and 1383-1386, Future: query onboarding_messages table by client_id lines 1388-1391, (4) build response with dynamic content: can include dynamic dates (next Monday calculated server-side lines 1393-1397), client-specific communication channels (DMs/email/SMS line 1374), localization (line 1375), A/B testing variants (line 1376), (5) return response line 1378. MVP Implementation: hardcode response in backend (line 1383-1386), simple JavaScript object returned. Future: onboarding_messages table with schema {id, client_id, heading, message, submessage, button_text, created_at} (lines 1388-1391). Security: can be cached per client_id for 1 hour (lines 1409-1411), no sensitive data exposed (line 1434), no PII (line 1437). Return errors: UNAUTHORIZED (401), INTERNAL_ERROR (500) (lines 1415-1428)
+    - **Acceptance Criteria:** MUST return `{ heading: string, message: string, submessage: string, buttonText: string }` per lines 1328-1333, implements all 5 steps of onboarding-info workflow per lines 1356-1379, validates session token from HTTP-only cookie auth-token (line 1315), returns 401 UNAUTHORIZED if invalid/missing (lines 1415-1420), queries users table for client_id (lines 1363-1365, 1449-1450), MVP implementation returns hardcoded default response (lines 1383-1386), response can include emojis in heading (line 1321), dynamic dates in message (line 1322), communication channel info in submessage (line 1323), CTA button text (line 1324), can be cached per client_id (lines 1409-1411, 1435), does NOT expose sensitive data or PII (lines 1434, 1437), returns 200 for success or 401/500 for errors, follows route pattern from Section 5
 
 ## Step 3.4: Auth Testing
 - [ ] **Task 3.4.1:** Create auth service tests
@@ -556,12 +585,12 @@
 
 - [ ] **Task 4.1.2:** Implement getUserDashboard function
     - **Action:** Add function to aggregate: user info, current tier, total points, active commission boost, tier progress
-    - **References:** API_CONTRACTS.md /dashboard, Loyalty.md Flow 1 (Dashboard)
-    - **Acceptance Criteria:** Single query with JOINs to users, vip_tiers, commission_boost_states
+    - **References:** API_CONTRACTS.md /dashboard, SchemaFinalv2.md (users, vip_tiers tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id for vip_tiers JOIN (Section 9 Critical Rule #1), single query with JOINs to users, vip_tiers, commission_boost_redemptions
 
 - [ ] **Task 4.1.3:** Implement getStatsSummary function
     - **Action:** Add function to count: available missions, active rewards, pending redemptions
-    - **References:** API_CONTRACTS.md /dashboard, ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1028-1063)
+    - **References:** API_CONTRACTS.md /dashboard, ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** MUST filter by client_id in ALL queries (Section 9 Critical Rule #1), return counts
 
 - [ ] **Task 4.1.4:** Create mission repository file
@@ -571,8 +600,8 @@
 
 - [ ] **Task 4.1.5:** Implement findFeaturedMission function
     - **Action:** Add function to get highest-priority active mission user hasn't completed
-    - **References:** API_CONTRACTS.md /dashboard/featured-mission, Loyalty.md Flow 1
-    - **Acceptance Criteria:** Query orders by priority, excludes completed missions
+    - **References:** API_CONTRACTS.md /dashboard/featured-mission, SchemaFinalv2.md (missions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter missions by client_id (Section 9 Critical Rule #1), query orders by display_order, excludes completed missions for user
 
 ## Step 4.2: Dashboard Services
 - [ ] **Task 4.2.1:** Create dashboard service file
@@ -598,13 +627,15 @@
 ## Step 4.3: Dashboard API Routes
 - [ ] **Task 4.3.1:** Create dashboard overview route
     - **Action:** Create `/app/api/dashboard/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /dashboard, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Authorization pattern, lines 1082-1122)
-    - **Acceptance Criteria:** Auth middleware, calls service, returns 200 with dashboard data, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md lines 2061-2669 (GET /api/dashboard unified endpoint), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
+    - **Implementation Guide:** MUST return unified dashboard response with 5 major sections (lines 2075-2193): (1) User & Tier Info: query users JOIN clients JOIN tiers, return id/handle/email/clientName and currentTier (id/name/color/order/checkpointExempt camelCase) and nextTier (id/name/color/minSalesThreshold) or null if highest tier (lines 2079-2108, 2386-2424), (2) Client config: vipMetric (sales|units) and vipMetricLabel (lines 2086-2091), (3) Tier Progress: read from precomputed users.checkpoint_sales_current or checkpoint_units_current + manual_adjustments, compute progressPercentage, format display strings based on vipMetric (sales mode: "$4,200" | units mode: "4,200 units"), include checkpointExpiresFormatted (lines 2113-2125, 2428-2471), (4) Featured Mission: SAME data structure as GET /api/dashboard/featured-mission with isRaffle flag, raffleEndDate, formatted progress text (currentFormatted/targetFormatted/targetText/progressText), backend handles ALL formatting (lines 2132-2168, 2486-2641), (5) Current Tier Rewards: query rewards WHERE tier_eligibility + enabled=true + client_id per Section 10.1, sort by display_order ASC, LIMIT 4 rewards, include displayText (backend-generated), totalRewardsCount for "And more!" logic (lines 2172-2192). Backend formats ALL display strings per vipMetric setting (lines 2473-2484). Tier expiration logic: show if checkpointExempt=false, hide if true (lines 2642-2667)
+    - **Acceptance Criteria:** MUST return `{ user: {id, handle, email, clientName}, client: {id, vipMetric, vipMetricLabel}, currentTier: {id, name, color, order, checkpointExempt}, nextTier: {id, name, color, minSalesThreshold} | null, tierProgress: {currentValue, targetValue, progressPercentage, currentFormatted, targetFormatted, checkpointExpiresAt, checkpointExpiresFormatted, checkpointMonths}, featuredMission: {...same as GET /api/dashboard/featured-mission...}, currentTierRewards: [{id, type, name, displayText, description, valueData, redemptionQuantity, displayOrder}], totalRewardsCount: number }` per lines 2075-2193, queries users JOIN clients JOIN tiers (lines 2389-2405), queries next tier by tier_order+1 or returns null (lines 2412-2424), reads tier progress from precomputed checkpoint_sales_current or checkpoint_units_current + manual_adjustments (lines 2431-2450), formats display strings based on vipMetric (sales: "$4,200" vs units: "4,200 units") (lines 2456-2471), includes featuredMission with SAME logic as Task 4.3.2 plus isRaffle/raffleEndDate/formatted progress text (lines 2486-2591), queries rewards filtered by tier + enabled + client_id per Section 10.1 sorted by display_order LIMIT 4 (lines 2172-2192), backend handles ALL formatting (lines 2636-2641), includes checkpointExempt camelCase for tier expiration UI logic (lines 2642-2667), returns 200 or 401/500, follows route pattern from Section 5
 
 - [ ] **Task 4.3.2:** Create featured mission route
     - **Action:** Create `/app/api/dashboard/featured-mission/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /dashboard/featured-mission, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Returns 200 with mission or 404 if none, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md lines 1773-2060 (GET /api/dashboard/featured-mission), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.2 (Missions Authorization, lines 1299-1309)
+    - **Implementation Guide:** MUST use single optimized query (lines 1940-1970, ~80ms performance): query missions with IN clause for types (raffle, sales_dollars, sales_units, videos, likes, views), filter by client_id + tier_eligibility + enabled=true per Section 10.2, raffle ONLY if activated=true (surprise feature lines 1952-1953), exclude if user participated in raffle (lines 1954-1958), exclude claimed missions (lines 1959, 1981-1984), order by priority: raffle=0 > sales_dollars=1 > sales_units=2 > videos=3 > likes=4 > views=5 (lines 1960-1968), LIMIT 1. Display name mapping static per type (lines 1901-1927): sales_dollars/sales_units→"Sales Sprint", likes→"Fan Favorite", views→"Road to Viral", videos→"Lights, Camera, Go!", raffle→"VIP Raffle". Compute progressPercentage in backend (currentProgress/targetValue)*100 (lines 1987-1992). Congratulations modal: compare mission_progress.fulfilled_at > users.last_login_at (lines 1996-2029), set showCongratsModal=true if found, update last_login_at AFTER checking (lines 2023-2028, 2037). Status: active/completed/no_missions (lines 1976-1985). Return errors: 401, 500 (lines 2040-2055)
+    - **Acceptance Criteria:** MUST return `{ status: 'active'|'completed'|'claimed'|'fulfilled'|'no_missions', mission: {id, type, displayName, currentProgress, targetValue, progressPercentage, rewardType, rewardAmount, rewardCustomText, unitText} | null, tier: {name, color}, showCongratsModal: boolean, congratsMessage: string | null, supportEmail: string, emptyStateMessage: string | null }` per lines 1787-1824, uses single optimized query ~80ms (lines 1940-1972), filters by client_id + tier_eligibility + enabled=true per Section 10.2, includes raffle ONLY if activated=true (lines 1952-1953), excludes claimed missions from home page (lines 1959, 1981-1984), orders by priority raffle > sales_dollars > sales_units > videos > likes > views (lines 1960-1968), uses static display name mapping per type (lines 1901-1927), calculates progressPercentage in backend (lines 1800, 1987-1992), checks congrats modal by comparing fulfilled_at > last_login_at (lines 1998-2029), updates last_login_at AFTER checking to prevent re-showing (lines 2023-2028, 2037), returns 200 with status='no_missions' if none found (not 404) (lines 1883-1896), follows route pattern from Section 5
 
 ## Step 4.4: Dashboard Testing
 - [ ] **Task 4.4.1:** Create dashboard integration tests
@@ -632,14 +663,14 @@
     - **Acceptance Criteria:** MUST apply tier filtering, MUST include user progress
 
 - [ ] **Task 5.1.2:** Implement getUserProgress function
-    - **Action:** Add function querying mission_progress for user
-    - **References:** SchemaFinalv2.md (mission_progress table)
-    - **Acceptance Criteria:** Returns progress with status, current_progress, target_progress
+    - **Action:** Add function querying mission_progress for user and mission
+    - **References:** SchemaFinalv2.md (mission_progress table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns progress with status, current_progress, target_progress
 
 - [ ] **Task 5.1.3:** Implement claimReward function
     - **Action:** Add function to update mission_progress.status to 'claimed'
-    - **References:** MissionsRewardsFlows.md (Mission Claim Flow)
-    - **Acceptance Criteria:** MUST validate status is 'completed', add points to user, update status
+    - **References:** SchemaFinalv2.md (mission_progress table), MissionsRewardsFlows.md (Mission Claim Flow), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST validate status is 'completed', MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), add points to user, update status
 
 - [ ] **Task 5.1.4:** Create raffle repository file
     - **Action:** Create `/lib/repositories/raffleRepository.ts`
@@ -648,13 +679,13 @@
 
 - [ ] **Task 5.1.5:** Implement participate function
     - **Action:** Add function to insert raffle_participations record
-    - **References:** MissionsRewardsFlows.md (Raffle Mission Flow)
-    - **Acceptance Criteria:** MUST check mission type is 'raffle', mission is active
+    - **References:** SchemaFinalv2.md (raffle_participations table), MissionsRewardsFlows.md (Raffle Mission Flow), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST check mission type is 'raffle', mission is active
 
 - [ ] **Task 5.1.6:** Implement getHistory function
-    - **Action:** Add function to query mission_progress with mission details
-    - **References:** API_CONTRACTS.md /missions/history
-    - **Acceptance Criteria:** Returns paginated history ordered by updated_at DESC
+    - **Action:** Add function to query mission_progress with mission details for user
+    - **References:** API_CONTRACTS.md /missions/history, SchemaFinalv2.md (mission_progress table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns paginated history ordered by updated_at DESC
 
 ## Step 5.2: Mission Services
 - [ ] **Task 5.2.1:** Create mission service file
@@ -683,25 +714,29 @@
     - **Acceptance Criteria:** Supports offset/limit, returns total count
 
 ## Step 5.3: Mission API Routes
-- [ ] **Task 5.3.1:** Create available missions route
-    - **Action:** Create `/app/api/missions/available/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /missions/available, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Authorization, lines 1221-1233)
-    - **Acceptance Criteria:** Returns 200 with missions array, follows Section 5 route pattern
+- [ ] **Task 5.3.1:** Create missions list route
+    - **Action:** Create `/app/api/missions/route.ts` with GET handler
+    - **References:** API_CONTRACTS.md lines 2949-3648 (GET /api/missions for Missions page), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.2 (Missions Authorization, lines 1299-1309)
+    - **Implementation Guide:** MUST return complex missions page response with PRE-COMPUTED status, progress, and formatted display text (lines 2962-3065): (1) User & Tier Info with currentTier/currentTierName/currentTierColor (lines 2965-2971), (2) featuredMissionId for home page sync (line 2974), (3) missions array sorted by actionable priority with 14 possible statuses (in_progress, default_claim, default_schedule, scheduled, active, redeeming, redeeming_physical, sending, pending_info, clearing, dormant, raffle_available, raffle_processing, raffle_claim, raffle_won, locked) (lines 2990-2994), each mission includes progress object with backend-formatted currentFormatted/targetFormatted/remainingText/progressText per VIP metric mode (sales: "$350" vs units: "35 units") (lines 2996-3005, 3092-3100), deadline with daysRemaining (lines 3007-3012), scheduling data with formatted dates/times EST (lines 3025-3035), raffleData with daysUntilDraw/isWinner/prizeName with article (lines 3037-3044), lockedData with requiredTierName/unlockMessage (lines 3046-3053), flippableCard content (lines 3055-3063). Display name mapping static per type (lines 3070-3079): sales→"Sales Sprint", videos→"Lights, Camera, Go!", likes→"Fan Favorite", views→"Road to Viral", raffle→"VIP Raffle". Reward descriptions VIP metric mode-aware (lines 3081-3090). Backend generates ALL formatted display text (lines 3092-3100)
+    - **Acceptance Criteria:** MUST return `{ user: {id, handle, currentTier, currentTierName, currentTierColor}, featuredMissionId: string, missions: [{id, missionType, displayName, targetUnit, tierEligibility, rewardType, rewardDescription, status, progress: {currentValue, currentFormatted, targetValue, targetFormatted, percentage, remainingText, progressText} | null, deadline: {checkpointEnd, checkpointEndFormatted, daysRemaining} | null, valueData, scheduling, raffleData, lockedData, flippableCard}] }` per lines 2963-3065, filters by user's tier/client_id/enabled per Section 10.2, includes 14 possible mission statuses (lines 2990-2994), uses static display name mapping per type (lines 3070-3079), backend formats ALL progress text per VIP metric mode (sales: "$350" vs units: "35 units") (lines 3092-3100), formats reward descriptions with article "Win an iPhone 16 Pro!" (lines 3081-3090), calculates percentage/daysRemaining/daysUntilDraw in backend, provides raffleData with isWinner/prizeName, provides lockedData with requiredTierName/unlockMessage, returns 200 or 401/500, follows route pattern from Section 5
 
 - [ ] **Task 5.3.2:** Create claim mission route
     - **Action:** Create `/app/api/missions/[missionId]/claim/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /missions/:id/claim, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Validation, lines 1234-1247)
-    - **Acceptance Criteria:** Validates missionId UUID, returns 200 or 400/404, follows validation patterns from Section 10
+    - **References:** API_CONTRACTS.md lines 3700-3770 (POST /api/missions/:id/claim), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.2 (Mission Claim Validation, lines 1312-1323)
+    - **Implementation Guide:** MUST implement 7-step validation workflow (lines 3759-3767): (1) verify mission_progress.status='completed' (line 3761), (2) check redemptions.status='claimable' not already claimed (line 3762), (3) verify mission.tier_eligibility = user.current_tier (line 3763), (4) validate request body based on reward type: instant rewards (gift_card/spark_ads/experience) empty body, scheduled rewards (commission_boost/discount) require scheduledActivationDate/Time EST (lines 3718-3722), physical gifts require shippingAddress + optional size from valueData.sizeOptions (lines 3724-3741), (5) update redemptions.status from 'claimable' → 'claimed' (line 3765), (6) create sub-state records if needed (line 3766), (7) log audit trail (line 3767). Per Section 10.2 validation table MUST check: mission completion current_value >= target_value, tier eligibility, client ownership, status='completed', prevent double-claim claimed_at === null (lines 1314-1322). Request body varies by reward type (lines 3715-3741)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, message: string, redemptionId: string, nextAction: {type: 'show_confirmation'|'navigate_to_missions', status: string, message: string} }` per lines 3747-3756, implements all 7 validation steps per lines 3759-3767, verifies mission_progress.status='completed' (line 3761), checks redemptions.status='claimable' (line 3762), validates tier eligibility (line 3763), accepts varying request body: instant rewards empty, scheduled rewards with scheduledActivationDate/Time EST, physical gifts with shippingAddress + optional size (lines 3715-3741), updates redemptions.status 'claimable' → 'claimed' (line 3765), creates sub-state records if needed (line 3766), logs audit trail (line 3767), validates per Section 10.2 table (mission completion, tier eligibility, client ownership, status='completed', prevent double-claim) (lines 1314-1322), validates missionId UUID, returns 200 for success or 400/404 for errors, follows route pattern from Section 5
 
 - [ ] **Task 5.3.3:** Create raffle participation route
     - **Action:** Create `/app/api/missions/[missionId]/participate/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /missions/:id/participate, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Returns 201 on success, 409 if already participated
+    - **References:** API_CONTRACTS.md lines 3771-3814 (POST /api/missions/:id/participate), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
+    - **Implementation Guide:** MUST implement 8-step backend processing workflow (lines 3803-3812): (1) verify mission.mission_type='raffle' (line 3805), (2) check mission.activated=true (line 3806), (3) verify user hasn't already participated check raffle_participations table (line 3807), (4) verify tier eligibility mission.tier_eligibility = user.current_tier (line 3808), (5) update mission_progress.status from 'active' → 'completed' (line 3809), (6) create redemptions row with status='claimable' (line 3810), (7) create raffle_participations row with is_winner=NULL (line 3811), (8) log audit trail (line 3812). Request body empty (line 3785). Response includes raffleData with drawDate ISO 8601, drawDateFormatted "Feb 20, 2025", daysUntilDraw backend-calculated, prizeName with article "an iPhone 16 Pro" (lines 3794-3799)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, message: string, raffleData: {drawDate: string, drawDateFormatted: string, daysUntilDraw: number, prizeName: string} }` per lines 3791-3800, implements all 8 processing steps per lines 3803-3812, accepts empty request body (line 3785), verifies mission_type='raffle' (line 3805), checks activated=true (line 3806), prevents duplicate participation (line 3807), validates tier eligibility (line 3808), updates mission_progress.status 'active' → 'completed' (line 3809), creates redemptions row status='claimable' (line 3810), creates raffle_participations row is_winner=NULL (line 3811), logs audit trail (line 3812), validates per Section 10.3 server-side, validates missionId UUID, returns 200 for success or 409 if already participated or 400/404 for other errors, follows route pattern from Section 5
 
 - [ ] **Task 5.3.4:** Create mission history route
     - **Action:** Create `/app/api/missions/history/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /missions/history, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Parses offset/limit query params, returns paginated response
+    - **References:** API_CONTRACTS.md lines 3820-4041 (GET /api/missions/history), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.2 (Missions Authorization, lines 1299-1309)
+    - **Implementation Guide:** MUST query concluded missions with INNER JOIN on redemptions WHERE status IN ('concluded', 'rejected') (lines 3970-4002): SELECT missions JOIN mission_progress JOIN rewards JOIN redemptions (status IN 'concluded'/'rejected') LEFT JOIN raffle_participations, WHERE client_id + mp.status != 'cancelled', ORDER BY COALESCE(concluded_at, rejected_at) DESC (lines 3998-4001). Status determination (lines 4004-4019): if redemption.status='concluded' return 'concluded', if redemption.status='rejected' AND raffle_participation.is_winner=false return 'rejected_raffle'. Backend formats reward names focused on reward not mission (lines 3877-3886): gift_card "$50 Gift Card", commission_boost "5% Pay Boost", spark_ads "$100 Ads Boost", discount "15% Deal Boost", physical_gift/experience use display_text or description. Subtitle format "From: {displayName} mission" (lines 3888-3896). Date fields (lines 4022-4038): concluded missions use completed_at/claimed_at/concluded_at, rejected raffles use participated_at with null claimed_at/deliveredAt. Each date includes ISO 8601 and formatted version "Jan 10, 2025"
+    - **Acceptance Criteria:** MUST return `{ user: {id, currentTier, currentTierName, currentTierColor}, history: [{id, missionType, displayName, status: 'concluded'|'rejected_raffle', rewardType, rewardName, rewardSubtitle, completedAt, completedAtFormatted, claimedAt, claimedAtFormatted, deliveredAt, deliveredAtFormatted, raffleData: {isWinner, drawDate, drawDateFormatted, prizeName} | null}] }` per lines 3834-3872, queries with INNER JOIN on redemptions WHERE status IN ('concluded', 'rejected') (lines 3989-3992), filters by client_id per Section 10.2, excludes cancelled missions mp.status != 'cancelled' (line 3999), orders by concluded_at/rejected_at DESC (line 4001), determines status: concluded or rejected_raffle (lines 4007-4018), backend formats reward names focused on reward (lines 3877-3886), generates subtitle "From: {displayName} mission" (lines 3888-3896), includes formatted dates for completedAt/claimedAt/deliveredAt (lines 4022-4037), provides raffleData with isWinner for lost raffles (lines 3864-3870), returns 200 or 401/500, follows route pattern from Section 5
 
 ## Step 5.4: Mission Testing
 - [ ] **Task 5.4.1:** Create mission service tests
@@ -740,18 +775,18 @@
 
 - [ ] **Task 6.1.2:** Implement listAvailable function
     - **Action:** Add function querying rewards with tier restrictions, usage limits
-    - **References:** API_CONTRACTS.md /rewards, Loyalty.md Flow 9 (Reward List)
-    - **Acceptance Criteria:** MUST filter by tier, check max_uses_per_user vs usage_count
+    - **References:** API_CONTRACTS.md /rewards, SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST filter by tier_eligibility, enabled=true, ordered by display_order
 
 - [ ] **Task 6.1.3:** Implement getUsageCount function
-    - **Action:** Add function counting redemptions for user
-    - **References:** SchemaFinalv2.md (redemptions table)
-    - **Acceptance Criteria:** Counts redemptions where user_id matches and status != 'cancelled'
+    - **Action:** Add function counting redemptions for reward and user
+    - **References:** SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), counts redemptions where user_id and reward_id match and status != 'cancelled'
 
 - [ ] **Task 6.1.4:** Implement redeemReward function
     - **Action:** Add transactional function to: deduct points, insert redemption, create sub-state
-    - **References:** Loyalty.md Pattern 1 (Transactional), Pattern 6 (VIP Reward Lifecycle)
-    - **Acceptance Criteria:** MUST use transaction, validate sufficient points, check usage limit
+    - **References:** SchemaFinalv2.md (redemptions table), Loyalty.md Pattern 1 (Transactional), Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST use transaction, validate sufficient points, check usage limit
 
 - [ ] **Task 6.1.5:** Create redemption repository file
     - **Action:** Create `/lib/repositories/redemptionRepository.ts`
@@ -759,9 +794,9 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 6.1.6:** Implement getHistory function
-    - **Action:** Add function querying redemptions with reward details
-    - **References:** API_CONTRACTS.md /rewards/history
-    - **Acceptance Criteria:** Returns paginated history with reward info
+    - **Action:** Add function querying redemptions with reward details for user
+    - **References:** API_CONTRACTS.md /rewards/history, SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns paginated history with reward info ordered by redeemed_at DESC
 
 - [ ] **Task 6.1.7:** Create commission boost repository file
     - **Action:** Create `/lib/repositories/commissionBoostRepository.ts`
@@ -769,14 +804,14 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 6.1.8:** Implement createBoostState function
-    - **Action:** Add function to insert commission_boost_states record
-    - **References:** Loyalty.md Pattern 7 (Commission Boost State History)
-    - **Acceptance Criteria:** Creates state with boost_percentage, start_date, end_date, is_active=true
+    - **Action:** Add function to insert commission_boost_redemptions record with state history
+    - **References:** SchemaFinalv2.md (commission_boost_redemptions table), Loyalty.md Pattern 7 (Commission Boost State History), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST insert into commission_boost_redemptions AND commission_boost_state_history, creates state with boost_percentage, start_date, end_date, boost_status='active'
 
 - [ ] **Task 6.1.9:** Implement deactivateBoost function
-    - **Action:** Add function to set is_active=false and trigger history logging
-    - **References:** Pattern 7
-    - **Acceptance Criteria:** Updates state, trigger logs deactivation event
+    - **Action:** Add function to update boost_status='deactivated' and insert state history record
+    - **References:** SchemaFinalv2.md (commission_boost_redemptions table), Loyalty.md Pattern 7 (Commission Boost State History), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), updates boost_status to 'deactivated', inserts commission_boost_state_history record
 
 - [ ] **Task 6.1.10:** Create physical gift repository file
     - **Action:** Create `/lib/repositories/physicalGiftRepository.ts`
@@ -784,24 +819,24 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 6.1.11:** Implement createGiftState function
-    - **Action:** Add function to insert physical_gift_states with encrypted address
-    - **References:** Loyalty.md Pattern 9 (Encryption)
-    - **Acceptance Criteria:** MUST encrypt address using encryption utility
+    - **Action:** Add function to insert physical_gift_redemptions with encrypted shipping address
+    - **References:** SchemaFinalv2.md (physical_gift_redemptions table), Loyalty.md Pattern 6 (VIP Reward Lifecycle), Pattern 9 (Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST encrypt shipping_address before INSERT (Section 9 checklist item 6), creates record with shipping_status='pending'
 
 - [ ] **Task 6.1.12:** Implement updateShippingStatus function
-    - **Action:** Add function to update shipping_status and log tracking
-    - **References:** MissionsRewardsFlows.md (Physical Gift Flow)
-    - **Acceptance Criteria:** Updates status, inserts physical_gift_tracking record
+    - **Action:** Add function to update shipping_status with state transition validation
+    - **References:** SchemaFinalv2.md (physical_gift_redemptions table), Loyalty.md Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), validates shipping_status transitions (pending→shipped→delivered)
 
 - [ ] **Task 6.1.13:** Implement getPaymentInfo function
-    - **Action:** Add function with signature `getPaymentInfo(clientId: string, userId: string)` to retrieve and decrypt payment account info from commission_boost_states
-    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /user/payment-info
-    - **Acceptance Criteria:** MUST decrypt payment_account field using encryption utility, MUST filter by client_id AND user_id, returns payment_type and decrypted payment_account or null if not set
+    - **Action:** Add function with signature `getPaymentInfo(clientId: string, userId: string)` to retrieve and decrypt payment account info from commission_boost_redemptions
+    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /user/payment-info
+    - **Acceptance Criteria:** MUST decrypt payment_account field using encryption utility (Section 9 checklist item 6), MUST filter by client_id AND user_id (Section 9 Critical Rule #1), returns payment_type and decrypted payment_account or null if not set
 
 - [ ] **Task 6.1.14:** Implement savePaymentInfo function
     - **Action:** Add function with signature `savePaymentInfo(clientId: string, userId: string, redemptionId: string, paymentType: string, paymentAccount: string)` to store encrypted payment info
-    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /rewards/:id/payment-info
-    - **Acceptance Criteria:** MUST encrypt payment_account before INSERT/UPDATE, MUST validate payment_type enum (venmo, paypal, zelle, bank_account), MUST filter by client_id
+    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /rewards/:id/payment-info
+    - **Acceptance Criteria:** MUST encrypt payment_account before INSERT/UPDATE (Section 9 checklist item 6), MUST validate payment_type enum (venmo, paypal, zelle, bank_account), MUST filter by client_id (Section 9 Critical Rule #1), for UPDATE operations MUST verify count > 0 (Section 9 checklist item 4)
 
 ## Step 6.2: Reward Services
 - [ ] **Task 6.2.1:** Create reward service file
@@ -855,30 +890,34 @@
     - **Acceptance Criteria:** Validates payment_type enum (venmo, paypal, zelle, bank_account), validates payment_account format is not empty, verifies reward exists and is commission_boost type, calls repository.savePaymentInfo
 
 ## Step 6.3: Reward API Routes
-- [ ] **Task 6.3.1:** Create available rewards route
+- [ ] **Task 6.3.1:** Create rewards list route
     - **Action:** Create `/app/api/rewards/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /rewards, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Authorization, lines 1080-1122)
-    - **Acceptance Criteria:** Returns 200 with rewards array, follows Section 5 route pattern with authorization checks
+    - **References:** API_CONTRACTS.md lines 4045-4809 (GET /api/rewards for Rewards page), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
+    - **Implementation Guide:** MUST return complex rewards page response with PRE-COMPUTED status and availability (lines 4059-4138): (1) User & Tier Info with currentTier/currentTierName/currentTierColor (lines 4061-4067), (2) redemptionCount for history link COUNT of status='concluded' (lines 4069-4070), (3) rewards array sorted by actionable priority with 10 possible statuses (clearing, sending, active, pending_info, scheduled, redeeming_physical, redeeming, claimable, limit_reached, locked) (lines 4096-4099), each reward includes backend-formatted name and displayText per type (lines 4142-4161): gift_card "$50 Gift Card" / "Amazon Gift Card", commission_boost "5% Pay Boost" / "Higher earnings (30d)", spark_ads "$100 Ads Boost" / "Spark Ads Promo", discount "15% Deal Boost" / "Follower Discount (7d)", physical_gift "Gift Drop: {description}" / valueData.displayText, experience description / valueData.displayText. Computed availability: canClaim (tier match + limit + enabled + no active claim), isLocked (tier_eligibility != current_tier), isPreview (preview_from_tier) (lines 4101-4104). Usage tracking: usedCount filtered by mission_progress_id IS NULL AND tier_at_claim = current_tier (line 4107), totalQuantity from redemption_quantity (line 4108). StatusDetails with formatted dates/times: scheduledDate, activationDate, expirationDate, daysRemaining, shippingCity, clearingDays (lines 4115-4131). RedemptionFrequency (one-time, monthly, weekly, unlimited) and redemptionType (instant, scheduled) (lines 4133-4137)
+    - **Acceptance Criteria:** MUST return `{ user: {id, handle, currentTier, currentTierName, currentTierColor}, redemptionCount: number, rewards: [{id, type, name, description, displayText, valueData, status, canClaim, isLocked, isPreview, usedCount, totalQuantity, tierEligibility, requiredTierName, displayOrder, statusDetails, redemptionFrequency, redemptionType}] }` per lines 4059-4138, filters by user's tier/client_id/enabled per Section 10.1, includes 10 possible reward statuses (lines 4096-4099), backend generates name and displayText per type (lines 4142-4161), computes canClaim based on tier + limit + enabled + no active claim (line 4102), computes isLocked for tier_eligibility mismatch (line 4103), includes isPreview for preview_from_tier rewards (line 4104), tracks usedCount for VIP tier rewards WHERE mission_progress_id IS NULL AND tier_at_claim = current_tier (line 4107), provides statusDetails with formatted dates (lines 4115-4131), includes redemptionFrequency and redemptionType (lines 4133-4137), returns 200 or 401/500, follows route pattern from Section 5
 
 - [ ] **Task 6.3.2:** Create claim reward route
     - **Action:** Create `/app/api/rewards/[rewardId]/claim/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /rewards/:id/claim, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Claim Validation, lines 1123-1218)
-    - **Acceptance Criteria:** Accepts optional shipping_address in body, returns 200 or 400/404, follows validation patterns from Section 10
+    - **References:** API_CONTRACTS.md lines 4810-5241 (POST /api/rewards/:id/claim VIP tier rewards only), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Claim Validation, lines 1201-1294)
+    - **Implementation Guide:** MUST implement 11-step pre-claim validation (lines 4902-4951): (1) authentication JWT required (line 4904), (2) reward exists (line 4905), (3) rewards.enabled=true (line 4906), (4) reward.tier_eligibility matches user.current_tier (line 4907), (5) VIP tier reward only (mission_progress_id IS NULL) (line 4908), (6) no active redemption WHERE status IN ('claimed', 'fulfilled') (lines 4909-4917), (7) usage limit check COUNT < redemption_quantity WHERE mission_progress_id IS NULL AND tier_at_claim = current_tier AND created_at >= tier_achieved_at (lines 4919-4931), (8) scheduling required for discount/commission_boost (line 4932), (9) discount scheduling: weekday Mon-Fri + time 09:00-16:00 EST + future date (lines 4933-4936), (10) commission_boost scheduling: future date + time auto-set to 18:00:00 EST (lines 4937-4939), (11) physical_gift requirements: shippingInfo required + sizeValue if requires_size=true + must match size_options (lines 4940-4951). Request body varies (lines 4827-4898): instant rewards empty, scheduled rewards scheduledActivationAt ISO 8601, physical gifts shippingInfo + optional sizeValue. Redemption period reset rules (lines 4953-4965): gift_card/physical_gift/experience once forever, commission_boost/spark_ads/discount once per tier achievement (re-claimable on re-promotion). 10 error types (lines 5138-5238): ACTIVE_CLAIM_EXISTS, LIMIT_REACHED, SCHEDULING_REQUIRED, INVALID_SCHEDULE (weekend), INVALID_TIME_SLOT, SHIPPING_INFO_REQUIRED, SIZE_REQUIRED, INVALID_SIZE_SELECTION, TIER_NOT_ELIGIBLE, CLAIM_FAILED
+    - **Acceptance Criteria:** MUST return `{ success: boolean, message: string, redemption: {id, status: 'claimed', rewardType, claimedAt, reward: {id, name, displayText, type, valueData}, scheduledActivationAt?, usedCount, totalQuantity, nextSteps: {action, message}}, updatedRewards: [{id, status, canClaim, usedCount}] }` per lines 4971-5018, implements all 11 validation steps per lines 4902-4951 and Section 10.1 table lines 1203-1211, validates tier eligibility matches current_tier (line 4907), checks no active redemption status IN ('claimed', 'fulfilled') (lines 4909-4917), enforces usage limits with tier-specific count WHERE mission_progress_id IS NULL AND tier_at_claim = current_tier AND created_at >= tier_achieved_at (lines 4919-4931), validates discount scheduling weekday + 09:00-16:00 EST (lines 4933-4936), auto-sets commission_boost time to 18:00:00 EST (lines 4937-4939), validates physical_gift shippingInfo + size requirements (lines 4940-4951), accepts varying request body per reward type (lines 4827-4898), applies redemption period reset rules once forever vs once per tier (lines 4953-4965), returns 200 for success or 400/403/404/500 for 10 error types (lines 5138-5238), follows route pattern from Section 5
 
 - [ ] **Task 6.3.3:** Create reward history route
     - **Action:** Create `/app/api/rewards/history/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /rewards/history, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Returns paginated history, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md /rewards/history, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
+    - **Acceptance Criteria:** Filters by client_id per Section 10.1, returns paginated history, follows Section 5 route pattern
 
 - [ ] **Task 6.3.4:** Create get payment info route
     - **Action:** Create `/app/api/user/payment-info/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /user/payment-info, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Auth middleware verifies user, calls rewardService.getPaymentInfo, returns 200 with payment_type and payment_account if exists or 404 if not set, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md lines 5246-5289 (GET /api/user/payment-info), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Tenant Isolation Pattern, lines 1328-1343)
+    - **Implementation Guide:** MUST retrieve user's saved payment information for pre-filling payment modals for commission boost payouts (line 5248). Returns full unmasked account since user is authenticated (line 5263). Two response scenarios (lines 5269-5285): if payment info exists return hasPaymentInfo=true with paymentMethod and paymentAccount, if no saved info return hasPaymentInfo=false with null values. PaymentMethod enum 'paypal' or 'venmo' (line 5262). Backend must decrypt payment_account from database using encryption utility (Pattern 9 Sensitive Data Encryption)
+    - **Acceptance Criteria:** MUST return `{ hasPaymentInfo: boolean, paymentMethod: 'paypal'|'venmo'|null, paymentAccount: string|null }` per lines 5260-5264, auth middleware verifies user, filters by client_id per Section 10.3, calls rewardService.getPaymentInfo, decrypts payment_account field (Pattern 9), returns full unmasked account for authenticated user (line 5263), returns 200 with hasPaymentInfo=true if info exists (lines 5269-5275) OR 200 with hasPaymentInfo=false and null values if no saved info (lines 5278-5285), NOT 404, follows route pattern from Section 5
 
 - [ ] **Task 6.3.5:** Create save payment info route
     - **Action:** Create `/app/api/rewards/[rewardId]/payment-info/route.ts` with POST handler
-    - **References:** API_CONTRACTS.md /rewards/:id/payment-info, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10 (Validation patterns, lines 1318-1324)
-    - **Acceptance Criteria:** Zod validates request body (payment_type enum, payment_account string), calls rewardService.savePaymentInfo, returns 201 on success or 400 for validation errors, follows Section 10 validation patterns
+    - **References:** API_CONTRACTS.md lines 5290-5412 (POST /api/rewards/:id/payment-info), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.4 (Validation Checklist Template, lines 1396-1401)
+    - **Implementation Guide:** MUST submit payment information for commission boost payout (line 5292). Request body requires 4 fields (lines 5305-5310): paymentMethod enum 'paypal'|'venmo', paymentAccount string, paymentAccountConfirm string (must match paymentAccount), saveAsDefault boolean (saves to users.default_payment_* if true). Validation rules: (1) verify paymentAccount === paymentAccountConfirm return PAYMENT_ACCOUNT_MISMATCH if not (lines 5370-5375), (2) validate PayPal email format return INVALID_PAYPAL_EMAIL if invalid (lines 5378-5383), (3) validate Venmo handle starts with @ return INVALID_VENMO_HANDLE if not (lines 5386-5391), (4) verify redemption status is 'pending_info' return PAYMENT_INFO_NOT_REQUIRED (403) if not (lines 5394-5400). Backend processing: update redemption with encrypted payment_account (Pattern 9), update redemption.status to 'fulfilled' (line 5343), set paymentInfoCollectedAt timestamp (line 5345), if saveAsDefault=true update users.default_payment_method and users.default_payment_account (line 5309). Return 5 error types (lines 5368-5409): PAYMENT_ACCOUNT_MISMATCH, INVALID_PAYPAL_EMAIL, INVALID_VENMO_HANDLE, PAYMENT_INFO_NOT_REQUIRED (403), REWARD_NOT_FOUND (404)
+    - **Acceptance Criteria:** MUST return `{ success: boolean, message: string, redemption: {id, status: 'fulfilled', paymentMethod, paymentInfoCollectedAt: string}, userPaymentUpdated: boolean }` per lines 5338-5348, Zod validates request body with 4 fields paymentMethod/paymentAccount/paymentAccountConfirm/saveAsDefault per Section 10.4, validates paymentAccount === paymentAccountConfirm (lines 5370-5375), validates PayPal email format (lines 5378-5383), validates Venmo handle starts with @ (lines 5386-5391), verifies redemption status is 'pending_info' (lines 5394-5400), encrypts payment_account before storing (Pattern 9), updates redemption.status to 'fulfilled' (line 5343), sets paymentInfoCollectedAt ISO 8601 timestamp (line 5345), saves to users default payment if saveAsDefault=true (line 5309, 5347), calls rewardService.savePaymentInfo, returns 200 for success or 400/403/404 for 5 error types (lines 5368-5409), follows route pattern from Section 5
 
 ## Step 6.4: Reward Testing
 - [ ] **Task 6.4.1:** Create reward service tests
@@ -934,8 +973,8 @@
 
 - [ ] **Task 7.2.2:** Implement listTiers function
     - **Action:** Add function to query vip_tiers for client
-    - **References:** API_CONTRACTS.md /tiers, Loyalty.md Flow 7 (Tiers Page)
-    - **Acceptance Criteria:** Returns all tiers with commission rates, benefits, point thresholds
+    - **References:** API_CONTRACTS.md /tiers, SchemaFinalv2.md (vip_tiers table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns all tiers for client ordered by tier_order ASC with commission rates, benefits, point thresholds
 
 - [ ] **Task 7.2.3:** Create tier service file
     - **Action:** Create `/lib/services/tierService.ts`
@@ -949,8 +988,8 @@
 
 - [ ] **Task 7.2.5:** Create tiers route
     - **Action:** Create `/app/api/tiers/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /tiers, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
-    - **Acceptance Criteria:** Returns 200 with tiers array, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md /tiers, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Tenant Isolation Pattern, lines 1328-1343)
+    - **Acceptance Criteria:** Filters by client_id per Section 10.3 tenant isolation, returns 200 with tiers array ordered by tier_order, follows Section 5 route pattern
 
 ## Step 7.3: Tiers Testing
 - [ ] **Task 7.3.1:** Create tier API tests
@@ -990,8 +1029,8 @@
 
 - [ ] **Task 8.2.3:** Implement processDailySales function
     - **Action:** Add transactional function to: fetch CSV from R2, parse rows, insert/update sales_adjustments, update user totals
-    - **References:** Loyalty.md Flow 1, Pattern 1 (Transactional)
-    - **Acceptance Criteria:** MUST use transaction, handle duplicates (upsert), update users.total_sales
+    - **References:** SchemaFinalv2.md (videos, sales_adjustments tables), Loyalty.md Pattern 1 (Transactional), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter all queries by client_id (Section 9 Critical Rule #1), MUST use transaction, handle duplicates (upsert), update users.total_sales and precomputed fields
 
 - [ ] **Task 8.2.3a:** Add updatePrecomputedFields function to daily sync
     - **Action:** Add SQL to update all 16 precomputed fields on users table after sales data sync: total_sales, total_units, manual_adjustments_total, manual_adjustments_units, checkpoint_sales_current, checkpoint_units_current, checkpoint_videos_posted, checkpoint_total_views, checkpoint_total_likes, checkpoint_total_comments, next_tier_name, next_tier_threshold, next_tier_threshold_units, checkpoint_progress_updated_at

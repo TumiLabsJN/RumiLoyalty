@@ -22,6 +22,7 @@
     X,
   } from "lucide-react"
   import { PageLayout } from "@/components/pagelayout"
+  import type { TiersPageResponse, TierCard, AggregatedReward } from "@/app/types/tiers"
 
   export default function TiersPage() {
     const [activeScenario, setActiveScenario] = useState("scenario-1")
@@ -29,215 +30,405 @@
     const [isProgressCardFlipped, setIsProgressCardFlipped] = useState(false)
 
     // Test scenarios
-    const scenarios = {
+    interface TestScenario {
+      name: string
+      mockData: TiersPageResponse
+    }
+
+    const scenarios: Record<string, TestScenario> = {
       "scenario-1": {
         name: "Test 1: Bronze User (4 levels)",
-        currentTier: "Bronze",
-        currentSales: 320,
-        expirationDate: "June 30, 2025",
+        mockData: {
+          user: {
+            id: "user123",
+            currentTier: "tier_1",
+            currentTierName: "Bronze",
+            currentTierColor: "#CD7F32",
+            currentSales: 320,
+            currentSalesFormatted: "$320",
+            expirationDate: null,
+            expirationDateFormatted: null,
+            showExpiration: false
+          },
+          progress: {
+            nextTierName: "Silver",
+            nextTierTarget: 1000,
+            nextTierTargetFormatted: "$1,000",
+            amountRemaining: 680,
+            amountRemainingFormatted: "$680",
+            progressPercentage: 32,
+            progressText: "$680 to go"
+          },
+          vipSystem: {
+            metric: "sales_dollars"
+          },
+          tiers: [
+        {
+          name: "Bronze",
+          color: "#CD7F32",
+          tierLevel: 1,
+          minSales: 0,
+          minSalesFormatted: "$0",
+          salesDisplayText: "$0+ in sales",
+          commissionRate: 10,
+          commissionDisplayText: "10% Commission on sales",
+          isUnlocked: true,
+          isCurrent: true,
+          totalPerksCount: 9,
+          rewards: [
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$25 Gift Card",
+              count: 2,
+              sortPriority: 6
+            },
+            {
+              type: "commission_boost",
+              isRaffle: false,
+              displayText: "5% Pay Boost",
+              count: 1,
+              sortPriority: 7
+            },
+            {
+              type: "spark_ads",
+              isRaffle: false,
+              displayText: "$30 Ads Boost",
+              count: 1,
+              sortPriority: 8
+            },
+            {
+              type: "discount",
+              isRaffle: false,
+              displayText: "5% Deal Boost",
+              count: 1,
+              sortPriority: 9
+            }
+          ]
+        },
+        {
+          name: "Silver",
+          color: "#94a3b8",
+          tierLevel: 2,
+          minSales: 1000,
+          minSalesFormatted: "$1,000",
+          salesDisplayText: "$1,000+ in sales",
+          commissionRate: 12,
+          commissionDisplayText: "12% Commission on sales",
+          isUnlocked: false,
+          isCurrent: false,
+          totalPerksCount: 17,
+          rewards: [
+            {
+              type: "physical_gift",
+              isRaffle: true,
+              displayText: "Chance to win AirPods!",
+              count: 1,
+              sortPriority: 1
+            },
+            {
+              type: "physical_gift",
+              isRaffle: false,
+              displayText: "Gift Drop: Branded Water Bottle",
+              count: 1,
+              sortPriority: 5
+            },
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$40 Gift Card",
+              count: 2,
+              sortPriority: 6
+            },
+            {
+              type: "commission_boost",
+              isRaffle: false,
+              displayText: "8% Pay Boost",
+              count: 3,
+              sortPriority: 7
+            }
+          ]
+        },
+        {
+          name: "Gold",
+          color: "#F59E0B",
+          tierLevel: 3,
+          minSales: 3000,
+          minSalesFormatted: "$3,000",
+          salesDisplayText: "$3,000+ in sales",
+          commissionRate: 15,
+          commissionDisplayText: "15% Commission on sales",
+          isUnlocked: false,
+          isCurrent: false,
+          totalPerksCount: 33,
+          rewards: [
+            {
+              type: "experience",
+              isRaffle: true,
+              displayText: "Chance to win Mystery Trip!",
+              count: 1,
+              sortPriority: 2
+            },
+            {
+              type: "physical_gift",
+              isRaffle: true,
+              displayText: "Chance to win Premium Headphones!",
+              count: 1,
+              sortPriority: 1
+            },
+            {
+              type: "physical_gift",
+              isRaffle: false,
+              displayText: "Gift Drop: Designer Backpack",
+              count: 1,
+              sortPriority: 5
+            },
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$75 Gift Card",
+              count: 4,
+              sortPriority: 6
+            }
+          ]
+        },
+        {
+          name: "Platinum",
+          color: "#818CF8",
+          tierLevel: 4,
+          minSales: 5000,
+          minSalesFormatted: "$5,000",
+          salesDisplayText: "$5,000+ in sales",
+          commissionRate: 20,
+          commissionDisplayText: "20% Commission on sales",
+          isUnlocked: false,
+          isCurrent: false,
+          totalPerksCount: 60,
+          rewards: [
+            {
+              type: "physical_gift",
+              isRaffle: true,
+              displayText: "Chance to win MacBook Pro!",
+              count: 1,
+              sortPriority: 1
+            },
+            {
+              type: "experience",
+              isRaffle: true,
+              displayText: "Chance to win Brand Partner Trip!",
+              count: 1,
+              sortPriority: 2
+            },
+            {
+              type: "experience",
+              isRaffle: false,
+              displayText: "VIP Event Access",
+              count: 1,
+              sortPriority: 4
+            },
+            {
+              type: "physical_gift",
+              isRaffle: false,
+              displayText: "Gift Drop: Designer Bag",
+              count: 1,
+              sortPriority: 5
+            }
+          ]
+        }
+      ]
+        }
+    },
+    "scenario-2": {
+      name: "Test 2: Silver User (4 levels)",
+      mockData: {
+        user: {
+          id: "user456",
+          currentTier: "tier_2",
+          currentTierName: "Silver",
+          currentTierColor: "#94a3b8",
+          currentSales: 2100,
+          currentSalesFormatted: "$2,100",
+          expirationDate: "2025-08-10T00:00:00Z",
+          expirationDateFormatted: "August 10, 2025",
+          showExpiration: true
+        },
+        progress: {
+          nextTierName: "Gold",
+          nextTierTarget: 3000,
+          nextTierTargetFormatted: "$3,000",
+          amountRemaining: 900,
+          amountRemainingFormatted: "$900",
+          progressPercentage: 70,
+          progressText: "$900 to go"
+        },
+        vipSystem: {
+          metric: "sales_dollars"
+        },
         tiers: [
         {
           name: "Bronze",
           color: "#CD7F32",
-          minSales: 0,
           tierLevel: 1,
+          minSales: 0,
+          minSalesFormatted: "$0",
+          salesDisplayText: "$0+ in sales",
+          commissionRate: 10,
+          commissionDisplayText: "10% Commission on sales",
           isUnlocked: true,
-          isCurrent: true,
-          commissionRate: 10, // Dynamic commission percentage for this tier
+          isCurrent: false,
+          totalPerksCount: 6,
           rewards: [
-            { type: "gift_card", value: "$25", uses: 2 },
-            { type: "commission_boost", value: "5%", uses: 1 },
-            { type: "spark_ads", value: "$30", uses: 1 },
-            { type: "discount", value: "5%", uses: 1 },
-          ],
-          missions: [
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$25 Gift Card", uses: 2 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "5% Discount", uses: 1 },
-            { name: "Eyes on You", missionType: "views", rewardValue: "$30 Spark Ads", uses: 1 },
-          ],
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$20 Gift Card",
+              count: 1,
+              sortPriority: 6
+            },
+            {
+              type: "spark_ads",
+              isRaffle: false,
+              displayText: "$40 Ads Boost",
+              count: 2,
+              sortPriority: 8
+            }
+          ]
         },
         {
           name: "Silver",
           color: "#94a3b8",
-          minSales: 1000,
           tierLevel: 2,
-          isUnlocked: false,
-          commissionRate: 12, // Dynamic commission percentage for this tier
-          rewards: [
-            { type: "physical_gift", name: "AirPods", isRaffle: true, uses: 1 },
-            { type: "physical_gift", name: "Gift Drop: Branded Water Bottle", uses: 1 },
-            { type: "gift_card", value: "$40", uses: 2 },
-            { type: "commission_boost", value: "8%", uses: 3 },
-            { type: "spark_ads", value: "$60", uses: 2 },
-            { type: "discount", value: "10%", uses: 1 },
-          ],
-          missions: [
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$40 Gift Card", uses: 2 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "8% Pay Boost", uses: 3 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "Branded Water Bottle", uses: 1 },
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "AirPods", uses: 1 },
-          ],
-        },
-        {
-          name: "Gold",
-          color: "#F59E0B",
-          minSales: 3000,
-          tierLevel: 3,
-          isUnlocked: false,
-          commissionRate: 15, // Dynamic commission percentage for this tier
-          rewards: [
-            { type: "experience", name: "Mystery Trip", isRaffle: true, uses: 1 },
-            { type: "physical_gift", name: "Premium Headphones", isRaffle: true, uses: 1 },
-            { type: "physical_gift", name: "Gift Drop: Designer Backpack", uses: 1 },
-            { type: "gift_card", value: "$75", uses: 4 },
-            { type: "commission_boost", value: "12%", uses: 4 },
-            { type: "spark_ads", value: "$120", uses: 3 },
-            { type: "discount", value: "15%", uses: 3 },
-          ],
-          missions: [
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Mystery Trip", uses: 1 },
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Premium Headphones", uses: 1 },
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$75 Gift Card", uses: 4 },
-            { name: "Eyes on You", missionType: "views", rewardValue: "12% Pay Boost", uses: 4 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "15% Deal Boost", uses: 3 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "$120 Ads Boost", uses: 3 },
-          ],
-        },
-        {
-          name: "Platinum",
-          color: "#818CF8",
-          minSales: 5000,
-          tierLevel: 4,
-          isUnlocked: false,
-          commissionRate: 20, // Dynamic commission percentage for this tier
-          rewards: [
-            { type: "physical_gift", name: "MacBook Pro", isRaffle: true, uses: 1 },
-            { type: "experience", name: "Brand Partner Trip", isRaffle: true, uses: 1 },
-            { type: "experience", name: "VIP Event Access", uses: 1 },
-            { type: "physical_gift", name: "Gift Drop: Designer Bag", uses: 1 },
-            { type: "gift_card", value: "$150", uses: 6 },
-            { type: "commission_boost", value: "20%", uses: 10 },
-            { type: "spark_ads", value: "$250", uses: 6 },
-            { type: "discount", value: "25%", uses: 5 },
-          ],
-          missions: [
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "MacBook Pro", uses: 1 },
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Brand Partner Trip", uses: 1 },
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$150 Gift Card", uses: 6 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "20% Pay Boost", uses: 10 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "$250 Ads Boost", uses: 6 },
-            { name: "Eyes on You", missionType: "views", rewardValue: "25% Deal Boost", uses: 5 },
-          ],
-        },
-      ],
-    },
-    "scenario-2": {
-      name: "Test 2: Silver User (4 levels)",
-      currentTier: "Silver",
-      currentSales: 2100,
-      expirationDate: "August 10, 2025",
-      tiers: [
-        {
-          name: "Bronze",
-          color: "#CD7F32",
-          minSales: 0,
-          tierLevel: 1,
-          isUnlocked: true,
-          commissionRate: 10, // Dynamic commission percentage for this tier
-          rewards: [
-            { type: "gift_card", value: "$20", uses: 1 },
-            { type: "spark_ads", value: "$40", uses: 2 },
-          ],
-          missions: [
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$20 Gift Card", uses: 1 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "$40 Spark Ads", uses: 2 },
-          ],
-        },
-        {
-          name: "Silver",
-          color: "#94a3b8",
           minSales: 1000,
-          tierLevel: 2,
+          minSalesFormatted: "$1,000",
+          salesDisplayText: "$1,000+ in sales",
+          commissionRate: 12,
+          commissionDisplayText: "12% Commission on sales",
           isUnlocked: true,
           isCurrent: true,
-          commissionRate: 12, // Dynamic commission percentage for this tier
+          totalPerksCount: 22,
           rewards: [
-            { type: "gift_card", value: "$60", uses: 3 },
-            { type: "commission_boost", value: "10%", uses: 4 },
-            { type: "spark_ads", value: "$80", uses: 2 },
-            { type: "discount", value: "12%", uses: 2 },
-          ],
-          missions: [
-            { name: "Eyes on You", missionType: "views", rewardValue: "12% Deal Boost", uses: 2 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "10% Pay Boost", uses: 4 },
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$60 Gift Card", uses: 3 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "$80 Ads Boost", uses: 2 },
-          ],
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$60 Gift Card",
+              count: 3,
+              sortPriority: 6
+            },
+            {
+              type: "commission_boost",
+              isRaffle: false,
+              displayText: "10% Pay Boost",
+              count: 4,
+              sortPriority: 7
+            },
+            {
+              type: "spark_ads",
+              isRaffle: false,
+              displayText: "$80 Ads Boost",
+              count: 2,
+              sortPriority: 8
+            },
+            {
+              type: "discount",
+              isRaffle: false,
+              displayText: "12% Deal Boost",
+              count: 2,
+              sortPriority: 9
+            }
+          ]
         },
         {
           name: "Gold",
           color: "#F59E0B",
-          minSales: 3000,
           tierLevel: 3,
+          minSales: 3000,
+          minSalesFormatted: "$3,000",
+          salesDisplayText: "$3,000+ in sales",
+          commissionRate: 15,
+          commissionDisplayText: "15% Commission on sales",
           isUnlocked: false,
-          commissionRate: 15, // Dynamic commission percentage for this tier
+          isCurrent: false,
+          totalPerksCount: 39,
           rewards: [
-            { type: "physical_gift", name: "Smartwatch", isRaffle: true, uses: 1 },
-            { type: "physical_gift", name: "Gift Drop: Premium Backpack", uses: 1 },
-            { type: "gift_card", value: "$100", uses: 5 },
-            { type: "commission_boost", value: "15%", uses: 5 },
-            { type: "spark_ads", value: "$150", uses: 4 },
-            { type: "discount", value: "18%", uses: 4 },
-          ],
-          missions: [
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Smartwatch", uses: 1 },
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$100 Gift Card", uses: 5 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "15% Pay Boost", uses: 5 },
-            { name: "Eyes on You", missionType: "views", rewardValue: "18% Deal Boost", uses: 4 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "$150 Ads Boost", uses: 4 },
-          ],
+            {
+              type: "physical_gift",
+              isRaffle: true,
+              displayText: "Chance to win Smartwatch!",
+              sortPriority: 1
+            },
+            {
+              type: "physical_gift",
+              isRaffle: false,
+              displayText: "Gift Drop: Premium Backpack",
+              sortPriority: 5
+            },
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$100 Gift Card",
+              count: 5,
+              sortPriority: 6
+            },
+            {
+              type: "commission_boost",
+              isRaffle: false,
+              displayText: "15% Pay Boost",
+              count: 5,
+              sortPriority: 7
+            }
+          ]
         },
         {
           name: "Platinum",
           color: "#818CF8",
-          minSales: 5000,
           tierLevel: 4,
+          minSales: 5000,
+          minSalesFormatted: "$5,000",
+          salesDisplayText: "$5,000+ in sales",
+          commissionRate: 20,
+          commissionDisplayText: "20% Commission on sales",
           isUnlocked: false,
-          commissionRate: 20, // Dynamic commission percentage for this tier
+          isCurrent: false,
+          totalPerksCount: 73,
           rewards: [
-            { type: "experience", name: "Creator Retreat", isRaffle: true, uses: 1 },
-            { type: "physical_gift", name: "Laptop", isRaffle: true, uses: 1 },
-            { type: "experience", name: "VIP Brand Event", uses: 1 },
-            { type: "gift_card", value: "$200", uses: 8 },
-            { type: "commission_boost", value: "25%", uses: 12 },
-            { type: "spark_ads", value: "$300", uses: 8 },
-            { type: "discount", value: "30%", uses: 6 },
-          ],
-          missions: [
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Creator Retreat", uses: 1 },
-            { name: "VIP Raffle", missionType: "raffle", rewardValue: "Laptop", uses: 1 },
-            { name: "Unlock Payday", missionType: "sales", rewardValue: "$200 Gift Card", uses: 8 },
-            { name: "Lights, Camera, Go!", missionType: "videos", rewardValue: "25% Pay Boost", uses: 12 },
-            { name: "Road to Viral", missionType: "likes", rewardValue: "$300 Ads Boost", uses: 8 },
-            { name: "Eyes on You", missionType: "views", rewardValue: "30% Deal Boost", uses: 6 },
-          ],
-        },
-      ],
-    },
+            {
+              type: "experience",
+              isRaffle: true,
+              displayText: "Chance to win Creator Retreat!",
+              sortPriority: 2
+            },
+            {
+              type: "physical_gift",
+              isRaffle: true,
+              displayText: "Chance to win Laptop!",
+              sortPriority: 1
+            },
+            {
+              type: "experience",
+              isRaffle: false,
+              displayText: "VIP Brand Event",
+              sortPriority: 4
+            },
+            {
+              type: "gift_card",
+              isRaffle: false,
+              displayText: "$200 Gift Card",
+              count: 8,
+              sortPriority: 6
+            }
+          ]
+        }
+      ]
+        }
+    }
   }
 
     // Get current scenario data
     const currentScenario = scenarios[activeScenario as keyof typeof scenarios]
-    const mockData = {
-      currentTier: currentScenario.currentTier,
-      currentSales: currentScenario.currentSales,
-      expirationDate: currentScenario.expirationDate,
-      tiers: currentScenario.tiers,
-    }
+    const mockData: TiersPageResponse = currentScenario.mockData
 
-    const formatCurrency = (num: number): string => {
-      return `${num.toLocaleString()}`
-    }
+    // Destructure for cleaner access
+    const { user, progress, tiers: displayTiers } = mockData
 
     // Custom Gift Drop SVG icon (matches Rewards page)
     const GiftDropIcon = ({ className }: { className?: string }) => (
@@ -304,110 +495,16 @@
       }
     }
 
-    // Calculate total rewards count for a tier
-    // Includes: sum of all reward uses + mission rewards
-    // Example: Silver with 7 rewards + 7 missions (each with reward) = 14 total
-    // NOTE: If rewards are monthly, each month counts (e.g., 2 spark ads/month = 2 rewards)
-    const getTotalRewardsCount = (rewards: any[], missions: any[]) => {
-      const rewardsCount = rewards.reduce((sum, reward) => sum + reward.uses, 0)
-      const missionsCount = missions ? missions.reduce((sum, mission) => sum + (mission.uses || 1), 0) : 0
-      return rewardsCount + missionsCount
-    }
-
-    // Get formatted reward list in priority order with proper display text
-    const getFormattedRewards = (rewards: any[]) => {
-      // Priority order: raffle rewards first, then regular rewards
-      // 1) physical_gift (raffle), 2) experience (raffle), 3) experience, 4) physical_gift, 5) gift_card, 6) commission_boost, 7) spark_ads, 8) discount
-      const priorityOrder = [
-        "physical_gift_raffle",
-        "experience_raffle",
-        "experience",
-        "physical_gift",
-        "gift_card",
-        "commission_boost",
-        "spark_ads",
-        "discount"
-      ]
-
-      const sortedRewards = [...rewards].sort((a, b) => {
-        const aKey = a.isRaffle ? `${a.type}_raffle` : a.type
-        const bKey = b.isRaffle ? `${b.type}_raffle` : b.type
-        return priorityOrder.indexOf(aKey) - priorityOrder.indexOf(bKey)
-      })
-
-      // MAX DISPLAY: Show only first 4 rewards
-      const displayRewards = sortedRewards.slice(0, 4)
-
-      return displayRewards.map((reward) => {
-        let displayName = ""
-
-        // Display text rules based on reward type and whether it's tied to raffle
-        if (reward.isRaffle) {
-          // Raffle-tied rewards: "Chance to win {description}"
-          if (reward.type === "physical_gift") {
-            displayName = `Chance to win ${reward.name || reward.description || "Prize"}!`
-          } else if (reward.type === "experience") {
-            displayName = `Chance to win ${reward.name || reward.description || "Experience"}!`
-          }
-        } else {
-          // Regular rewards with proper formatting
-          switch (reward.type) {
-            case "experience":
-              // Experience: rewards.description
-              displayName = reward.name || reward.description || "Experience"
-              break
-            case "physical_gift":
-              // Physical gift: "Gift Drop: {value_data.name}"
-              displayName = reward.name || "Physical Gift"
-              break
-            case "gift_card":
-              // Gift card: "{count}x ${amount} Gift Card" from GET /api/rewards name field
-              displayName = reward.uses > 1 ? `${reward.uses}x ${reward.value || ""} Gift Card` : `${reward.value || ""} Gift Card`
-              break
-            case "commission_boost":
-              // Commission boost: "{count}x {percent}% Pay Boost" from GET /api/rewards name field
-              displayName = reward.uses > 1 ? `${reward.uses}x ${reward.value} Pay Boost` : `${reward.value} Pay Boost`
-              break
-            case "spark_ads":
-              // Spark ads: "{count}x ${amount} Ads Boost" from GET /api/rewards displayText field
-              displayName = reward.uses > 1 ? `${reward.uses}x ${reward.value} Ads Boost` : `${reward.value} Ads Boost`
-              break
-            case "discount":
-              // Discount: "{count}x {percent}% Deal Boost" from GET /api/rewards name field
-              displayName = reward.uses > 1 ? `${reward.uses}x ${reward.value} Deal Boost` : `${reward.value} Deal Boost`
-              break
-          }
-        }
-
-        return {
-          display: displayName,
-          type: reward.type,
-          isRaffle: reward.isRaffle || false,
-        }
-      })
-    }
-
     // Get current tier details - color and level are dynamic based on user's current VIP tier
-    const currentTierData = mockData.tiers.find(t => t.isCurrent)
+    const currentTierData = displayTiers.find(t => t.isCurrent)
     const currentTierLevel = currentTierData?.tierLevel || 1
-    const currentTierColor = currentTierData?.color || "#CD7F32" // Dynamic: matches the tier's color (Bronze, Silver, Gold, Platinum)
+    const currentTierColor = user.currentTierColor // Backend provides this
 
-    // Get next tier for progress tracking - dynamic based on what tier comes after current
-    const nextTierData = mockData.tiers.find(t => t.tierLevel === currentTierLevel + 1)
-    const nextTierName = nextTierData?.name || "Next Level"
-    const nextTierTarget = nextTierData?.minSales || 5000
+    // Backend provides all progress calculations
+    const { nextTierName, progressPercentage } = progress
 
-    // Calculate progress to next tier - dynamic based on current sales vs next tier requirement
-    const progressToNext = nextTierTarget - mockData.currentSales
-    const progressPercentage = (mockData.currentSales / nextTierTarget) * 100
-
-    // First VIP level (tierLevel === 1) NEVER expires, so we hide expiration text for Bronze
-    const showExpirationDate = currentTierLevel > 1
-
-    // Filter and sort tiers: Show current tier first, then all higher tiers
-    const displayTiers = mockData.tiers
-      .filter(tier => tier.tierLevel >= currentTierLevel) // Only show current and higher tiers
-      .sort((a, b) => a.tierLevel - b.tierLevel) // Sort ascending by tier level
+    // Backend provides expiration flag
+    const showExpirationDate = user.showExpiration
 
     return (
       <>
@@ -496,14 +593,14 @@
                       }}
                     >
                       <Trophy className="h-4 w-4" style={{ color: currentTierColor }} />
-                      <span className="text-sm font-semibold text-slate-900">{mockData.currentTier}</span>
+                      <span className="text-sm font-semibold text-slate-900">{user.currentTierName}</span>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     {/* Dynamic sales value - displays creator's current sales with $ prefix */}
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-slate-900">${formatCurrency(mockData.currentSales)}</span>
+                      <span className="text-3xl font-bold text-slate-900">{user.currentSalesFormatted}</span>
                     </div>
 
                     {/* Progress to next tier - all values are dynamic */}
@@ -513,7 +610,7 @@
                         <span className="text-slate-600">Progress to {nextTierName}</span>
                         {/* Dynamic amount remaining - compatible with sales count or sales dollar value */}
                         <span className="font-semibold text-slate-900">
-                          ${formatCurrency(progressToNext)} to go
+                          {progress.amountRemainingFormatted} to go
                         </span>
                       </div>
                       {/* Dynamic progress bar - percentage based on current sales vs next tier target */}
@@ -531,7 +628,7 @@
                       {showExpirationDate && (
                         <div className="flex items-center gap-1.5 pt-1">
                           <p className="text-xs text-slate-600">
-                            {mockData.currentTier} Expires on {mockData.expirationDate}
+                            {user.currentTierName} Expires on {user.expirationDateFormatted}
                           </p>
                           <Info
                             className="h-3.5 w-3.5 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors flex-shrink-0"
@@ -572,7 +669,7 @@
                         ⚠️ VIP Checkpoint
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Your <span className="font-semibold">{mockData.currentTier}</span> Level renews every <span className="font-semibold">6</span> months based on sales.
+                        Your <span className="font-semibold">{user.currentTierName}</span> Level renews every <span className="font-semibold">6</span> months based on sales.
                       </p>
                       <p className="text-sm text-slate-600 font-medium">
                         Keep selling to earn more rewards! 🚀
@@ -591,11 +688,7 @@
         <div className="space-y-3">
           <div className="space-y-3">
             {displayTiers.map((tier) => {
-              const formattedRewards = getFormattedRewards(tier.rewards)
-              // DYNAMIC: Total rewards count = sum of all reward uses + mission rewards
-              // Example: If Silver has 7 rewards + 7 missions (each with reward) = Tier Perks (14)
-              // NOTE: If rewards are monthly, each month counts (e.g., 2 spark ads/month = 2 rewards)
-              const totalRewardsCount = getTotalRewardsCount(tier.rewards, tier.missions || [])
+              // Backend provides pre-formatted rewards and total count
 
               return (
                 <Card
@@ -629,7 +722,7 @@
                           <h3 className="text-lg font-bold text-slate-900">{tier.name}</h3>
                           {/* DYNAMIC: Minimum sales required for this VIP level */}
                           {/* DYNAMIC: Text changes based on VIP system metric - "in sales" for dollar value, "in units sold" for unit count */}
-                          <p className="text-sm text-slate-600">${formatCurrency(tier.minSales)}+ in sales</p>
+                          <p className="text-sm text-slate-600">{tier.salesDisplayText}</p>
                         </div>
                       </div>
 
@@ -649,7 +742,7 @@
 
                     {/* DYNAMIC: Commission Rate - percentage varies by VIP level (Bronze: 10%, Silver: 12%, Gold: 15%, Platinum: 20%) */}
                     <p className="text-base font-semibold text-slate-700 -mt-2">
-                      {tier.commissionRate}% Commission on sales
+                      {tier.commissionDisplayText}
                     </p>
 
                     {/* Benefits Section */}
@@ -658,30 +751,36 @@
                       {/* Count = sum of reward uses + mission rewards. Monthly rewards counted per month (2 ads/month = 2 rewards) */}
                       {/* Example: Silver with 7 rewards + 7 missions = Tier Perks (14) */}
                       <p className="text-sm font-semibold text-slate-900">
-                        Tier Perks ({totalRewardsCount})
+                        Tier Perks ({tier.totalPerksCount})
                       </p>
-                      {/* DYNAMIC: Rewards list with priority ranking and display rules */}
+                      {/* DYNAMIC: Rewards list with NEW mobile-friendly format */}
+                      {/* NEW FORMAT: [icon] [reward name] ............ ×N */}
                       {/* MAX DISPLAY: Show maximum 4 rewards per card */}
                       {/* PRIORITY ORDER: 1) physical_gift (raffle), 2) experience (raffle), 3) experience, 4) physical_gift, 5) gift_card, 6) commission_boost, 7) spark_ads, 8) discount */}
                       {/* DISPLAY TEXT RULES by type:
-                          - physical_gift (raffle mission): "Chance to win {rewards.description}" (e.g., "Chance to win AirPods!")
-                          - experience (raffle mission): "Chance to win {rewards.description}" (e.g., "Chance to win Mystery Trip!")
-                          - experience: rewards.description (e.g., "Mystery Trip")
-                          - physical_gift: "Gift Drop: {value_data.name}" from value_data.display_text JSONB (e.g., "Gift Drop: Brand Gear")
-                          - gift_card: "{count}x ${amount} Gift Card" from GET /api/rewards name field
-                          - commission_boost: "{count}x {percent}% Pay Boost" from GET /api/rewards name field
-                          - spark_ads: "{count}x ${amount} Ads Boost" from GET /api/rewards displayText field
-                          - discount: "{count}x {percent}% Deal Boost" from GET /api/rewards name field
+                          - physical_gift (raffle): reward name (e.g., "AirPods", "Mystery Reward")
+                          - experience (raffle): reward name (e.g., "Mystery Trip", "Mystery Reward")
+                          - experience: reward name (e.g., "Mystery Trip", "VIP Event Access")
+                          - physical_gift: clean name (e.g., "Branded Water Bottle", "Designer Backpack")
+                          - gift_card: "${amount} Gift Card" (e.g., "$40 Gift Card")
+                          - commission_boost: "{percent}% Pay Boost" (e.g., "8% Pay Boost")
+                          - spark_ads: "${amount} Ads Boost" (e.g., "$60 Ads Boost")
+                          - discount: "{percent}% Deal Boost" (e.g., "10% Deal Boost")
                       */}
-                      {/* COUNT CALCULATION: Sum total rewards per type across tier (e.g., "3x Gift Card" if tier has 3 gift card rewards) */}
+                      {/* MOBILE-FRIENDLY FORMAT: [icon] Reward Name ............ ×N */}
                       <div className="space-y-1">
-                        {formattedRewards.map((reward, index) => (
-                          <div key={index} className="flex items-center gap-2 pl-2">
-                            {getRewardIcon(reward.type, tier.isUnlocked, reward.isRaffle)}
-                            <span
-                              className={`text-sm ${tier.isUnlocked ? "text-slate-700" : "text-slate-500"}`}
-                            >
-                              {reward.display}
+                        {tier.rewards.map((reward, index) => (
+                          <div key={index} className="flex items-center justify-between pl-2 pr-2">
+                            <div className="flex items-center gap-2">
+                              {getRewardIcon(reward.type, tier.isUnlocked, reward.isRaffle)}
+                              <span
+                                className={`text-sm ${tier.isUnlocked ? "text-slate-700" : "text-slate-500"}`}
+                              >
+                                {reward.displayText}
+                              </span>
+                            </div>
+                            <span className={`text-sm font-medium ${tier.isUnlocked ? "text-slate-600" : "text-slate-400"}`}>
+                              ×{reward.count}
                             </span>
                           </div>
                         ))}

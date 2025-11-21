@@ -3812,6 +3812,7 @@ Authorization: Bearer <supabase-jwt-token>
 8. ✅ Log audit trail
 
 ---
+
 # Mission History
 
 **Page:** `/app/missions/missionhistory/page.tsx`
@@ -5568,7 +5569,573 @@ Authorization: Bearer <supabase-jwt-token>
 
 ### Response Schema
 
-_To be defined_
+```typescript
+interface TiersPageResponse {
+  // User progress data (dynamic to user's current VIP level)
+  user: {
+    id: string
+    currentTier: string                    // Database tier_id (e.g., "tier_2")
+    currentTierName: string                // Display name: "Bronze", "Silver", "Gold", "Platinum"
+    currentTierColor: string               // Hex color from tiers.tier_color (Bronze: #CD7F32, Silver: #94a3b8, Gold: #F59E0B, Platinum: #818CF8)
+    currentSales: number                   // Current sales value (raw number, compatible with dollars or units)
+    currentSalesFormatted: string          // Backend-formatted: "$2,100" or "2,100 units"
+    expirationDate: string | null          // ISO 8601 (null if tierLevel === 1, Bronze never expires)
+    expirationDateFormatted: string | null // Backend-formatted: "August 10, 2025"
+    showExpiration: boolean                // True if tierLevel > 1 (controls display of expiration UI elements)
+  }
+
+  // Progress to next tier (dynamic calculations)
+  progress: {
+    nextTierName: string                   // Display name of next tier: "Silver", "Gold", "Platinum"
+    nextTierTarget: number                 // Minimum sales required for next tier (raw number)
+    nextTierTargetFormatted: string        // Backend-formatted: "$3,000" or "3,000 units"
+    amountRemaining: number                // Calculated: nextTierTarget - currentSales
+    amountRemainingFormatted: string       // Backend-formatted: "$900" or "900 units"
+    progressPercentage: number             // Calculated: (currentSales / nextTierTarget) * 100
+    progressText: string                   // Backend-formatted display text: "$900 to go" or "900 units to go"
+  }
+
+  // VIP system configuration (determines display text for all tiers)
+  vipSystem: {
+    metric: 'sales_dollars' | 'sales_units' // Determines whether minSales displays use "$" or "units"
+  }
+
+  // Tier cards (filtered to show only current tier + all higher tiers)
+  // User-scoped: Backend only sends tiers where tier_level >= user's current tier_level
+  tiers: Array<{
+    // Tier identity
+    name: string                           // Display name: "Bronze", "Silver", "Gold", "Platinum"
+    color: string                          // Hex color from tiers.tier_color
+    tierLevel: number                      // 1 = Bronze, 2 = Silver, 3 = Gold, 4 = Platinum
+
+    // Tier requirements
+    minSales: number                       // Minimum sales required (raw number)
+    minSalesFormatted: string              // Backend-formatted: "$1,000" or "1,000 units"
+    salesDisplayText: string               // Backend-formatted full text: "$1,000+ in sales" or "1,000+ in units sold"
+
+    // Commission rate (public information for creators)
+    commissionRate: number                 // Percentage: 10, 12, 15, 20
+    commissionDisplayText: string          // Backend-formatted: "12% Commission on sales"
+
+    // Tier status (user-specific)
+    isUnlocked: boolean                    // True if user has reached this tier (tier_level <= user's tier_level)
+    isCurrent: boolean                     // True if this is user's current active tier
+
+    // Perks summary
+    totalPerksCount: number                // Sum of all reward uses + mission reward uses
+                                          // Example: 7 rewards (uses: 1,2,1,1,1,1,1) + 7 missions = 14 total
+                                          // NOTE: Monthly rewards counted per month (2 spark ads/month = 2 perks)
+
+    // Rewards preview (aggregated and formatted by backend)
+    // MAX DISPLAY: Backend sends maximum 4 rewards per tier (highest priority only)
+    // PRIORITY ORDER: physical_gift (raffle) → experience (raffle) → gift_card (raffle) → experience → physical_gift → gift_card → commission_boost → spark_ads → discount
+    rewards: Array<{
+      type: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+      isRaffle: boolean                    // True if tied to raffle mission
+      displayText: string                  // Backend-formatted reward name (see Display Rules below)
+      count: number                        // Quantity: 1, 2, 3, etc. (aggregated sum of uses)
+      sortPriority: number                 // Backend-computed for sorting (1 = highest priority)
+    }>
+  }>
+}
+```
+
+### Display Rules for Reward Text
+
+Backend generates `displayText` (clean reward name) and `count` (quantity) separately:
+
+| Reward Type | Raffle? | displayText Format | count | UI Display |
+|-------------|---------|-------------------|-------|------------|
+| physical_gift | Yes | `"Chance to win {value_data.name}!"` | 1 | `"Chance to win AirPods Pro!"` (no ×1) |
+| experience | Yes | `"Chance to win {description}!"` | 1 | `"Chance to win Mystery Trip!"` (no ×1) |
+| gift_card | Yes | `"Chance to win {name}!"` | 1 | `"Chance to win $200 Gift Card!"` (no ×1) |
+| experience | No | `"{description}"` | 1 | `"VIP Event Access"` (no ×1) |
+| physical_gift | No | `"Gift Drop: {value_data.name}"` | 1 | `"Gift Drop: Branded Hoodie"` (no ×1) |
+| gift_card | No | `"{name}"` | 3 | `"$100 Gift Card ×3"` |
+| commission_boost | No | `"{name}"` | 4 | `"10% Pay Boost ×4"` |
+| spark_ads | No | `"{displayText}"` | 2 | `"$50 Ads Boost ×2"` |
+| discount | No | `"{name}"` | 3 | `"15% Deal Boost ×3"` |
+
+**Count Calculation:**
+- `count` = SUM of `uses` field across all rewards of same type in that tier
+- Example: Tier has 2 gift card rewards (uses: 2, 1) → count = 3
+- Monthly rewards: If reward has `uses: 2` (2 per month), count it as 2
+- Raffle rewards: Always count = 1 (displayed without ×1 in UI)
+
+**Priority Sorting:**
+1. physical_gift (raffle)
+2. experience (raffle)
+3. gift_card (raffle)
+4. experience
+5. physical_gift
+6. gift_card
+7. commission_boost
+8. spark_ads
+9. discount
+
+### Example Responses
+
+**Bronze User (4 tiers total):**
+```json
+{
+  "user": {
+    "id": "user123",
+    "currentTier": "tier_1",
+    "currentTierName": "Bronze",
+    "currentTierColor": "#CD7F32",
+    "currentSales": 320,
+    "currentSalesFormatted": "$320",
+    "expirationDate": null,
+    "expirationDateFormatted": null,
+    "showExpiration": false
+  },
+  "progress": {
+    "nextTierName": "Silver",
+    "nextTierTarget": 1000,
+    "nextTierTargetFormatted": "$1,000",
+    "amountRemaining": 680,
+    "amountRemainingFormatted": "$680",
+    "progressPercentage": 32,
+    "progressText": "$680 to go"
+  },
+  "vipSystem": {
+    "metric": "sales_dollars"
+  },
+  "tiers": [
+    {
+      "name": "Bronze",
+      "color": "#CD7F32",
+      "tierLevel": 1,
+      "minSales": 0,
+      "minSalesFormatted": "$0",
+      "salesDisplayText": "$0+ in sales",
+      "commissionRate": 10,
+      "commissionDisplayText": "10% Commission on sales",
+      "isUnlocked": true,
+      "isCurrent": true,
+      "totalPerksCount": 10,
+      "rewards": [
+        {
+          "type": "gift_card",
+          "isRaffle": false,
+          "displayText": "$25 Gift Card",
+          "count": 2,
+          "sortPriority": 6
+        },
+        {
+          "type": "commission_boost",
+          "isRaffle": false,
+          "displayText": "5% Pay Boost",
+          "count": 1,
+          "sortPriority": 7
+        },
+        {
+          "type": "spark_ads",
+          "isRaffle": false,
+          "displayText": "$30 Ads Boost",
+          "count": 1,
+          "sortPriority": 8
+        },
+        {
+          "type": "discount",
+          "isRaffle": false,
+          "displayText": "5% Deal Boost",
+          "count": 1,
+          "sortPriority": 9
+        }
+      ]
+    },
+    {
+      "name": "Silver",
+      "color": "#94a3b8",
+      "tierLevel": 2,
+      "minSales": 1000,
+      "minSalesFormatted": "$1,000",
+      "salesDisplayText": "$1,000+ in sales",
+      "commissionRate": 12,
+      "commissionDisplayText": "12% Commission on sales",
+      "isUnlocked": false,
+      "isCurrent": false,
+      "totalPerksCount": 14,
+      "rewards": [
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win AirPods Pro!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Branded Water Bottle",
+          "count": 1,
+          "sortPriority": 5
+        },
+        {
+          "type": "gift_card",
+          "isRaffle": false,
+          "displayText": "$40 Gift Card",
+          "count": 2,
+          "sortPriority": 6
+        },
+        {
+          "type": "commission_boost",
+          "isRaffle": false,
+          "displayText": "8% Pay Boost",
+          "count": 3,
+          "sortPriority": 7
+        }
+      ]
+    },
+    {
+      "name": "Gold",
+      "color": "#F59E0B",
+      "tierLevel": 3,
+      "minSales": 3000,
+      "minSalesFormatted": "$3,000",
+      "salesDisplayText": "$3,000+ in sales",
+      "commissionRate": 15,
+      "commissionDisplayText": "15% Commission on sales",
+      "isUnlocked": false,
+      "isCurrent": false,
+      "totalPerksCount": 20,
+      "rewards": [
+        {
+          "type": "experience",
+          "isRaffle": true,
+          "displayText": "Chance to win Mystery Trip!",
+          "count": 1,
+          "sortPriority": 2
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win Premium Headphones!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Designer Backpack",
+          "count": 1,
+          "sortPriority": 5
+        },
+        {
+          "type": "gift_card",
+          "isRaffle": false,
+          "displayText": "$75 Gift Card",
+          "count": 4,
+          "sortPriority": 6
+        }
+      ]
+    },
+    {
+      "name": "Platinum",
+      "color": "#818CF8",
+      "tierLevel": 4,
+      "minSales": 5000,
+      "minSalesFormatted": "$5,000",
+      "salesDisplayText": "$5,000+ in sales",
+      "commissionRate": 20,
+      "commissionDisplayText": "20% Commission on sales",
+      "isUnlocked": false,
+      "isCurrent": false,
+      "totalPerksCount": 32,
+      "rewards": [
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win MacBook Pro!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "experience",
+          "isRaffle": true,
+          "displayText": "Chance to win Brand Partner Trip!",
+          "count": 1,
+          "sortPriority": 2
+        },
+        {
+          "type": "experience",
+          "isRaffle": false,
+          "displayText": "VIP Event Access",
+          "count": 1,
+          "sortPriority": 4
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Designer Bag",
+          "count": 1,
+          "sortPriority": 5
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Silver User (units-based VIP system):**
+```json
+{
+  "user": {
+    "id": "user456",
+    "currentTier": "tier_2",
+    "currentTierName": "Silver",
+    "currentTierColor": "#94a3b8",
+    "currentSales": 2100,
+    "currentSalesFormatted": "2,100 units",
+    "expirationDate": "2025-08-10T00:00:00Z",
+    "expirationDateFormatted": "August 10, 2025",
+    "showExpiration": true
+  },
+  "progress": {
+    "nextTierName": "Gold",
+    "nextTierTarget": 3000,
+    "nextTierTargetFormatted": "3,000 units",
+    "amountRemaining": 900,
+    "amountRemainingFormatted": "900 units",
+    "progressPercentage": 70,
+    "progressText": "900 units to go"
+  },
+  "vipSystem": {
+    "metric": "sales_units"
+  },
+  "tiers": [
+    {
+      "name": "Silver",
+      "color": "#94a3b8",
+      "tierLevel": 2,
+      "minSales": 1000,
+      "minSalesFormatted": "1,000 units",
+      "salesDisplayText": "1,000+ in units sold",
+      "commissionRate": 12,
+      "commissionDisplayText": "12% Commission on sales",
+      "isUnlocked": true,
+      "isCurrent": true,
+      "totalPerksCount": 14,
+      "rewards": [
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win AirPods Pro!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Branded Water Bottle",
+          "count": 1,
+          "sortPriority": 5
+        },
+        {
+          "type": "gift_card",
+          "isRaffle": false,
+          "displayText": "$40 Gift Card",
+          "count": 2,
+          "sortPriority": 6
+        },
+        {
+          "type": "commission_boost",
+          "isRaffle": false,
+          "displayText": "8% Pay Boost",
+          "count": 3,
+          "sortPriority": 7
+        }
+      ]
+    },
+    {
+      "name": "Gold",
+      "color": "#F59E0B",
+      "tierLevel": 3,
+      "minSales": 3000,
+      "minSalesFormatted": "3,000 units",
+      "salesDisplayText": "3,000+ in units sold",
+      "commissionRate": 15,
+      "commissionDisplayText": "15% Commission on sales",
+      "isUnlocked": false,
+      "isCurrent": false,
+      "totalPerksCount": 20,
+      "rewards": [
+        {
+          "type": "experience",
+          "isRaffle": true,
+          "displayText": "Chance to win Mystery Trip!",
+          "count": 1,
+          "sortPriority": 2
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win Premium Headphones!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Designer Backpack",
+          "count": 1,
+          "sortPriority": 5
+        },
+        {
+          "type": "gift_card",
+          "isRaffle": false,
+          "displayText": "$75 Gift Card",
+          "count": 4,
+          "sortPriority": 6
+        }
+      ]
+    },
+    {
+      "name": "Platinum",
+      "color": "#818CF8",
+      "tierLevel": 4,
+      "minSales": 5000,
+      "minSalesFormatted": "5,000 units",
+      "salesDisplayText": "5,000+ in units sold",
+      "commissionRate": 20,
+      "commissionDisplayText": "20% Commission on sales",
+      "isUnlocked": false,
+      "isCurrent": false,
+      "totalPerksCount": 32,
+      "rewards": [
+        {
+          "type": "physical_gift",
+          "isRaffle": true,
+          "displayText": "Chance to win MacBook Pro!",
+          "count": 1,
+          "sortPriority": 1
+        },
+        {
+          "type": "experience",
+          "isRaffle": true,
+          "displayText": "Chance to win Brand Partner Trip!",
+          "count": 1,
+          "sortPriority": 2
+        },
+        {
+          "type": "experience",
+          "isRaffle": false,
+          "displayText": "VIP Event Access",
+          "count": 1,
+          "sortPriority": 4
+        },
+        {
+          "type": "physical_gift",
+          "isRaffle": false,
+          "displayText": "Gift Drop: Designer Bag",
+          "count": 1,
+          "sortPriority": 5
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Business Logic
+
+#### 1. Tier Filtering (User-Scoped Display)
+Backend only returns tiers where `tier_level >= user's current tier_level`.
+
+**Example:** If user is Silver (tier_level = 2):
+- ✅ Send: Silver (2), Gold (3), Platinum (4)
+- ❌ Don't send: Bronze (1)
+
+**Why:** User doesn't need to see tiers they've already surpassed.
+
+#### 2. Expiration Logic
+- **tierLevel === 1 (Bronze):** Never expires
+  - `expirationDate: null`
+  - `showExpiration: false`
+  - Frontend hides entire expiration section
+- **tierLevel > 1:** 6-month checkpoint renewal
+  - `expirationDate: ISO 8601`
+  - `showExpiration: true`
+  - Frontend shows expiration text + info icon
+
+#### 3. Reward Aggregation
+Backend aggregates rewards by type for each tier:
+
+```typescript
+// Pseudocode for backend aggregation
+function aggregateRewards(tierRewards: Reward[]): AggregatedReward[] {
+  const grouped = groupBy(tierRewards, r => `${r.type}_${r.isRaffle}`)
+
+  return Object.entries(grouped).map(([key, rewards]) => {
+    const totalUses = sumBy(rewards, r => r.uses)
+    const sample = rewards[0]
+
+    return {
+      type: sample.type,
+      isRaffle: sample.isRaffle,
+      displayText: formatDisplayText(sample.type, sample.isRaffle, totalUses, sample),
+      sortPriority: getPriority(sample.type, sample.isRaffle)
+    }
+  })
+  .sort((a, b) => a.sortPriority - b.sortPriority)
+  .slice(0, 4)  // Max 4 rewards per tier
+}
+```
+
+#### 4. VIP System Metric Display
+The `vipSystem.metric` field controls all sales-related text:
+
+| Metric | Progress Text | Sales Display Text | Format |
+|--------|--------------|-------------------|--------|
+| `sales_dollars` | `"$680 to go"` | `"$1,000+ in sales"` | Currency with $ symbol |
+| `sales_units` | `"680 units to go"` | `"1,000+ in units sold"` | No $ symbol, "units" suffix |
+
+**Backend must:**
+- Check `vip_system_settings.metric` from database
+- Apply appropriate formatting to ALL numeric fields
+- Include metric in response for frontend validation
+
+#### 5. Commission Rate Display
+Commission rates are PUBLIC information shown to creators.
+
+**Source:** `tiers.commission_rate` (integer percentage)
+**Display:** Backend formats as `"{rate}% Commission on sales"`
+
+#### 6. Total Perks Count Calculation
+```typescript
+// Pseudocode for backend calculation
+function calculateTotalPerks(tier: Tier): number {
+  // Sum of all reward uses (monthly rewards count per month)
+  const rewardPerks = tier.rewards.reduce((sum, r) => sum + r.uses, 0)
+
+  // Sum of all mission reward uses
+  const missionPerks = tier.missions
+    .filter(m => m.reward_id !== null)  // Only missions with rewards
+    .reduce((sum, m) => sum + (m.uses || 1), 0)
+
+  return rewardPerks + missionPerks
+}
+```
+
+**Example:**
+- 7 rewards: uses = [1, 2, 1, 1, 1, 1, 1] → sum = 8
+- 7 missions: each has 1 reward → sum = 7
+- **Total perks = 15**
+
+#### 7. Frontend Icon Mapping
+Frontend maps `type` to Lucide React icons (backend does NOT send icon names):
+
+| Type | Icon | Component |
+|------|------|-----------|
+| gift_card | Gift | `<Gift />` |
+| commission_boost | HandCoins | `<HandCoins />` |
+| spark_ads | Megaphone | `<Megaphone />` |
+| discount | BadgePercent | `<BadgePercent />` |
+| physical_gift (raffle) | Clover | `<Clover />` |
+| experience (raffle) | Clover | `<Clover />` |
+| physical_gift | GiftDropIcon | Custom SVG (defined in page) |
+| experience | GiftDropIcon | Custom SVG (defined in page) |
 
 ---
 
@@ -6088,18 +6655,6 @@ WHERE mission_id = $missionId
 - All monetary amounts are in USD cents unless otherwise specified
 - All endpoints return JSON responses
 - Error responses follow standard format: `{ "error": "Type", "message": "Description" }`
-
----
-
-**Document Version:** 1.5
-**Last Updated:** 2025-01-18 (Rewards page API contracts complete with all validations)
-**Changelog:**
-- v1.5: Fixed all validation issues (3 critical + 4 minor improvements)
-- v1.4.1: Resolved critical schema mismatches (discount duration, missing fields)
-- v1.4: Added Rewards page API contracts
-- v1.3: Added Missions page API contracts
-**Validation Status:** ✅ 100% Schema Alignment (SchemaFinalv2.md)
-**Next Review:** After remaining page contracts defined (Rewards History, Tiers, Auth)
 
 ---
 

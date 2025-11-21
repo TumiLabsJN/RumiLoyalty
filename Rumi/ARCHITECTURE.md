@@ -480,6 +480,8 @@ export async function POST(
 - ❌ HTTP handling (that's routes)
 - ❌ Raw SQL queries (that's repositories)
 
+**See Also:** [API_CONTRACTS.md](./API_CONTRACTS.md) for complete business logic specifications and validation rules.
+
 **Example:**
 ```typescript
 // lib/services/missionService.ts
@@ -950,6 +952,78 @@ export const missionRepository = {
 - **camelCase** for variables and functions
 - **PascalCase** for types and interfaces
 - **UPPER_SNAKE_CASE** for constants
+
+### Data Transformation Conventions
+
+**Database → API Response Transformations:**
+
+All API responses transform database field names from `snake_case` to `camelCase`:
+
+```typescript
+// Database fields (snake_case)
+{
+  current_tier: 'tier_3',
+  tier_achieved_at: '2025-01-01T00:00:00Z',
+  total_sales: 5000
+}
+
+// API response (camelCase)
+{
+  currentTier: 'tier_3',
+  tierAchievedAt: '2025-01-01T00:00:00Z',
+  totalSales: 5000
+}
+```
+
+**Critical Transformations (Special Cases):**
+
+1. **Discount Duration Fields**
+   ```typescript
+   // Database stores duration in minutes
+   rewards.value_data.duration_minutes = 10080  // 7 days
+
+   // API response converts to days for display
+   {
+     valueData: {
+       durationDays: Math.floor(duration_minutes / 1440)  // = 7
+     }
+   }
+   ```
+
+2. **Nested JSON Fields**
+   ```typescript
+   // Database JSONB column (snake_case keys)
+   rewards.value_data = {
+     "coupon_code": "GOLD15",
+     "max_uses": 100
+   }
+
+   // API response (camelCase keys)
+   {
+     valueData: {
+       couponCode: "GOLD15",
+       maxUses: 100
+     }
+   }
+   ```
+
+3. **Encrypted Fields**
+   ```typescript
+   // Database stores encrypted value
+   commission_boost_redemptions.payment_account = "encrypted_string_here"
+
+   // Repository layer decrypts before returning
+   {
+     paymentAccount: decrypt(payment_account)  // "user@email.com"
+   }
+   ```
+
+**Implementation Location:**
+- Field name transformation: Service Layer
+- Data type transformation: Service Layer
+- Encryption/Decryption: Repository Layer
+
+**Reference:** See [API_CONTRACTS.md](./API_CONTRACTS.md) for complete field transformation specifications.
 
 ---
 
@@ -1432,6 +1506,9 @@ export async function GET(request: Request) {
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2025-01-10
+**Document Version:** 1.1
+**Last Updated:** 2025-11-21
+**Changelog:**
+- v1.1 (2025-11-21): Added cross-reference to API_CONTRACTS.md, documented data transformation conventions (discount duration, encryption, nested JSON)
+- v1.0 (2025-01-10): Initial architecture documentation
 **Next Review:** After first 3 features implemented

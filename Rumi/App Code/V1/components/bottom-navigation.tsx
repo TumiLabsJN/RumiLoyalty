@@ -5,7 +5,7 @@ import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Gift, Target, Award, User } from "lucide-react"
+import { Home, Gift, Target, Award } from "lucide-react"
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string }>
@@ -19,7 +19,6 @@ const navItems: NavItem[] = [
   { icon: Gift, label: "Rewards", href: "/rewards", ariaLabel: "Navigate to Rewards" },
   { icon: Target, label: "Missions", href: "/missions", ariaLabel: "Navigate to Missions" },
   { icon: Award, label: "Tiers", href: "/tiers", ariaLabel: "Navigate to Tiers" },
-  { icon: User, label: "Profile", href: "/login/start", ariaLabel: "Navigate to Profile" },
 ]
 
 export function BottomNavigation() {

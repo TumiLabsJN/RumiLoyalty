@@ -2024,6 +2024,7 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
 - Dashboard shows fulfillment metrics (total pending, overdue count, on-time completion rate)
 
 ---
+
 ## Critical Implementation Patterns
 
 **Purpose:** Non-negotiable database patterns that ensure data integrity and prevent financial errors.
