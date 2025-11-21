@@ -312,9 +312,10 @@
     - **Acceptance Criteria:** Client with known UUID inserted
 
 - [ ] **Task 1.8.3:** Seed VIP tiers
-    - **Action:** Add INSERT INTO vip_tiers with Fan, Supporter, VIP, Super Fan tiers
-    - **References:** Loyalty.md Core Features (VIP Tiers section)
-    - **Acceptance Criteria:** All 4 tiers with correct commission rates and benefits
+    - **Action:** Add INSERT INTO vip_tiers with Bronze, Silver, Gold, Platinum tiers
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers tier structure and tier colors), Loyalty.md Core Features (VIP Tiers section)
+    - **Implementation Guide:** MUST create 4 tiers with exact naming and properties from API spec (lines 5577-5579, 6684-6840): Tier 1 Bronze (tier_level=1, tier_color=#CD7F32, min_sales=0, commission_rate=10), Tier 2 Silver (tier_level=2, tier_color=#94a3b8, min_sales=1000, commission_rate=12), Tier 3 Gold (tier_level=3, tier_color=#F59E0B, min_sales=3000, commission_rate=15), Tier 4 Platinum (tier_level=4, tier_color=#818CF8, min_sales=5000, commission_rate=20). Tier names MUST match API response exactly: "Bronze", "Silver", "Gold", "Platinum" (not Fan/Supporter/VIP/Super Fan)
+    - **Acceptance Criteria:** All 4 tiers inserted with tier_level 1-4, tier_color hex codes matching API spec (Bronze=#CD7F32, Silver=#94a3b8, Gold=#F59E0B, Platinum=#818CF8), min_sales thresholds (0, 1000, 3000, 5000), commission_rate percentages (10, 12, 15, 20), names exactly "Bronze", "Silver", "Gold", "Platinum"
 
 - [ ] **Task 1.8.4:** Seed test users
     - **Action:** Add INSERT INTO users with 2-3 test creators at different tiers
@@ -584,14 +585,16 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 4.1.2:** Implement getUserDashboard function
-    - **Action:** Add function to aggregate: user info, current tier, total points, active commission boost, tier progress
-    - **References:** API_CONTRACTS.md /dashboard, SchemaFinalv2.md (users, vip_tiers tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id for vip_tiers JOIN (Section 9 Critical Rule #1), single query with JOINs to users, vip_tiers, commission_boost_redemptions
+    - **Action:** Add function querying user, client, current tier, next tier with VIP metric-aware data selection
+    - **References:** API_CONTRACTS.md lines 2061-2669 (GET /api/dashboard sections 1-3: User & Tier Info, Client config, Tier Progress), SchemaFinalv2.md (users, clients, vip_tiers tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute query with JOINs: users JOIN clients JOIN tiers (current tier) LEFT JOIN tiers (next tier WHERE tier_order = current_tier.tier_order + 1). Return 3 sections (lines 2079-2125): (1) user (id, handle, email, clientName from clients.company_name), (2) client (id, vipMetric from clients.vip_metric enum 'sales'|'units', vipMetricLabel), (3) currentTier (id, name, color, order, checkpointExempt camelCase transformed from checkpoint_exempt snake_case per lines 2099, 2386-2424), (4) nextTier (id, name, color, minSalesThreshold camelCase from sales_threshold) or null if highest tier (lines 2102-2108, 2412-2424). Return raw checkpoint values (checkpoint_sales_current or checkpoint_units_current + manual_adjustments) for service layer VIP metric-aware formatting
+    - **Acceptance Criteria:** MUST filter by client_id for vip_tiers JOIN (Section 9 Critical Rule #1), executes single query with JOINs to users/clients/tiers, returns user section with id/handle/email/clientName, returns client section with vipMetric enum and vipMetricLabel, returns currentTier with checkpointExempt camelCase (lines 2094-2100), returns nextTier with minSalesThreshold camelCase or null (lines 2102-2108), returns raw checkpoint values for VIP metric-aware formatting by service layer
 
-- [ ] **Task 4.1.3:** Implement getStatsSummary function
-    - **Action:** Add function to count: available missions, active rewards, pending redemptions
-    - **References:** API_CONTRACTS.md /dashboard, ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id in ALL queries (Section 9 Critical Rule #1), return counts
+- [ ] **Task 4.1.3:** Implement getCurrentTierRewards function
+    - **Action:** Add function querying rewards for user's current tier with LIMIT 4
+    - **References:** API_CONTRACTS.md lines 2172-2192 (Current Tier Rewards section), SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** Query rewards WHERE client_id=$clientId AND tier_eligibility=$currentTier AND enabled=true, ORDER BY display_order ASC, LIMIT 4 (lines 2173-2176). Also get total count for "And more!" logic (line 2192). Return fields: id, type, name, displayText (backend-generated), description, valueData (camelCase transformed), redemptionQuantity, displayOrder (lines 2177-2190)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), filters by tier_eligibility=$currentTier AND enabled=true, sorted by display_order ASC, LIMIT 4 rewards for showcase card (lines 2174-2176), includes totalRewardsCount for full tier reward count (line 2192), returns fields matching lines 2177-2190 with valueData camelCase transformed
 
 - [ ] **Task 4.1.4:** Create mission repository file
     - **Action:** Create `/lib/repositories/missionRepository.ts`
@@ -610,14 +613,16 @@
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
 
 - [ ] **Task 4.2.2:** Implement getDashboardOverview function
-    - **Action:** Add function aggregating data from repositories
-    - **References:** API_CONTRACTS.md /dashboard
-    - **Acceptance Criteria:** Returns complete dashboard object matching API schema
+    - **Action:** Add function that aggregates 5 sections with VIP metric-aware formatting and tier progression calculations
+    - **References:** API_CONTRACTS.md lines 2061-2669 (GET /api/dashboard complete unified endpoint with 5 major sections)
+    - **Implementation Guide:** MUST aggregate 5 sections (lines 2075-2193): (1) call dashboardRepository.getUserDashboard for user/client/currentTier/nextTier sections, (2) calculate tierProgress: read precomputed checkpoint_sales_current or checkpoint_units_current + manual_adjustments_total (lines 2428-2450), compute progressPercentage = (currentValue / targetValue) * 100, format display strings based on client.vipMetric (sales mode: "$4,200" vs units mode: "4,200 units") (lines 2456-2471), include checkpointExpiresAt/checkpointExpiresFormatted/checkpointMonths (lines 2122-2125), (3) call getFeaturedMission for featuredMission section with SAME data structure as GET /api/dashboard/featured-mission including isRaffle flag, raffleEndDate, formatted progress text (lines 2132-2168, 2486-2641), (4) call getCurrentTierRewards for currentTierRewards LIMIT 4 with backend displayText generation, (5) return totalRewardsCount. Backend handles ALL formatting per vipMetric setting (lines 2473-2484). Tier expiration logic based on checkpointExempt boolean (lines 2642-2667)
+    - **Acceptance Criteria:** Returns complete DashboardResponse matching lines 2075-2193, aggregates user/client/currentTier/nextTier from repository, calculates tierProgress with VIP metric-aware formatting (sales: "$4,200" vs units: "4,200 units"), reads from precomputed checkpoint fields (lines 2428-2450), computes progressPercentage in backend, includes featuredMission with SAME logic as Task 4.3.2 (lines 2132-2168), queries currentTierRewards filtered by tier + enabled LIMIT 4 sorted by display_order (lines 2172-2192), includes totalRewardsCount, backend handles ALL display string formatting based on vipMetric (lines 2473-2484), follows service layer patterns
 
 - [ ] **Task 4.2.3:** Implement shouldShowCongratsModal logic
-    - **Action:** Add function checking if users.last_login_at is NULL or > 24h ago
-    - **References:** Loyalty.md Flow 1 (Congrats Modal)
-    - **Acceptance Criteria:** Returns boolean, updates last_login_at after shown
+    - **Action:** Add function checking if mission was fulfilled AFTER user's last login
+    - **References:** API_CONTRACTS.md lines 1996-2029 (Congratulations modal logic in featured-mission), Loyalty.md Flow 1 (Congrats Modal)
+    - **Implementation Guide:** MUST compare mission_progress.fulfilled_at > users.last_login_at to detect newly completed missions (lines 1996-2029). Query finds missions WHERE fulfilled_at IS NOT NULL AND fulfilled_at > last_login_at (lines 2003-2010). If found, set showCongratsModal=true and provide congratsMessage with mission details (lines 2014-2018). CRITICAL: update users.last_login_at=NOW() AFTER checking comparison but before returning response (lines 2023-2028) to prevent modal from showing again on refresh (line 2037)
+    - **Acceptance Criteria:** Returns boolean showCongratsModal by comparing mission_progress.fulfilled_at > users.last_login_at per lines 1996-2029, queries missions WHERE fulfilled_at > last_login_at (lines 2003-2010), generates congratsMessage if found (lines 2014-2018), updates users.last_login_at=NOW() AFTER checking but before returning (lines 2023-2028), prevents duplicate modals on refresh (line 2037)
 
 - [ ] **Task 4.2.4:** Implement getFeaturedMission function
     - **Action:** Add function calling missionRepository with user context
@@ -658,14 +663,16 @@
 
 ## Step 5.1: Mission Repositories
 - [ ] **Task 5.1.1:** Extend missionRepository with listAvailable function
-    - **Action:** Add function to get missions filtered by: active, tier restrictions, not completed
-    - **References:** API_CONTRACTS.md /missions/available, Loyalty.md Flow 8 (Mission List)
-    - **Acceptance Criteria:** MUST apply tier filtering, MUST include user progress
+    - **Action:** Add function querying missions with progress, redemptions, and sub-states using LEFT JOINs
+    - **References:** API_CONTRACTS.md lines 2949-3648 (GET /api/missions with complex query requirements), Loyalty.md Flow 8 (Mission List), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute single optimized query with LEFT JOINs to: (1) mission_progress for current_value/target_value/status/checkpoint_end, (2) redemptions WHERE mission_progress_id IS NOT NULL (mission rewards, not VIP tier rewards), (3) commission_boost_redemptions for boost_status/activated_at/expires_at/scheduled dates, (4) physical_gift_redemptions for shipping_city/shipped_at, (5) raffle_participations for is_winner, (6) tiers for tier_name/tier_color. Filter missions WHERE client_id=$clientId AND enabled=true AND (tier_eligibility=$currentTier OR preview_from_tier filtering for locked previews). Return all data needed for backend 14-status computation (lines 3241-3296), VIP metric-aware progress formatting (lines 3092-3100), deadline calculations, scheduling data, raffle data, locked data. Use single query strategy for performance
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), executes single query with LEFT JOINs to mission_progress/redemptions/commission_boost_redemptions/physical_gift_redemptions/raffle_participations/tiers, filters by enabled=true, filters by tier_eligibility OR preview_from_tier logic for locked tier previews, excludes concluded/rejected redemptions, includes all fields needed for 14-status computation (lines 2990-2994), progress tracking, deadline info, scheduling data, raffle data, locked data, ordered by display_order for backend re-sorting
 
 - [ ] **Task 5.1.2:** Implement getUserProgress function
-    - **Action:** Add function querying mission_progress for user and mission
-    - **References:** SchemaFinalv2.md (mission_progress table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns progress with status, current_progress, target_progress
+    - **Action:** Add function querying mission_progress with VIP metric-aware field selection
+    - **References:** API_CONTRACTS.md lines 2996-3005 (progress object with VIP metric formatting), SchemaFinalv2.md (mission_progress table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** Query mission_progress table for current_value, target_value, status, checkpoint_end. Return raw numeric values for backend VIP metric-aware formatting (lines 3092-3100): sales_dollars mode formats as "$350"/"$500", sales_units mode formats as "35 units"/"50 units", other types format as "8 videos"/"15 videos". Backend will calculate percentage, remainingText, progressText
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns progress with status/current_value/target_value/checkpoint_end for VIP metric-aware formatting by service layer, returns null for raffle/locked missions (no progress tracking per lines 2996, 3186)
 
 - [ ] **Task 5.1.3:** Implement claimReward function
     - **Action:** Add function to update mission_progress.status to 'claimed'
@@ -694,9 +701,10 @@
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
 
 - [ ] **Task 5.2.2:** Implement listAvailableMissions function
-    - **Action:** Add function calling repository with tier filtering logic
-    - **References:** API_CONTRACTS.md /missions/available
-    - **Acceptance Criteria:** Returns missions ordered by: status (in_progress first), priority, created_at
+    - **Action:** Add function that computes 14-status ranking, formats display text with VIP metric mode, populates flippable cards, and sorts by featured + actionable priority
+    - **References:** API_CONTRACTS.md lines 2949-3648 (GET /api/missions complete response with status computation, backend formatting, and sorting logic)
+    - **Implementation Guide:** MUST call repository to get missions with progress/redemptions (LEFT JOIN data), then for each mission: (1) compute status from 14-priority ranking (lines 3232-3296): raffle_available, raffle_claim, default_claim, default_schedule, pending_info, clearing, sending, active, scheduled, redeeming/redeeming_physical, in_progress, raffle_won/raffle_processing/dormant, locked, (2) use static displayName mapping per mission_type (lines 3070-3079): sales→"Sales Sprint", videos→"Lights, Camera, Go!", likes→"Fan Favorite", views→"Road to Viral", raffle→"VIP Raffle", (3) generate reward description with article for physical gifts/experiences (lines 3081-3090): "Win an iPhone 16 Pro!" using addArticle() helper, (4) format progress text per VIP metric mode (lines 3092-3100): sales_dollars→"$350 of $500"/"$150 more to go!", sales_units→"35 units of 50 units"/"15 more units to go!", (5) calculate deadline.daysRemaining from checkpoint_end, (6) populate scheduling data with formatted dates/times EST (lines 3025-3035), (7) populate raffleData with daysUntilDraw/isWinner/prizeName with article (lines 3037-3044), (8) populate lockedData with requiredTierName/requiredTierColor/unlockMessage (lines 3046-3053), (9) populate flippableCard ONLY for specific statuses (lines 3304-3463): redeeming, sending, scheduled, active, pending_info, clearing with type-specific content, (10) sort by featured mission first (line 3236-3239), then 12-priority status ranking (lines 3241-3296), then mission type priority (raffle→sales→videos→likes→views, line 3298). Return user info, featuredMissionId (always first in array), and sorted missions array
+    - **Acceptance Criteria:** Returns complete MissionsPageResponse matching lines 2963-3065, calls repository for single query with LEFT JOINs, computes all 14 possible statuses using priority ranking (lines 3232-3296), uses static displayName mapping per mission_type (lines 3070-3079), generates reward descriptions with article for physical gifts/experiences (lines 3081-3090), formats ALL progress text per VIP metric mode (lines 3092-3100), calculates daysRemaining/daysUntilDraw in backend, populates flippableCard for 8 specific status+reward type combinations (lines 3304-3463), sorts with featured mission first guarantee (line 3300), then 12-priority status ranking, then mission type secondary sort (line 3298), includes featuredMissionId, follows service layer patterns
 
 - [ ] **Task 5.2.3:** Implement claimMissionReward function
     - **Action:** Add transactional function to: validate state, add points, update status, create audit trail
@@ -774,19 +782,22 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 6.1.2:** Implement listAvailable function
-    - **Action:** Add function querying rewards with tier restrictions, usage limits
-    - **References:** API_CONTRACTS.md /rewards, SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST filter by tier_eligibility, enabled=true, ordered by display_order
+    - **Action:** Add function querying rewards with active redemptions and sub-states using LEFT JOINs
+    - **References:** API_CONTRACTS.md lines 4045-4809 (GET /api/rewards database query lines 4713-4774), SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute single optimized query (lines 4713-4774) with LEFT JOINs to: (1) redemptions table WHERE mission_progress_id IS NULL AND status NOT IN ('concluded', 'rejected') AND deleted_at IS NULL (lines 4751-4756), (2) commission_boost_redemptions for boost_status/activated_at/expires_at/sales_at_expiration (lines 4758, 4739-4743), (3) physical_gift_redemptions for shipping_city/shipped_at (lines 4759, 4745-4747), (4) tiers for tier_name (line 4750). Filter rewards WHERE client_id=$clientId AND enabled=true AND (tier_eligibility=$currentTier OR preview_from_tier filtering lines 4764-4771). Return all data needed for backend status computation and formatting. Use single query strategy for performance (lines 4778-4786)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), executes single query with LEFT JOINs to redemptions/commission_boost_redemptions/physical_gift_redemptions/tiers per lines 4713-4774, filters by enabled=true, filters by tier_eligibility OR preview_from_tier logic (lines 4763-4771), excludes concluded/rejected redemptions (line 4755), includes all fields needed for status computation (redemption_status, boost_status, shipping_city, shipped_at, scheduled dates, activation dates), ordered by display_order ASC for backend re-sorting
 
 - [ ] **Task 6.1.3:** Implement getUsageCount function
-    - **Action:** Add function counting redemptions for reward and user
-    - **References:** SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), counts redemptions where user_id and reward_id match and status != 'cancelled'
+    - **Action:** Add function counting VIP tier redemptions for current tier only with tier achievement reset logic
+    - **References:** API_CONTRACTS.md lines 4540-4590 (Usage Count Calculation for VIP Tier Rewards), SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute query per lines 4542-4556: SELECT COUNT(*) FROM redemptions WHERE user_id=$userId AND reward_id=$rewardId AND mission_progress_id IS NULL (VIP tier rewards only, line 4548) AND tier_at_claim=$currentTier (current tier only, line 4549) AND status IN ('claimed', 'fulfilled', 'concluded') (active and completed claims, line 4550) AND deleted_at IS NULL (not soft-deleted, line 4551) AND created_at >= (SELECT tier_achieved_at FROM users WHERE id=$userId) (resets on tier change, lines 4552-4556). Key points (lines 4559-4562): mission rewards don't count (mission_progress_id IS NULL), only current tier counts (tier_at_claim filter), resets when tier changes (tier_achieved_at comparison). Usage count reset behavior (lines 4564-4600): tier promotion resets to 0, tier demotion soft-deletes higher tier redemptions, re-promotion gives fresh limits
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), counts WHERE mission_progress_id IS NULL (VIP tier rewards only per line 4548), filters tier_at_claim=$currentTier (current tier only per line 4549), filters status IN ('claimed', 'fulfilled', 'concluded') per line 4550, excludes soft-deleted (deleted_at IS NULL per line 4551), filters created_at >= tier_achieved_at for tier change reset logic (lines 4552-4556), implements fresh count on tier promotion/demotion/re-promotion per lines 4564-4600
 
 - [ ] **Task 6.1.4:** Implement redeemReward function
-    - **Action:** Add transactional function to: deduct points, insert redemption, create sub-state
-    - **References:** SchemaFinalv2.md (redemptions table), Loyalty.md Pattern 1 (Transactional), Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST use transaction, validate sufficient points, check usage limit
+    - **Action:** Add transactional function to insert redemption with tier-specific usage counting and create sub-state tables
+    - **References:** API_CONTRACTS.md lines 4810-5241 (POST /api/rewards/:id/claim with usage limits and sub-state requirements), SchemaFinalv2.md (redemptions, commission_boost_redemptions, physical_gift_redemptions tables), Loyalty.md Pattern 1 (Transactional), Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute transactional INSERT with tier-specific data: (1) INSERT INTO redemptions (user_id, reward_id, client_id, status='claimed', claimed_at=NOW(), tier_at_claim=$currentTier, mission_progress_id=NULL for VIP tier rewards line 4908, scheduled_activation_date/time if provided) (2) Count usage WHERE mission_progress_id IS NULL AND tier_at_claim=$currentTier AND created_at >= tier_achieved_at (lines 4919-4931) to enforce usage limits, (3) For commission_boost: INSERT INTO commission_boost_redemptions (redemption_id, boost_status='pending_info', scheduled_activation_date/time), (4) For physical_gift: INSERT INTO physical_gift_redemptions (redemption_id, shipping_city, shipping_state, shipping_address_encrypted, size_value if provided), (5) For discount: store scheduled_activation_date and scheduled_activation_time in redemptions table. NO points deduction (VIP tier rewards use redemption_quantity limits, not points per line 4814). Redemption period reset: gift_card/physical_gift/experience count once forever, commission_boost/spark_ads/discount reset on tier re-achievement (lines 4953-4965)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST use transaction, NO points deduction (VIP tier rewards line 4814), enforces usage limits with tier-specific count WHERE mission_progress_id IS NULL AND tier_at_claim=$currentTier AND created_at >= tier_achieved_at (lines 4919-4931), inserts redemption with tier_at_claim field, creates sub-state for commission_boost (commission_boost_redemptions) or physical_gift (physical_gift_redemptions), applies redemption period reset rules (lines 4953-4965), returns redemption ID and created sub-state IDs
 
 - [ ] **Task 6.1.5:** Create redemption repository file
     - **Action:** Create `/lib/repositories/redemptionRepository.ts`
@@ -794,9 +805,10 @@
     - **Acceptance Criteria:** File exists with repository object pattern
 
 - [ ] **Task 6.1.6:** Implement getHistory function
-    - **Action:** Add function querying redemptions with reward details for user
-    - **References:** API_CONTRACTS.md /rewards/history, SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns paginated history with reward info ordered by redeemed_at DESC
+    - **Action:** Add function querying concluded redemptions with INNER JOIN rewards for user
+    - **References:** API_CONTRACTS.md lines 5413-5554 (GET /api/rewards/history backend query lines 5428-5442), SchemaFinalv2.md (redemptions, rewards tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Implementation Guide:** MUST execute query (lines 5428-5442): SELECT redemptions.id, reward_id, rewards.type, rewards.name, rewards.description, claimed_at, concluded_at FROM redemptions INNER JOIN rewards ON redemptions.reward_id = rewards.id WHERE redemptions.user_id=$userId AND redemptions.status='concluded' AND redemptions.client_id=$clientId ORDER BY concluded_at DESC. Return all fields needed for backend formatting: type (for formatting rules), name, description, value_data JSONB (for amount/percent/durationDays/displayText), claimed_at, concluded_at. NO pagination per API spec (lines 5413-5554 show no offset/limit parameters)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), executes INNER JOIN rewards (line 5438), filters WHERE status='concluded' (line 5440), NO pagination (API spec shows no pagination), ordered by concluded_at DESC (line 5441), returns all fields needed for backend formatting (type, name, description, value_data, claimed_at, concluded_at)
 
 - [ ] **Task 6.1.7:** Create commission boost repository file
     - **Action:** Create `/lib/repositories/commissionBoostRepository.ts`
@@ -829,14 +841,16 @@
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), validates shipping_status transitions (pending→shipped→delivered)
 
 - [ ] **Task 6.1.13:** Implement getPaymentInfo function
-    - **Action:** Add function with signature `getPaymentInfo(clientId: string, userId: string)` to retrieve and decrypt payment account info from commission_boost_redemptions
-    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /user/payment-info
-    - **Acceptance Criteria:** MUST decrypt payment_account field using encryption utility (Section 9 checklist item 6), MUST filter by client_id AND user_id (Section 9 Critical Rule #1), returns payment_type and decrypted payment_account or null if not set
+    - **Action:** Add function to retrieve and decrypt saved payment info from users table
+    - **References:** API_CONTRACTS.md lines 5246-5289 (GET /api/user/payment-info response schema lines 5260-5264), ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption)
+    - **Implementation Guide:** Query users table: SELECT default_payment_method, default_payment_account WHERE id=$userId AND client_id=$clientId. Decrypt default_payment_account using encryption utility (Pattern 9). Return object with hasPaymentInfo boolean, paymentMethod ('paypal'|'venmo'|null), and decrypted paymentAccount (string|null) per lines 5260-5264. If default_payment_method IS NULL return hasPaymentInfo=false with null values (lines 5278-5285), else return hasPaymentInfo=true with decrypted account (lines 5269-5275)
+    - **Acceptance Criteria:** MUST decrypt default_payment_account field using encryption utility (Section 9 checklist item 6, Pattern 9), MUST filter by client_id AND user_id (Section 9 Critical Rule #1), queries users.default_payment_method and users.default_payment_account (not commission_boost_redemptions), returns object matching lines 5260-5264 with hasPaymentInfo boolean, paymentMethod ('paypal'|'venmo'|null), paymentAccount (decrypted string|null), returns hasPaymentInfo=false with nulls if no saved info
 
 - [ ] **Task 6.1.14:** Implement savePaymentInfo function
-    - **Action:** Add function with signature `savePaymentInfo(clientId: string, userId: string, redemptionId: string, paymentType: string, paymentAccount: string)` to store encrypted payment info
-    - **References:** ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption), API_CONTRACTS.md /rewards/:id/payment-info
-    - **Acceptance Criteria:** MUST encrypt payment_account before INSERT/UPDATE (Section 9 checklist item 6), MUST validate payment_type enum (venmo, paypal, zelle, bank_account), MUST filter by client_id (Section 9 Critical Rule #1), for UPDATE operations MUST verify count > 0 (Section 9 checklist item 4)
+    - **Action:** Add function to update redemption with encrypted payment info and optionally save to user defaults
+    - **References:** API_CONTRACTS.md lines 5290-5412 (POST /api/rewards/:id/payment-info with encryption and status transition), ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption)
+    - **Implementation Guide:** MUST perform 2 database operations: (1) UPDATE redemptions SET payment_method=$paymentMethod, payment_account=encrypt($paymentAccount), status='fulfilled', payment_info_collected_at=NOW() WHERE id=$redemptionId AND client_id=$clientId (lines 5343-5345), verify count > 0 after UPDATE (Section 9 checklist item 4), (2) if saveAsDefault=true then UPDATE users SET default_payment_method=$paymentMethod, default_payment_account=encrypt($paymentAccount) WHERE id=$userId AND client_id=$clientId (lines 5309, 5347). PaymentMethod enum ONLY 'paypal' or 'venmo' (line 5307, NOT zelle or bank_account). Return updated redemption data and userPaymentUpdated boolean
+    - **Acceptance Criteria:** MUST encrypt payment_account before UPDATE using encryption utility (Section 9 checklist item 6, Pattern 9), validates paymentMethod enum is 'paypal' or 'venmo' ONLY (line 5307), updates redemption.status from 'pending_info' to 'fulfilled' (line 5343), sets payment_info_collected_at timestamp (line 5345), MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), if saveAsDefault=true updates users.default_payment_method and users.default_payment_account with encryption (lines 5309, 5347), returns userPaymentUpdated boolean
 
 ## Step 6.2: Reward Services
 - [ ] **Task 6.2.1:** Create reward service file
@@ -845,14 +859,16 @@
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
 
 - [ ] **Task 6.2.2:** Implement listAvailableRewards function
-    - **Action:** Add function calling repository with tier + usage filtering
-    - **References:** API_CONTRACTS.md /rewards
-    - **Acceptance Criteria:** Returns rewards user can afford and is eligible for
+    - **Action:** Add function that computes status, formats display text, calculates availability, and sorts by actionable priority
+    - **References:** API_CONTRACTS.md lines 4045-4809 (GET /api/rewards complete response with status computation, backend formatting, and sorting logic)
+    - **Implementation Guide:** MUST call repository to get rewards with active redemptions (LEFT JOIN data), then for each reward: (1) compute status from 10-priority ranking (lines 4403-4536): pending_info, clearing, sending, active, scheduled, redeeming_physical, redeeming, claimable, limit_reached, locked, (2) generate backend-formatted name and displayText per type (lines 4142-4161): gift_card "$X Gift Card"/"Amazon Gift Card", commission_boost "X% Pay Boost"/"Higher earnings (Xd)", spark_ads "$X Ads Boost"/"Spark Ads Promo", discount "X% Deal Boost"/"Follower Discount (Xd)", physical_gift "Gift Drop: {desc}"/{valueData.displayText}, experience {desc}/{valueData.displayText}, (3) compute canClaim based on tier match + limit + enabled + no active claim (line 4102), compute isLocked for tier mismatch (line 4103), compute isPreview for preview_from_tier (line 4104), (4) calculate usedCount for VIP tier rewards WHERE mission_progress_id IS NULL AND tier_at_claim=current_tier (line 4107), (5) generate statusDetails with formatted dates/times (lines 4115-4131), (6) sort by dual-sort: status priority 1-10, then display_order (lines 4652-4709). Transform discount duration_minutes to durationDays (lines 4637-4648). Return user info, redemptionCount (COUNT status='concluded'), and sorted rewards array
+    - **Acceptance Criteria:** Returns complete RewardsPageResponse matching lines 4059-4138, calls repository for single query with LEFT JOINs, computes all 10 possible statuses using priority ranking (lines 4403-4536), generates backend-formatted name/displayText per type (lines 4142-4161), computes canClaim/isLocked/isPreview flags (lines 4101-4104), calculates usedCount with VIP tier filtering (line 4107), generates statusDetails with formatted dates (lines 4115-4131), transforms discount duration_minutes to durationDays (lines 4637-4648), sorts by status priority 1-10 then display_order (lines 4652-4709), includes redemptionCount for history link, follows service layer patterns
 
 - [ ] **Task 6.2.3:** Implement claimReward function with type routing
-    - **Action:** Add function that routes to correct handler based on reward_type
-    - **References:** MissionsRewardsFlows.md (6 reward types)
-    - **Acceptance Criteria:** Calls: claimInstant, claimScheduled, claimPhysical, or claimCommissionBoost
+    - **Action:** Add function that validates 11 pre-claim rules, routes by reward type, and enforces scheduling constraints
+    - **References:** API_CONTRACTS.md lines 4810-5241 (POST /api/rewards/:id/claim with 11-step validation), MissionsRewardsFlows.md (6 reward types), ARCHITECTURE.md Section 10.1 (Rewards Claim Validation, lines 1201-1294)
+    - **Implementation Guide:** MUST validate 11 pre-claim rules (lines 4902-4951): (1) auth JWT, (2) reward exists, (3) enabled=true, (4) tier_eligibility matches current_tier, (5) VIP tier only (mission_progress_id IS NULL), (6) no active redemption status IN ('claimed', 'fulfilled') (lines 4909-4917), (7) usage limit COUNT < redemption_quantity with tier-specific WHERE mission_progress_id IS NULL AND tier_at_claim=$currentTier AND created_at >= tier_achieved_at (lines 4919-4931), (8) scheduling required for discount/commission_boost, (9) discount: weekday Mon-Fri + 09:00-16:00 EST + future date (lines 4933-4936), (10) commission_boost: future date + auto-set time to 18:00:00 EST (lines 4937-4939), (11) physical_gift: shippingInfo required + sizeValue if requires_size=true matching size_options (lines 4940-4951). Route by type: instant (gift_card/spark_ads/experience) empty body, scheduled (discount/commission_boost) with scheduledActivationAt, physical_gift with shippingInfo+optional sizeValue. Apply redemption period reset rules (lines 4953-4965). Return 10 error types (lines 5138-5238): ACTIVE_CLAIM_EXISTS, LIMIT_REACHED, SCHEDULING_REQUIRED, INVALID_SCHEDULE, INVALID_TIME_SLOT, SHIPPING_INFO_REQUIRED, SIZE_REQUIRED, INVALID_SIZE_SELECTION, TIER_NOT_ELIGIBLE, CLAIM_FAILED
+    - **Acceptance Criteria:** Validates all 11 pre-claim rules (lines 4902-4951), checks tier eligibility matches current_tier (line 4907), checks no active redemption (lines 4909-4917), enforces tier-specific usage limits (lines 4919-4931), validates discount scheduling weekday + 09:00-16:00 EST (lines 4933-4936), auto-sets commission_boost time to 18:00:00 EST (lines 4937-4939), validates physical_gift shippingInfo + size requirements (lines 4940-4951), routes by reward type (instant/scheduled/physical), applies redemption period reset rules (lines 4953-4965), throws specific error types, calls repository.redeemReward, returns complete response with updatedRewards array, follows service layer patterns
 
 - [ ] **Task 6.2.4:** Implement claimInstant function
     - **Action:** Add function for instant reward (code revealed immediately)
@@ -875,19 +891,22 @@
     - **Acceptance Criteria:** Creates boost state, trigger updates users.current_commission_boost, logs activation
 
 - [ ] **Task 6.2.8:** Implement getRewardHistory function
-    - **Action:** Add function with pagination
-    - **References:** API_CONTRACTS.md /rewards/history
-    - **Acceptance Criteria:** Returns redemptions with reward details
+    - **Action:** Add function that formats concluded redemptions using same backend formatting rules as GET /api/rewards
+    - **References:** API_CONTRACTS.md lines 5413-5554 (GET /api/rewards/history complete response with backend formatting)
+    - **Implementation Guide:** MUST call repository to get concluded redemptions, then format name and description for each history item using SAME logic as GET /api/rewards (lines 5469-5481): gift_card name="$"+amount+" Gift Card" description="Amazon Gift Card", commission_boost name=percent+"% Pay Boost" description="Higher earnings ("+durationDays+"d)", spark_ads name="$"+amount+" Ads Boost" description="Spark Ads Promo", discount name=percent+"% Deal Boost" description="Follower Discount ("+durationDays+"d)", physical_gift name="Gift Drop: "+description description=valueData.displayText||description, experience name=description description=valueData.displayText||description. Return two sections (lines 5444-5466): user info (id, handle, currentTier, currentTierName, currentTierColor from users JOIN tiers) and history array with backend-formatted name/description. NO pagination per API spec. Frontend notes (lines 5528-5534): show "Completed" badge (not "concluded"), display "Completed on [date]" using concludedAt, empty state message
+    - **Acceptance Criteria:** Returns complete RedemptionHistoryResponse matching lines 5444-5466, calls repository for concluded redemptions, formats name and description using SAME rules as GET /api/rewards per lines 5469-5481 (6 reward types), includes user section with id/handle/currentTier/currentTierName/currentTierColor, includes history array sorted by concludedAt DESC, NO pagination (API spec shows none), follows service layer patterns
 
 - [ ] **Task 6.2.9:** Implement getPaymentInfo service function
-    - **Action:** Add function calling commissionBoostRepository.getPaymentInfo with user context
-    - **References:** API_CONTRACTS.md /user/payment-info, ARCHITECTURE.md Section 5 (Service Layer, lines 463-526)
-    - **Acceptance Criteria:** Returns decrypted payment info object with payment_type and payment_account, or null if not set, follows service layer patterns
+    - **Action:** Add function that calls repository and returns formatted payment info response
+    - **References:** API_CONTRACTS.md lines 5246-5289 (GET /api/user/payment-info complete response structure), ARCHITECTURE.md Section 5 (Service Layer, lines 463-526)
+    - **Implementation Guide:** Call repository to get decrypted payment info from users table. Return PaymentInfoResponse object (lines 5260-5264): hasPaymentInfo boolean (true if default_payment_method IS NOT NULL), paymentMethod ('paypal'|'venmo'|null), paymentAccount (decrypted string|null). Full unmasked account returned since user is authenticated (line 5263). Two scenarios: if saved return hasPaymentInfo=true (lines 5269-5275), if not saved return hasPaymentInfo=false with all nulls (lines 5278-5285)
+    - **Acceptance Criteria:** Returns PaymentInfoResponse matching lines 5260-5264, calls repository.getPaymentInfo for decrypted data, returns hasPaymentInfo boolean, returns paymentMethod ('paypal'|'venmo'|null), returns full unmasked paymentAccount (decrypted, line 5263), returns hasPaymentInfo=false with null values if no saved info (lines 5278-5285), follows service layer patterns
 
 - [ ] **Task 6.2.10:** Implement savePaymentInfo service function
-    - **Action:** Add function to validate payment info and call repository
-    - **References:** API_CONTRACTS.md /rewards/:id/payment-info, ARCHITECTURE.md Section 5 (Service Layer, lines 463-526)
-    - **Acceptance Criteria:** Validates payment_type enum (venmo, paypal, zelle, bank_account), validates payment_account format is not empty, verifies reward exists and is commission_boost type, calls repository.savePaymentInfo
+    - **Action:** Add function that validates 4 rules, verifies status, and calls repository
+    - **References:** API_CONTRACTS.md lines 5290-5412 (POST /api/rewards/:id/payment-info with 4 validation rules), ARCHITECTURE.md Section 5 (Service Layer, lines 463-526)
+    - **Implementation Guide:** MUST validate 4 rules before calling repository (lines 5370-5400): (1) verify paymentAccount === paymentAccountConfirm, throw PAYMENT_ACCOUNT_MISMATCH error if not match (lines 5370-5375), (2) if paymentMethod='paypal' validate email format with regex, throw INVALID_PAYPAL_EMAIL if invalid (lines 5378-5383), (3) if paymentMethod='venmo' validate handle starts with @, throw INVALID_VENMO_HANDLE if not (lines 5386-5391), (4) verify redemption.status='pending_info', throw PAYMENT_INFO_NOT_REQUIRED (403) if status is not 'pending_info' (lines 5394-5400). PaymentMethod enum ONLY 'paypal' or 'venmo' (line 5307, NOT zelle or bank_account). After validation, call repository to encrypt and save payment info, update status to 'fulfilled', optionally save to user defaults if saveAsDefault=true
+    - **Acceptance Criteria:** Validates paymentMethod enum is 'paypal' or 'venmo' ONLY (line 5307), validates 4 rules: (1) paymentAccount === paymentAccountConfirm (lines 5370-5375), (2) PayPal email format (lines 5378-5383), (3) Venmo @ prefix (lines 5386-5391), (4) status='pending_info' (lines 5394-5400), throws specific error types for each validation failure, calls repository.savePaymentInfo with encrypted payment_account, updates status to 'fulfilled', handles saveAsDefault logic for user defaults, returns complete response with userPaymentUpdated boolean, follows service layer patterns
 
 ## Step 6.3: Reward API Routes
 - [ ] **Task 6.3.1:** Create rewards list route
@@ -904,8 +923,9 @@
 
 - [ ] **Task 6.3.3:** Create reward history route
     - **Action:** Create `/app/api/rewards/history/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /rewards/history, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
-    - **Acceptance Criteria:** Filters by client_id per Section 10.1, returns paginated history, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md lines 5413-5554 (GET /api/rewards/history for Rewards History page), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
+    - **Implementation Guide:** MUST retrieve user's concluded reward redemptions (archived/completed history) that have reached terminal "concluded" state only (lines 5415, 5440). Backend query (lines 5428-5442): SELECT redemptions.id, reward_id, rewards.type, rewards.name, rewards.description, claimed_at, concluded_at FROM redemptions INNER JOIN rewards WHERE user_id=current_user AND status='concluded' ORDER BY concluded_at DESC. Response includes two sections (lines 5444-5466): user info (id, handle, currentTier, currentTierName, currentTierColor) and history array of concluded redemptions. Backend MUST format name and description fields using SAME logic as GET /api/rewards (lines 5469-5481): gift_card name="$"+amount+" Gift Card" description="Amazon Gift Card", commission_boost name=percent+"% Pay Boost" description="Higher earnings ("+durationDays+"d)", spark_ads name="$"+amount+" Ads Boost" description="Spark Ads Promo", discount name=percent+"% Deal Boost" description="Follower Discount ("+durationDays+"d)", physical_gift name="Gift Drop: "+description description=valueData.displayText||description, experience name=description description=valueData.displayText||description. Each history item includes: id (redemptions.id), rewardId (redemptions.reward_id FK), name (backend-formatted), description (backend-formatted displayText), type (RewardType enum), claimedAt (ISO 8601 timestamp when claimed), concludedAt (ISO 8601 timestamp when moved to history), status='concluded' (always 'concluded' in history, line 5464). Frontend display notes (lines 5528-5534): show "Completed" badge instead of "Concluded", display "Completed on [date]" using concludedAt, show "No redemption history yet" for empty array, backend returns sorted by concludedAt DESC. NO pagination (API spec shows no pagination parameters in request or response). Return errors: UNAUTHORIZED 401 (lines 5537-5542), SERVER_ERROR 500 (lines 5545-5551)
+    - **Acceptance Criteria:** MUST return `{ user: { id, handle, currentTier, currentTierName, currentTierColor }, history: Array<{ id, rewardId, name, description, type, claimedAt, concludedAt, status }> }` per lines 5444-5466, auth middleware verifies user (line 5423), filters by client_id per Section 10.1, queries redemptions WHERE status='concluded' with INNER JOIN rewards (lines 5428-5442), backend formats name and description using same rules as GET /api/rewards per lines 5469-5481, returns sorted by concluded_at DESC (line 5441), NO pagination (no offset/limit/page parameters), returns 200 with user info and history array or 401/500 for errors per lines 5537-5551, follows route pattern from Section 5
 
 - [ ] **Task 6.3.4:** Create get payment info route
     - **Action:** Create `/app/api/user/payment-info/route.ts` with GET handler
@@ -968,37 +988,41 @@
 ## Step 7.2: Tiers API
 - [ ] **Task 7.2.1:** Create tier repository file
     - **Action:** Create `/lib/repositories/tierRepository.ts`
-    - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
-    - **Acceptance Criteria:** File exists with repository object pattern
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers), ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
+    - **Acceptance Criteria:** File exists with repository object pattern, includes functions for querying vip_tiers with rewards/missions aggregation per Section 5
 
-- [ ] **Task 7.2.2:** Implement listTiers function
-    - **Action:** Add function to query vip_tiers for client
-    - **References:** API_CONTRACTS.md /tiers, SchemaFinalv2.md (vip_tiers table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns all tiers for client ordered by tier_order ASC with commission rates, benefits, point thresholds
+- [ ] **Task 7.2.2:** Implement tier repository query functions
+    - **Action:** Add functions for tier data with rewards aggregation
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response schema and business logic), SchemaFinalv2.md (vip_tiers, rewards, missions tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), queries vip_tiers with tier_level filtering (lines 6043-6050), includes rewards aggregation with priority sorting (lines 6062-6084), calculates total perks count (lines 6105-6125), returns tier data ordered by tier_level ASC
 
 - [ ] **Task 7.2.3:** Create tier service file
     - **Action:** Create `/lib/services/tierService.ts`
-    - **References:** ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943)
-    - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers), ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943)
+    - **Acceptance Criteria:** File exists with service functions following Section 5 patterns, implements VIP metric-aware formatting logic (lines 6086-6098), reward displayText generation (lines 6643-6658), expiration logic (lines 6052-6061)
 
-- [ ] **Task 7.2.4:** Implement getTiers function
-    - **Action:** Add function calling repository
-    - **References:** API_CONTRACTS.md /tiers
-    - **Acceptance Criteria:** Returns tiers ordered by tier order (Fan → Super Fan)
+- [ ] **Task 7.2.4:** Implement getTiersPageData service function
+    - **Action:** Add function with business logic for tier progression calculations
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response schema with user progress and tier filtering)
+    - **Implementation Guide:** MUST implement complex response structure with 4 sections (lines 5573-5640): user progress (9 fields including VIP metric-aware formatting), progress to next tier (6 calculated fields: nextTierName, nextTierTarget, nextTierTargetFormatted, amountRemaining, amountRemainingFormatted, progressPercentage, progressText), vipSystem config (metric field), tiers array (user-scoped filtered). VIP metric-aware formatting (lines 6086-6098): if metric='sales_dollars' format as "$2,100" and "$680 to go", if metric='sales_units' format as "2,100 units" and "680 units to go". Tier filtering: only return tiers where tier_level >= user's current tier_level (lines 6043-6050). Progress calculations: amountRemaining = nextTierTarget - currentSales, progressPercentage = (currentSales / nextTierTarget) * 100. Expiration logic (lines 6052-6061): tierLevel=1 Bronze never expires (expirationDate=null, showExpiration=false), tierLevel>1 6-month checkpoint (expirationDate ISO 8601, showExpiration=true)
+    - **Acceptance Criteria:** Returns complete response matching lines 5573-5640, implements tier_level filtering (user sees only current+higher tiers), calculates all progress fields, applies VIP metric formatting to ALL numeric fields, implements expiration logic, calls repository for tier/rewards data
 
 - [ ] **Task 7.2.5:** Create tiers route
     - **Action:** Create `/app/api/tiers/route.ts` with GET handler
-    - **References:** API_CONTRACTS.md /tiers, ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Tenant Isolation Pattern, lines 1328-1343)
-    - **Acceptance Criteria:** Filters by client_id per Section 10.3 tenant isolation, returns 200 with tiers array ordered by tier_order, follows Section 5 route pattern
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers for Tiers page), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Tenant Isolation Pattern, lines 1328-1343)
+    - **Implementation Guide:** MUST return tier progression information with 4 major sections (lines 5573-5640). User progress section (lines 5574-5585): id, currentTier (tier_id like "tier_2"), currentTierName ("Bronze"/"Silver"/"Gold"/"Platinum"), currentTierColor (hex from tiers.tier_color: Bronze=#CD7F32, Silver=#94a3b8, Gold=#F59E0B, Platinum=#818CF8), currentSales (raw number), currentSalesFormatted (VIP metric-aware: "$2,100" or "2,100 units"), expirationDate (ISO 8601 or null), expirationDateFormatted ("August 10, 2025" or null), showExpiration (true if tierLevel>1). Progress section (lines 5587-5596): nextTierName, nextTierTarget (raw number), nextTierTargetFormatted (VIP metric-aware), amountRemaining (calculated: nextTierTarget - currentSales), amountRemainingFormatted, progressPercentage (calculated: currentSales/nextTierTarget*100), progressText (VIP metric-aware: "$680 to go" or "680 units to go"). VipSystem section (lines 5598-5601): metric enum 'sales_dollars' or 'sales_units' from vip_system_settings table controls ALL numeric formatting. Tiers array (lines 5603-5639): user-scoped filtered WHERE tier_level >= user's current tier_level (lines 6043-6050), each tier includes name, color, tierLevel (1-4), minSales (raw + formatted), salesDisplayText (VIP metric-aware: "$1,000+ in sales" or "1,000+ in units sold"), commissionRate (integer percentage), commissionDisplayText ("{rate}% Commission on sales"), isUnlocked (tier_level <= user's tier_level), isCurrent (boolean), totalPerksCount (sum of reward uses + mission reward uses, lines 6105-6125), rewards array (max 4 per tier, lines 6629-6639). Rewards aggregation (lines 6062-6084): group by type+isRaffle, sum uses for count, apply 9-priority sorting (1=physical_gift raffle, 2=experience raffle, 3=gift_card raffle, 4=experience, 5=physical_gift, 6=gift_card, 7=commission_boost, 8=spark_ads, 9=discount), generate displayText per lines 6643-6658 (raffle: "Chance to win {name}!", non-raffle varies by type), slice to max 4 rewards. Return errors: UNAUTHORIZED 401. Backend does NOT send icon names (frontend maps types to Lucide icons, lines 6126-6139)
+    - **Acceptance Criteria:** MUST return `{ user: { id, currentTier, currentTierName, currentTierColor, currentSales, currentSalesFormatted, expirationDate, expirationDateFormatted, showExpiration }, progress: { nextTierName, nextTierTarget, nextTierTargetFormatted, amountRemaining, amountRemainingFormatted, progressPercentage, progressText }, vipSystem: { metric }, tiers: Array<{ name, color, tierLevel, minSales, minSalesFormatted, salesDisplayText, commissionRate, commissionDisplayText, isUnlocked, isCurrent, totalPerksCount, rewards: Array<{ type, isRaffle, displayText, count, sortPriority }> }> }` per lines 5573-5640, auth middleware verifies user, filters by client_id per Section 10.3, queries vipSystem.metric from vip_system_settings table, applies VIP metric-aware formatting to ALL numeric fields per lines 6086-6098, filters tiers WHERE tier_level >= user's current tier_level per lines 6043-6050, implements expiration logic (Bronze null, others 6-month) per lines 6052-6061, aggregates rewards by type+isRaffle per lines 6062-6084, applies 9-priority sorting and limits to 4 rewards per tier, generates reward displayText with raffle vs non-raffle formatting per lines 6643-6658, calculates totalPerksCount as sum of reward uses + mission reward uses per lines 6105-6125, calculates progress fields (amountRemaining, progressPercentage, progressText), returns 200 with complete response or 401 for unauthorized, follows route pattern from Section 5
 
 ## Step 7.3: Tiers Testing
 - [ ] **Task 7.3.1:** Create tier API tests
     - **Action:** Create `/tests/integration/api/tiers.test.ts`
-    - **Acceptance Criteria:** Test returns correct tier structure
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response structure and business logic)
+    - **Acceptance Criteria:** Tests verify: (1) response includes all 4 sections (user, progress, vipSystem, tiers), (2) user-scoped tier filtering (Bronze user sees 4 tiers, Silver user sees 3 tiers per lines 6043-6050), (3) VIP metric-aware formatting (sales_dollars shows "$2,100", sales_units shows "2,100 units" per lines 6086-6098), (4) rewards aggregation with max 4 per tier sorted by priority 1-9 per lines 6062-6084, (5) expiration logic (Bronze null, Silver+ has ISO 8601 date per lines 6052-6061), (6) progress calculations (amountRemaining, progressPercentage, progressText), (7) totalPerksCount calculation, (8) isUnlocked and isCurrent flags, (9) commission rates displayed correctly
 
-- [ ] **Task 7.3.2:** Test tier ordering
-    - **Action:** Write test verifying tiers sorted correctly
-    - **Acceptance Criteria:** Tiers in ascending order by point thresholds
+- [ ] **Task 7.3.2:** Test tier progression calculations
+    - **Action:** Write tests verifying progress field calculations
+    - **References:** API_CONTRACTS.md lines 5587-5596 (progress section with calculated fields)
+    - **Acceptance Criteria:** Tests verify: (1) nextTierTarget correct for user's tier, (2) amountRemaining = nextTierTarget - currentSales, (3) progressPercentage = (currentSales / nextTierTarget) * 100, (4) progressText formatted with VIP metric ("$680 to go" or "680 units to go"), (5) Bronze user shows Silver as next tier, (6) Platinum user at max tier handled correctly
 
 ---
 
@@ -1055,8 +1079,9 @@
 ## Step 8.3: Tier Calculation
 - [ ] **Task 8.3.1:** Create tier calculation service
     - **Action:** Add runTierCalculations function to tierService
-    - **References:** Loyalty.md Flow 7 (Auto Tier Advancement)
-    - **Acceptance Criteria:** Queries users, compares total_sales to tier checkpoints, updates tier_id
+    - **References:** API_CONTRACTS.md lines 5559-6140 (tier_level structure and min_sales thresholds), Loyalty.md Flow 7 (Auto Tier Advancement)
+    - **Implementation Guide:** MUST query vip_tiers ordered by tier_level DESC to find highest tier where user's total_sales >= tier's min_sales. Tier thresholds from API spec: Bronze tier_level=1 min_sales=0, Silver tier_level=2 min_sales=1000, Gold tier_level=3 min_sales=3000, Platinum tier_level=4 min_sales=5000. Update user's current_tier to matching tier_id and set tier_achieved_at timestamp for redemption period tracking
+    - **Acceptance Criteria:** Queries users and vip_tiers tables, compares total_sales to min_sales thresholds per API spec tier structure (0, 1000, 3000, 5000), updates user's current_tier to highest qualifying tier_level, sets tier_achieved_at timestamp when tier changes for redemption period reset tracking
 
 - [ ] **Task 8.3.2:** Integrate with daily-sync
     - **Action:** Call tierService.runTierCalculations after sales processing
@@ -1150,11 +1175,13 @@
 
 - [ ] **Task 9.2.11:** Toggle Tiers page
     - **Action:** Set NEXT_PUBLIC_USE_REAL_API_TIERS=true
-    - **Acceptance Criteria:** Tiers fetch from real /api/tiers
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers)
+    - **Acceptance Criteria:** Tiers fetch from real /api/tiers, page receives complete response with user, progress, vipSystem, and tiers array
 
 - [ ] **Task 9.2.12:** Test Tiers manually
-    - **Action:** View all tiers, verify current tier highlighted
-    - **Acceptance Criteria:** Tier benefits and thresholds correct
+    - **Action:** View Tiers page with different user tier levels and VIP metrics
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers user-scoped filtering and VIP metric formatting)
+    - **Acceptance Criteria:** Verify: (1) Bronze user sees 4 tiers (Bronze through Platinum), Silver user sees 3 tiers (Silver through Platinum) per user-scoped filtering lines 6043-6050, (2) current tier highlighted with isUnlocked=true and isCurrent=true, (3) VIP metric formatting displays correctly (sales_dollars shows "$" prefix, sales_units shows "units" suffix), (4) progress bar shows correct percentage and "X to go" text, (5) rewards displayed with max 4 per tier sorted by priority, (6) raffle rewards show "Chance to win!" text, (7) expiration section hidden for Bronze (showExpiration=false), visible for Silver+ with formatted date, (8) commission rates display correctly, (9) totalPerksCount shows on each tier card
 
 ## Step 9.3: Full Integration Test
 - [ ] **Task 9.3.1:** Enable all real API flags

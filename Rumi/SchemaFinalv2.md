@@ -117,15 +117,6 @@ clients (root)
 - `vip_metric` - VARCHAR(20) NOT NULL DEFAULT 'sales' - VIP tier progression metric: 'sales' (revenue $$$) or 'units' (volume #). Immutable after client launch.
 - `created_at`, `updated_at` - TIMESTAMP - Audit trail
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Core infrastructure for multi-tenant SaaS architecture
-- Branding fields (logo_url, primary_color) are MVP requirements
-- Checkpoint configuration needed for tier system
-- tier_calculation_mode enables future flexibility
-- No overlap with SchemaFinal.md (different domain - system config vs rewards/missions)
-
 ---
 
 ### 1.2 users Table
@@ -161,15 +152,6 @@ clients (root)
 - `last_login_at` - TIMESTAMP
 - `created_at`, `updated_at` - TIMESTAMP
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Core user management required for platform
-- Precomputed fields optimize dashboard performance (Dashboard Performance Optimization section, lines 2538-2586)
-- Checkpoint tracking essential for tier maintenance system
-- No overlap with SchemaFinal.md (different domain - user profiles vs rewards/missions)
-- RLS policies defined for security (lines 711-725)
-
 ---
 
 ### 1.3 otp_codes Table
@@ -191,16 +173,6 @@ clients (root)
 CREATE INDEX idx_otp_session ON otp_codes(session_id);
 CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 ```
-
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Required for secure email verification during signup (POST /api/auth/signup, POST /api/auth/verify-otp)
-- Session tracked via HTTP-only cookie (XSS protection)
-- Code stored as bcrypt hash (even if DB breached, OTP codes are secure)
-- Expires in 5 minutes (short-lived, reduces attack window)
-- Rate limited to 3 attempts per code (brute-force protection)
-- One-time use prevents replay attacks
 
 **Security Features:**
 - Session ID in HTTP-only cookie (cannot be accessed by JavaScript)
@@ -229,16 +201,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - `idx_user_id` - User-specific queries (e.g., revoke all tokens for user)
 - `idx_expires_at` - Cleanup job for expired tokens (daily cron)
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Required for password reset flow (POST /api/auth/forgot-password, POST /api/auth/reset-password)
-- One-time use tokens prevent replay attacks (used_at timestamp)
-- 15-minute expiration prevents token theft abuse (short attack window)
-- Similar pattern to otp_codes table (proven security approach)
-- Bcrypt hashing prevents token theft if database compromised
-- Backend implements daily cleanup job for expired tokens (DELETE WHERE expires_at < NOW() - INTERVAL '1 day')
-
 **Security Features:**
 - Token stored as bcrypt hash (even if DB breached, tokens are secure)
 - Expires in 15 minutes (short-lived, reduces attack window)
@@ -254,31 +216,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 5. Backend validates: bcrypt.compare(token, token_hash), checks expiration, checks used_at
 6. If valid → update users.password_hash, set used_at = NOW()
 7. Token can never be reused (used_at prevents replay)
-
----
-
-### 1.5 metrics Table - **REMOVED** ❌
-
-**Previous Purpose:** Consolidated user-level aggregates from Cruva affiliates.csv + videos.csv
-
-**Removal Rationale:**
-- Tier calculations only use video-level data (not Shop GMV which includes livestreams)
-- All required aggregates can be computed directly from videos table
-- Mission progress tracked in mission_progress table (calculated from videos)
-- Precomputed totals stored in users table for performance
-- Eliminates unnecessary staging table and simplifies architecture
-- `period VARCHAR(7)` field didn't align with per-user rolling checkpoint windows
-
-**Migration Path:**
-- Lifetime totals: videos → users.total_sales, users.total_units
-- Checkpoint totals: videos (filtered by tier_achieved_at) → users.checkpoint_sales_current, users.checkpoint_units_current
-- Mission progress: videos (filtered by checkpoint_start/end) → mission_progress.current_value
-
-**New Data Flow:** videos.csv → videos table → users table + mission_progress table
-
-**See:**
-- users table: total_sales, total_units, checkpoint_sales_current, checkpoint_units_current, checkpoint_videos_posted, checkpoint_total_views, checkpoint_total_likes
-- mission_progress table: current_value (per mission per user)
 
 ---
 
@@ -307,15 +244,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - Mission progress tracking aggregates from this table into mission_progress.current_value (e.g., `SUM(views) WHERE post_date >= checkpoint_start`)
 - Each row = 1 video, each metric = that video's individual performance
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Required for engagement-based missions (videos, views, likes missions from Section 7)
-- Source data for commission boost sales delta calculations (per-video GMV tracking)
-- Updated by daily Cruva CSV sync (Flow 1, lines 1036-1040): "Upsert videos table (video_url as unique key)"
-- No overlap with SchemaFinal.md (different domain - video analytics vs rewards/missions)
-- Granular per-video data enables detailed mission progress tracking and analytics
-
 ---
 
 ### 1.6 tiers Table
@@ -337,16 +265,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - UNIQUE(client_id, tier_order)
 - UNIQUE(client_id, tier_id)
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Core tier system configuration (Admin Configuration System, Section 1, lines 2727-2738)
-- Supports 3-6 customizable tiers per client (dynamic configuration)
-- Admin-customizable names, colors, thresholds (white-label requirement)
-- Essential for tier promotion/demotion logic (Flow 6, lines 1860-1990)
-- No overlap with SchemaFinal.md (different domain - tier config vs rewards/missions)
-- Referenced by rewards.tier_eligibility and missions.tier_eligibility
-
 ---
 
 ### 1.7 sales_adjustments Table
@@ -364,15 +282,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - `adjusted_by` - UUID REFERENCES users(id) - Which admin made adjustment
 - `created_at` - TIMESTAMP
 - `applied_at` - TIMESTAMP - When included in tier calculation (NULL until daily sync applies it)
-
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Required for fair tier calculations (offline sales, refund corrections)
-- Admin Configuration System requirement (Section 1, lines 2741-2744)
-- Applied during daily sync before tier calculations (Flow 6, Step 0, lines 1866-1895)
-- Audit trail with reason and admin tracking
-- No overlap with SchemaFinal.md (different domain - manual adjustments vs rewards/missions)
 
 ---
 
@@ -396,16 +305,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - `status` - VARCHAR(50) NOT NULL - Options: 'maintained', 'promoted', 'demoted'
 - `created_at` - TIMESTAMP
 
-**Status:** **KEEP** ✅
-
-**Rationale:**
-- Historical audit trail for tier changes (compliance and transparency)
-- Created during checkpoint evaluations (Flow 6, Step 6, line 1976)
-- Immutable log (INSERT only, no updates/deletes)
-- RLS policy: Creators can view own history, system can insert (lines 763-768)
-- No overlap with SchemaFinal.md (different domain - tier audit vs rewards/missions)
-- Similar purpose to commission_boost_state_history (audit trail pattern)
-
 ---
 
 ### 1.9 handle_changes Table
@@ -422,13 +321,6 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - `resolved_at` - TIMESTAMP
 
 **Status:** **KEEP** ✅
-
-**Rationale:**
-- Handles real-world scenario (creators change TikTok handles)
-- Audit trail prevents data loss when handle changes in Cruva CSV
-- Admin resolution workflow (confirm it's same creator, not new person)
-- RLS policy defined (lines 782-790)
-- No overlap with SchemaFinal.md (different domain - handle management vs rewards/missions)
 
 ---
 

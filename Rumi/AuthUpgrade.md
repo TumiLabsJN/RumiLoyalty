@@ -68,18 +68,50 @@ All authentication pages currently use **hardcoded client branding** (logo and p
 
 ✅ **Already in place:**
 - `AuthLayout` component with `logoUrl` and `privacyPolicyUrl` props (authlayout.tsx:44-56)
-- Database schema has `clients.logo_url` field (SchemaFinalv2.md:113)
-- Database schema has `clients.privacy_policy_url` field (SchemaFinalv2.md:114)
+- Supabase client helper exists at `/lib/supabase-server.ts`
+- File-based legal docs system with API routes
 
 ❌ **Missing:**
 - Backend endpoint to serve client configuration
 - Frontend mechanism to fetch and share config across pages
-- Supabase client helper exists at `/lib/supabase-server.ts`
 
 ⚠️ **Discovery Finding:**
 - 3 files already use `NEXT_PUBLIC_CLIENT_LOGO_URL` environment variable
 - This suggests a previous incomplete attempt at dynamic branding
 - All 6 files need to migrate to the same pattern for consistency
+
+---
+
+### Schema Verification (SchemaFinalv2.md)
+
+**Clients Table - Actual Fields (lines 110-118):**
+
+| Field | Type | Purpose | Used in Upgrade? |
+|-------|------|---------|------------------|
+| `id` | UUID | Primary key | ✅ Query parameter |
+| `name` | VARCHAR(255) | Client display name | ✅ Maps to `clientName` |
+| `subdomain` | VARCHAR(100) | Multi-tenant routing | ❌ Future use |
+| `logo_url` | TEXT | Supabase Storage URL | ✅ Maps to `logoUrl` |
+| `primary_color` | VARCHAR(7) | Global header color (hex) | ✅ Maps to `primaryColor` |
+| `tier_calculation_mode` | VARCHAR(50) | Tier system config | ❌ Not needed |
+| `checkpoint_months` | INTEGER | Checkpoint duration | ❌ Not needed |
+| `vip_metric` | VARCHAR(20) | VIP progression metric | ❌ Not needed |
+
+**⚠️ Fields that DON'T exist (don't query these):**
+- ❌ `privacy_policy_url` - **Not in schema!** We construct this path instead
+- ❌ `terms_url` - **Not in schema!** We construct this path instead
+- ❌ `company_name` - **Not in schema!** Use `name` field instead
+
+**✅ Our Query (Correct):**
+```sql
+SELECT logo_url, name, primary_color FROM clients WHERE id = $clientId
+```
+
+**❌ Wrong Query (Don't do this):**
+```sql
+-- This will FAIL - these fields don't exist!
+SELECT logo_url, privacy_policy_url, company_name FROM clients
+```
 
 ---
 
@@ -177,9 +209,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Query Supabase for client configuration
+    // Note: Only query fields that exist in schema (SchemaFinalv2.md lines 110-114)
     const { data, error } = await supabase
       .from('clients')
-      .select('logo_url, privacy_policy_url, company_name, primary_color')
+      .select('logo_url, name, primary_color')
       .eq('id', clientId)
       .single()
 
@@ -188,11 +221,15 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
+    // Construct privacy policy path (file-based system already exists)
+    // Points to existing API route: /app/api/clients/[clientId]/privacy/route.ts
+    const privacyPolicyUrl = `/api/clients/${clientId}/privacy`
+
     // Build response with fallbacks
     const config = {
       logoUrl: data?.logo_url || "/images/fizee-logo.png",
-      privacyPolicyUrl: data?.privacy_policy_url || "/privacy-policy",
-      clientName: data?.company_name || "Rewards Program",
+      privacyPolicyUrl,
+      clientName: data?.name || "Rewards Program",
       primaryColor: data?.primary_color || "#F59E0B"
     }
 
@@ -207,11 +244,15 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch client config:', error)
 
+    // Use CLIENT_ID for fallback privacy URL
+    const fallbackClientId = process.env.CLIENT_ID || 'fizee'
+    const fallbackPrivacyUrl = `/api/clients/${fallbackClientId}/privacy`
+
     // Return safe fallback on error (don't expose error details)
     return NextResponse.json(
       {
         logoUrl: "/images/fizee-logo.png",
-        privacyPolicyUrl: "/privacy-policy",
+        privacyPolicyUrl: fallbackPrivacyUrl,
         clientName: "Rewards Program",
         primaryColor: "#F59E0B"
       },
@@ -248,17 +289,147 @@ curl http://localhost:3000/api/internal/client-config
 **Add:**
 ```bash
 # Client Configuration (MVP: Single client)
-CLIENT_ID=your-client-uuid-here
+# This should match the client ID from your `clients` table in Supabase
+# Example: CLIENT_ID=fizee (if your client folder is /public/legal/client-fizee)
+# Or: CLIENT_ID=<uuid> (if using UUID from database)
+CLIENT_ID=fizee
 
 # App URL for internal API calls
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
+
+**How to find your CLIENT_ID:**
+```sql
+-- Run this query in Supabase SQL Editor
+SELECT id, name, subdomain FROM clients LIMIT 1;
+```
+
+**Important:** The `CLIENT_ID` should match your legal docs folder name:
+- If folder is `/public/legal/client-fizee/`, use `CLIENT_ID=fizee`
+- If using UUID, make sure `/public/legal/client-<uuid>/` folder exists
 
 **Production (`/env.production`):**
 ```bash
 CLIENT_ID=${CLIENT_ID}  # Set via deployment environment
 NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ```
+
+---
+
+#### Task 1.3: Document API Contract
+
+**File:** `/home/jorge/Loyalty/Rumi/API_CONTRACTS.md` (APPEND)
+
+**Purpose:** Document the internal endpoint for future reference
+
+**Action:** Add new section at the END of API_CONTRACTS.md (after Tiers section)
+
+**Content to Add:**
+
+```markdown
+---
+
+# Internal/System Endpoints
+
+⚠️ **Security Notice:** These endpoints are internal-only and not accessible from client-side code.
+
+## GET /api/internal/client-config
+
+**Purpose:** Server-side endpoint to fetch client branding configuration for auth pages
+
+**Used By:** `/app/login/layout.tsx` (Server Component only)
+
+**Authentication:** Internal header validation only
+- Requires: `x-internal-request: true` header
+- Client-side requests will receive 403 Forbidden
+
+### Request
+
+```http
+GET /api/internal/client-config
+x-internal-request: true
+```
+
+### Response Schema
+
+```typescript
+interface ClientConfigResponse {
+  logoUrl: string           // Supabase Storage URL or fallback path
+  privacyPolicyUrl: string  // Path to privacy API route
+  clientName: string        // Display name from clients.name
+  primaryColor: string      // Hex color from clients.primary_color
+}
+```
+
+### Example Response
+
+**Success (200 OK):**
+```json
+{
+  "logoUrl": "https://xyz.supabase.co/storage/v1/object/public/client-logos/fizee/logo.png",
+  "privacyPolicyUrl": "/api/clients/fizee/privacy",
+  "clientName": "Fizee Rewards",
+  "primaryColor": "#F59E0B"
+}
+```
+
+**Forbidden (403):**
+```json
+{
+  "error": "Forbidden - Internal endpoint only"
+}
+```
+
+### Backend Logic
+
+```sql
+-- Query Supabase clients table
+SELECT logo_url, name, primary_color
+FROM clients
+WHERE id = $CLIENT_ID;
+
+-- Construct privacy URL from CLIENT_ID env var
+privacyPolicyUrl = `/api/clients/${CLIENT_ID}/privacy`
+```
+
+### Caching
+
+- **Cache-Control:** `public, s-maxage=3600, stale-while-revalidate=7200`
+- **Duration:** 1 hour
+- **Revalidation:** 2 hours stale-while-revalidate
+
+### Error Handling
+
+Returns 200 with fallback values if database query fails (to prevent breaking auth flow):
+
+```json
+{
+  "logoUrl": "/images/fizee-logo.png",
+  "privacyPolicyUrl": "/api/clients/fizee/privacy",
+  "clientName": "Rewards Program",
+  "primaryColor": "#F59E0B"
+}
+```
+
+### Security
+
+- ✅ Server-side only (Next.js layout component)
+- ✅ Header validation prevents client access
+- ✅ No sensitive data exposed in response
+- ✅ Graceful fallback on error (doesn't break auth)
+
+### Table of Contents Update
+
+**Also update the TOC at the top of API_CONTRACTS.md:**
+
+Add after the Tiers entry:
+```markdown
+8. [Internal/System Endpoints](#internalsystem-endpoints)
+   - [Client Configuration](#get-apiinternalclient-config)
+```
+```
+
+**Important:** This documents an internal endpoint that won't be called by frontend directly.
 
 ---
 
@@ -495,7 +666,169 @@ const { logoUrl, privacyPolicyUrl } = useClientConfig()
 
 ---
 
-### Phase 3: Database Setup
+### Phase 3.5: Connect Legal Docs (Already Implemented!)
+
+**Good News:** File-based legal docs system already exists!
+
+**Existing Infrastructure:**
+- ✅ API Routes: `/app/api/clients/[clientId]/privacy/route.ts`
+- ✅ API Routes: `/app/api/clients/[clientId]/terms/route.ts`
+- ✅ HTML Files: `/public/legal/client-fizee/privacy.html` + `terms.html`
+- ✅ Caching: 1-hour cache headers configured
+- ✅ Versioning: `lastUpdated` + `version` fields included
+
+**Important Note:** `privacy_policy_url` field does NOT exist in `clients` table (verified in SchemaFinalv2.md lines 110-114).
+
+**Solution:** Task 1.1 already handles this correctly by constructing the path:
+
+```typescript
+// Construct path to existing file-based API route
+const privacyPolicyUrl = `/api/clients/${clientId}/privacy`
+```
+
+**How it works:**
+1. Backend queries: `logo_url`, `name`, `primary_color` (fields that exist in schema)
+2. Backend constructs: `privacyPolicyUrl` from `CLIENT_ID` environment variable
+3. Privacy URL points to existing API route: `/api/clients/fizee/privacy`
+4. API route reads file: `/public/legal/client-fizee/privacy.html`
+
+**No additional changes needed!** Task 1.1 code already implements this correctly.
+
+---
+
+### Phase 4: Dynamic Button Colors
+
+**Goal:** Make pink buttons use client's `primary_color` from database
+
+**Files to Create:**
+1. `/lib/color-utils.ts` - Color manipulation helper
+
+**Files to Update:**
+All 6 auth pages with pink buttons
+
+---
+
+#### Task 4.1: Create Color Utility Helper
+
+**File:** `/lib/color-utils.ts` (NEW)
+
+**Purpose:** Programmatically adjust color brightness for hover/focus states
+
+**Code:**
+```typescript
+/**
+ * COLOR UTILITIES - Dynamic Button Colors
+ *
+ * Adjusts hex color brightness for hover/focus states
+ * Used by auth pages to derive colors from primaryColor
+ */
+
+/**
+ * Adjusts color brightness by a percentage
+ * @param hex - Hex color (e.g., "#6366f1" or "6366f1")
+ * @param percent - Amount to adjust: negative = darken, positive = lighten
+ * @returns Adjusted hex color with # prefix
+ *
+ * @example
+ * adjustBrightness("#F59E0B", -20)  // "#d18206" (darker for hover)
+ * adjustBrightness("#F59E0B", 40)   // "#ffb83f" (lighter for focus ring)
+ */
+export function adjustBrightness(hex: string, percent: number): string {
+  // Remove # if present
+  const cleanHex = hex.replace('#', '')
+
+  // Parse hex to RGB
+  const num = parseInt(cleanHex, 16)
+  let r = (num >> 16) + percent
+  let g = ((num >> 8) & 0x00FF) + percent
+  let b = (num & 0x0000FF) + percent
+
+  // Clamp values to 0-255 range
+  r = Math.min(255, Math.max(0, r))
+  g = Math.min(255, Math.max(0, g))
+  b = Math.min(255, Math.max(0, b))
+
+  // Convert back to hex
+  const newHex = ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')
+  return `#${newHex}`
+}
+
+/**
+ * Generates button color variants from primary color
+ * @param primaryColor - Base hex color from database
+ * @returns Object with base, hover, and focus colors
+ *
+ * @example
+ * const colors = getButtonColors("#F59E0B")
+ * // { base: "#F59E0B", hover: "#d18206", focus: "#ffb83f" }
+ */
+export function getButtonColors(primaryColor: string) {
+  return {
+    base: primaryColor,
+    hover: adjustBrightness(primaryColor, -20),
+    focus: adjustBrightness(primaryColor, 40),
+  }
+}
+```
+
+---
+
+#### Task 4.2: Update Button Components
+
+**Pattern for all auth pages:**
+
+**BEFORE (Pink Buttons):**
+```tsx
+<Button
+  className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md"
+>
+  Continue
+</Button>
+```
+
+**AFTER (Dynamic Colors):**
+```tsx
+// Add imports at top
+import { useClientConfig } from "../ClientConfigProvider"
+import { getButtonColors } from "@/lib/color-utils"
+
+// Inside component
+const { primaryColor } = useClientConfig()
+const buttonColors = getButtonColors(primaryColor)
+
+// Button with inline styles
+<Button
+  style={{
+    background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+  }}
+  className="w-full text-white font-semibold py-6 rounded-full shadow-md"
+>
+  Continue
+</Button>
+```
+
+**Files to Update (6 pages):**
+1. `/app/login/start/page.tsx` - "Continue" button (line ~148)
+2. `/app/login/wb/page.tsx` - "Continue" button (line ~194)
+3. `/components/signup-form.tsx` - "Create Account" button
+4. `/app/login/forgotpw/page.tsx` - "Send Reset Link" button (line ~200)
+5. `/app/login/resetpw/page.tsx` - "Reset Password" button (line ~301)
+6. `/app/login/welcomeunr/page.tsx` - "Explore Program" button (line ~98)
+
+**Also update other pink elements:**
+- Loading spinners: `text-pink-600` → `style={{ color: primaryColor }}`
+- Focus rings: `focus:border-pink-500` → `style={{ borderColor: buttonColors.focus }}`
+- Text links: `text-pink-600` → `style={{ color: primaryColor }}`
+
+---
+
+### Phase 5: Database Setup
 
 #### Task 3.1: Verify Client Record
 **Action:** Ensure test client has valid branding data
@@ -700,16 +1033,19 @@ WHERE id = 'your-client-uuid';
 ## Success Metrics
 
 ### Before Upgrade
-- ❌ 6 pages with hardcoded branding
-- ❌ Requires code change for new clients
-- ❌ 0 dynamic branding capability
+- ❌ 3 pages with hardcoded branding
+- ⚠️ 3 pages with partial env var solution (incomplete)
+- ❌ Inconsistent patterns across codebase
+- ❌ Requires code change for new clients (env vars)
+- ❌ 0 truly dynamic branding capability
 
 ### After Upgrade
-- ✅ 6 pages with dynamic branding
+- ✅ 6 pages with consistent dynamic branding
 - ✅ Zero code changes for new clients
 - ✅ 100% dynamic branding capability
-- ✅ < 5ms overhead (cached after first fetch)
+- ✅ Single fetch per session (< 5ms overhead after cache)
 - ✅ Secure (internal-only endpoint)
+- ✅ Database-driven (admin can update logo via admin panel)
 
 ---
 
@@ -717,10 +1053,11 @@ WHERE id = 'your-client-uuid';
 
 ### Immediate Actions (This Sprint)
 
-**Phase 1: Backend (15 min)**
+**Phase 1: Backend (20 min)**
 1. ✅ Create backend endpoint (`/api/internal/client-config/route.ts`)
 2. ✅ Add `CLIENT_ID` to `.env.local`
-3. ✅ Test endpoint security (403 on external access)
+3. ✅ Document endpoint in `API_CONTRACTS.md` (see Task 1.3 below)
+4. ✅ Test endpoint security (403 on external access)
 
 **Phase 2: Frontend Setup (20 min)**
 4. ✅ Create server layout (`/app/login/layout.tsx`)
@@ -730,16 +1067,28 @@ WHERE id = 'your-client-uuid';
 6. ✅ Update 3 hardcoded files (start, wb, signup-form)
 7. ✅ Update 3 env var files (forgotpw, resetpw, welcomeunr)
 8. ✅ Verify no hardcoded values or env vars remain
+9. ✅ Fix legal doc paths (see Phase 3.5 below)
 
-**Phase 4: Testing (15 min)**
-9. ✅ Test all 6 auth pages display correct logo
-10. ✅ Verify only 1 API call per session (check Network tab)
-11. ✅ Test fallback behavior (wrong CLIENT_ID)
+**Phase 3.5: Verify Legal Docs (2 min)**
+10. ✅ Verify `/api/clients/fizee/privacy` returns HTML
+11. ✅ Verify `/public/legal/client-fizee/privacy.html` exists
+12. ✅ No code changes needed (Task 1.1 already constructs correct path!)
 
-**Phase 5: Deployment**
-12. ✅ Deploy to staging
-13. ✅ Test staging environment
-14. ✅ Deploy to production
+**Phase 4: Dynamic Button Colors (20 min)**
+13. ✅ Create color utility helper (`/lib/color-utils.ts`)
+14. ✅ Update all pink buttons to use `primaryColor`
+15. ✅ Test with different colors (red, blue, green, orange)
+
+**Phase 5: Testing (15 min)**
+16. ✅ Test all 6 auth pages display correct logo
+17. ✅ Verify only 1 API call per session (check Network tab)
+18. ✅ Test fallback behavior (wrong CLIENT_ID)
+19. ✅ Test button colors match client branding
+
+**Phase 6: Deployment**
+20. ✅ Deploy to staging
+21. ✅ Test staging environment
+22. ✅ Deploy to production
 
 ### Follow-Up Actions (Next Sprint)
 1. ⚠️ Implement admin logo upload (see missing API contract)
