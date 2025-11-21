@@ -5,6 +5,10 @@
 **Date Established:** 2025-01-10
 **Status:** Active - Official Architecture
 
+**Related Documents:**
+- [API_CONTRACTS.md](./API_CONTRACTS.md) - Complete API endpoint specifications and request/response schemas
+- [Loyalty.md](./Loyalty.md) - Business requirements and feature specifications
+
 ---
 
 ## TABLE OF CONTENTS

@@ -71,502 +71,549 @@ export default function MissionsPage() {
     missions: [
     {
       id: "1",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Reach your sales target",
-      currentProgress: 1500,
-      goal: 2000,
-      progressPercentage: 75,
-      remainingValue: 500,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "gift_card",
-      rewardValue: 50,
-      rewardCustomText: null,
-      status: "active" as const,
-      checkpointEnd: "2025-03-15T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: true, // CARD STATE: In Progress
-      enabled: true,
-      redemptions: { status: "claimable" }, // TODO: Replace with API response
+      rewardDescription: "Win a $50 Gift Card!",
+      status: "in_progress",
+      progress: {
+        currentValue: 1500,
+        currentFormatted: "$1,500",
+        targetValue: 2000,
+        targetFormatted: "$2,000",
+        percentage: 75,
+        remainingText: "$500 more to go!",
+        progressText: "$1,500 of $2,000"
+      },
+      deadline: {
+        checkpointEnd: "2025-03-15T23:59:59Z",
+        checkpointEndFormatted: "March 15, 2025",
+        daysRemaining: 23
+      },
+      valueData: { amount: 50 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "1b",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Redeeming your reward",
-      currentProgress: 500,
-      goal: 500,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "gift_card",
-      rewardValue: 100,
-      rewardCustomText: null,
-      status: "completed" as const,
-      checkpointEnd: "2025-03-15T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimed" }, // TODO: Replace with API response - this triggers Redeeming state
+      rewardDescription: "Win a $100 Gift Card!",
+      status: "redeeming",
+      progress: null,
+      deadline: null,
+      valueData: { amount: 100 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "message",
+        message: "We will deliver your reward in up to 72 hours",
+        dates: null
+      }
     },
     {
       id: "2",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Film and post new clips",
-      currentProgress: 8,
-      goal: 15,
-      progressPercentage: 50,
-      remainingValue: 7,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 5,
-      rewardCustomText: null,
-      status: "active" as const,
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: true, // CARD STATE: In Progress
-      enabled: true,
-      redemptions: { status: "claimable" }, // TODO: Replace with API response
+      rewardDescription: "Win +5% commission for 30 days!",
+      status: "in_progress",
+      progress: {
+        currentValue: 8,
+        currentFormatted: "8 videos",
+        targetValue: 15,
+        targetFormatted: "15 videos",
+        percentage: 53,
+        remainingText: "7 more videos to post!",
+        progressText: "8 of 15 videos"
+      },
+      deadline: {
+        checkpointEnd: "2025-03-10T23:59:59Z",
+        checkpointEndFormatted: "March 10, 2025",
+        daysRemaining: 18
+      },
+      valueData: { percent: 5, durationDays: 30 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "2b",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Completed - Ready to schedule",
-      currentProgress: 15,
-      goal: 15,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 5,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Default Schedule
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      rewardDescription: "Win +5% commission for 30 days!",
+      status: "default_schedule",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 5, durationDays: 30 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "3",
-      missionType: "likes" as const,
-      displayName: "Road to Viral",
-      description: "Rack up those likes",
-      currentProgress: 1000,
-      goal: 1000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      missionType: "likes",
+      displayName: "Fan Favorite",
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "gift_card",
-      rewardValue: 25,
-      rewardCustomText: null,
-      status: "completed" as const,
-      checkpointEnd: "2025-02-28T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimable" }, // TODO: Replace with API response
+      rewardDescription: "Win a $25 Gift Card!",
+      status: "default_claim",
+      progress: null,
+      deadline: null,
+      valueData: { amount: 25 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "3b",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Completed - Ready to schedule discount",
-      currentProgress: 3000,
-      goal: 3000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "discount",
-      rewardValue: 15,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Default Schedule (discount)
-      checkpointEnd: "2025-03-20T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      rewardDescription: "Win a Follower Discount of 15% for 1 days!",
+      status: "default_schedule",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 15, durationDays: 1 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "3c",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Scheduled commission boost",
-      currentProgress: 15,
-      goal: 15,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 5,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Scheduled (commission_boost)
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "claimed",
-        scheduledActivationDate: "Jan 25, 2025 at 6:00 PM"
+      rewardDescription: "Win +5% commission for 30 days!",
+      status: "scheduled",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 5, durationDays: 30 },
+      scheduling: {
+        scheduledActivationDate: "2025-01-25",
+        scheduledActivationTime: "18:00:00",
+        scheduledActivationFormatted: "Jan 25, 2025 at 6:00 PM EST",
+        activationDate: null,
+        activationDateFormatted: null,
+        expirationDate: null,
+        expirationDateFormatted: null,
+        durationText: "Active for 30 days"
       },
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "dates",
+        message: null,
+        dates: [
+          { label: "Scheduled", value: "Jan 25, 2025 at 6:00 PM EST" },
+          { label: "Duration", value: "Active for 30 days" }
+        ]
+      }
     },
     {
       id: "3d",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Scheduled discount",
-      currentProgress: 3000,
-      goal: 3000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "discount",
-      rewardValue: 15,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Scheduled (discount)
-      checkpointEnd: "2025-03-20T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "claimed",
-        scheduledActivationDate: "Jan 22, 2025 at 3:30 PM"
+      rewardDescription: "Win a Follower Discount of 15% for 1 days!",
+      status: "scheduled",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 15, durationDays: 1 },
+      scheduling: {
+        scheduledActivationDate: "2025-01-22",
+        scheduledActivationTime: "15:30:00",
+        scheduledActivationFormatted: "Jan 22, 2025 at 3:30 PM EST",
+        activationDate: null,
+        activationDateFormatted: null,
+        expirationDate: null,
+        expirationDateFormatted: null,
+        durationText: "Active for 1 days"
       },
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "dates",
+        message: null,
+        dates: [
+          { label: "Scheduled", value: "Jan 22, 2025 at 3:30 PM EST" },
+          { label: "Duration", value: "Active for 1 days" }
+        ]
+      }
     },
     {
       id: "3e",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Active commission boost",
-      currentProgress: 15,
-      goal: 15,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 10,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Active (commission_boost)
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "claimed"
+      rewardDescription: "Win +10% commission for 30 days!",
+      status: "active",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 10, durationDays: 30 },
+      scheduling: {
+        scheduledActivationDate: "2025-01-15",
+        scheduledActivationTime: "00:00:00",
+        scheduledActivationFormatted: "Jan 15, 2025",
+        activationDate: "2025-01-15T00:00:00Z",
+        activationDateFormatted: "Jan 15, 2025",
+        expirationDate: "2025-02-14T23:59:59Z",
+        expirationDateFormatted: "Feb 14, 2025",
+        durationText: "Active for 30 days"
       },
-      statusDetails: {
-        activationDate: "Jan 15, 2025",
-        expirationDate: "Feb 14, 2025"
-      },
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "dates",
+        message: null,
+        dates: [
+          { label: "Started", value: "Jan 15, 2025" },
+          { label: "Expires", value: "Feb 14, 2025" }
+        ]
+      }
     },
     {
       id: "3f",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Active discount",
-      currentProgress: 3000,
-      goal: 3000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "discount",
-      rewardValue: 20,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Active (discount)
-      checkpointEnd: "2025-03-20T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "fulfilled"
+      rewardDescription: "Win a Follower Discount of 20% for 30 days!",
+      status: "active",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 20, durationDays: 30 },
+      scheduling: {
+        scheduledActivationDate: "2025-01-12",
+        scheduledActivationTime: "00:00:00",
+        scheduledActivationFormatted: "Jan 12, 2025",
+        activationDate: "2025-01-12T00:00:00Z",
+        activationDateFormatted: "Jan 12, 2025",
+        expirationDate: "2025-02-11T23:59:59Z",
+        expirationDateFormatted: "Feb 11, 2025",
+        durationText: "Active for 30 days"
       },
-      statusDetails: {
-        activationDate: "Jan 12, 2025",
-        expirationDate: "Feb 11, 2025"
-      },
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "dates",
+        message: null,
+        dates: [
+          { label: "Started", value: "Jan 12, 2025" },
+          { label: "Expires", value: "Feb 11, 2025" }
+        ]
+      }
     },
     {
       id: "3g",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Pending payment commission boost",
-      currentProgress: 15,
-      goal: 15,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 10,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Pending Payment
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "claimed"
-      },
-      commission_boost_redemption: {
-        boostStatus: "pending_info"
-      },
+      rewardDescription: "Win +10% commission for 30 days!",
+      status: "pending_info",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 10, durationDays: 30 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "message",
+        message: "Setup your payout info",
+        dates: null
+      }
     },
     {
       id: "3h",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Commission boost clearing",
-      currentProgress: 2500,
-      goal: 2500,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "commission_boost",
-      rewardValue: 8,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Clearing
-      checkpointEnd: "2025-03-15T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: {
-        status: "claimed"
-      },
-      commission_boost_redemption: {
-        boostStatus: "pending_payout"
-      },
+      rewardDescription: "Win +8% commission for 30 days!",
+      status: "clearing",
+      progress: null,
+      deadline: null,
+      valueData: { percent: 8, durationDays: 30 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "message",
+        message: "Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.",
+        dates: null
+      }
     },
     {
       id: "3i",
-      missionType: "likes" as const,
-      displayName: "Road to Viral",
-      description: "Completed - Physical gift with size",
-      currentProgress: 5000,
-      goal: 5000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      missionType: "likes",
+      displayName: "Fan Favorite",
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "physical_gift",
-      rewardValue: null,
-      rewardCustomText: "Branded Hoodie",
-      status: "completed" as const, // TEST: Physical gift with size
-      checkpointEnd: "2025-03-01T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimable" },
-      name: "Gift Drop: Branded Hoodie",
-      type: "physical_gift",
+      rewardDescription: "Win a Branded Hoodie!",
+      status: "default_claim",
+      progress: null,
+      deadline: null,
       valueData: {
+        displayText: "Branded Hoodie",
         requiresSize: true,
         sizeCategory: "clothing",
         sizeOptions: ["S", "M", "L", "XL"]
-      }
+      },
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "3j",
-      missionType: "videos" as const,
+      missionType: "videos",
       displayName: "Lights, Camera, Go!",
-      description: "Completed - Physical gift being shipped",
-      currentProgress: 20,
-      goal: 20,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "physical_gift",
-      rewardValue: null,
-      rewardCustomText: "Wireless Earbuds",
-      status: "completed" as const, // TEST: CARD STATE: Redeeming Physical
-      checkpointEnd: "2025-03-05T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimed" },
-      name: "Gift Drop: Wireless Earbuds",
-      type: "physical_gift",
+      rewardDescription: "Win Wireless Earbuds!",
+      status: "redeeming_physical",
+      progress: null,
+      deadline: null,
       valueData: {
+        displayText: "Wireless Earbuds",
         requiresSize: false
       },
-      physical_gift_redemptions: {
-        shippingCity: "Los Angeles"
-      }
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "3k",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "Physical gift being shipped",
-      currentProgress: 3000,
-      goal: 3000,
-      progressPercentage: 100,
-      remainingValue: 0,
+      targetUnit: "dollars",
+      tierEligibility: "tier_3",
       rewardType: "physical_gift",
-      rewardValue: null,
-      rewardCustomText: "Premium Water Bottle",
-      status: "completed" as const, // TEST: CARD STATE: Sending
-      checkpointEnd: "2025-03-10T23:59:59Z",
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimed" },
-      name: "Gift Drop: Premium Water Bottle",
-      type: "physical_gift",
+      rewardDescription: "Win a Premium Water Bottle!",
+      status: "sending",
+      progress: null,
+      deadline: null,
       valueData: {
+        displayText: "Premium Water Bottle",
         requiresSize: false
       },
-      physical_gift_redemptions: {
-        shippingCity: "New York",
-        shippedAt: "2025-01-15T10:30:00Z"
+      scheduling: null,
+      raffleData: null,
+      lockedData: null,
+      flippableCard: {
+        backContentType: "message",
+        message: "Your gift is on its way!",
+        dates: null
       }
     },
     {
       id: "3l",
-      missionType: "sales_dollars" as const,
+      missionType: "sales_dollars",
       displayName: "Sales Sprint",
-      description: "",
-      currentProgress: 0,
-      goal: 10000,
-      progressPercentage: 0,
-      remainingValue: 10000,
+      targetUnit: "dollars",
+      tierEligibility: "tier_4",
       rewardType: "gift_card",
-      rewardValue: 500,
-      rewardCustomText: null,
-      status: "locked" as const, // TEST: CARD STATE: Locked
-      checkpointEnd: "2025-04-01T23:59:59Z",
-      requiredTier: "Gold",
-      raffleEndDate: null,
-      activated: null,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      rewardDescription: "Win a $500 Gift Card!",
+      status: "locked",
+      progress: null,
+      deadline: null,
+      valueData: { amount: 500 },
+      scheduling: null,
+      raffleData: null,
+      lockedData: {
+        requiredTier: "tier_4",
+        requiredTierName: "Platinum",
+        requiredTierColor: "#818CF8",
+        unlockMessage: "Unlock at Platinum",
+        previewFromTier: "tier_3"
+      },
+      flippableCard: null
     },
     {
       id: "4a",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
-      rewardType: "gift",
-      rewardValue: null,
-      rewardCustomText: "iPhone 16 Pro",
-      status: "available" as const, // TEST: CARD STATE: Raffle Available
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: "2025-02-15T23:59:59Z",
-      activated: true,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      targetUnit: "count",
+      tierEligibility: "tier_3",
+      rewardType: "physical_gift",
+      rewardDescription: "Win an iPhone 16 Pro!",
+      status: "raffle_available",
+      progress: null,
+      deadline: null,
+      valueData: {
+        displayText: "iPhone 16 Pro",
+        requiresSize: false
+      },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-02-15T23:59:59Z",
+        raffleEndFormatted: "Feb 15, 2025",
+        daysUntilDraw: 26,
+        isWinner: null,
+        prizeName: "an iPhone 16 Pro"
+      },
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "4b",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
-      rewardType: "gift",
-      rewardValue: null,
-      rewardCustomText: "MacBook Pro",
-      status: "processing" as const, // TEST: CARD STATE: Raffle Processing
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: "2025-01-25T23:59:59Z",
-      activated: true,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      targetUnit: "count",
+      tierEligibility: "tier_3",
+      rewardType: "physical_gift",
+      rewardDescription: "Win a MacBook Pro!",
+      status: "raffle_processing",
+      progress: null,
+      deadline: null,
+      valueData: {
+        displayText: "MacBook Pro",
+        requiresSize: false
+      },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-01-25T23:59:59Z",
+        raffleEndFormatted: "Jan 25, 2025",
+        daysUntilDraw: 5,
+        isWinner: null,
+        prizeName: "a MacBook Pro"
+      },
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "4c",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "physical_gift",
-      rewardValue: null,
-      rewardCustomText: "AirPods Pro",
-      status: "completed" as const, // TEST: CARD STATE: Raffle Claim (physical gift with size)
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: true,
-      enabled: true,
-      redemptions: { status: "claimable" },
-      raffle_participations: { isWinner: true },
-      name: "Gift Drop: AirPods Pro",
-      type: "physical_gift",
+      rewardDescription: "You won AirPods Pro!",
+      status: "raffle_claim",
+      progress: null,
+      deadline: null,
       valueData: {
+        displayText: "AirPods Pro",
         requiresSize: false
-      }
+      },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-01-18T23:59:59Z",
+        raffleEndFormatted: "Jan 18, 2025",
+        daysUntilDraw: 0,
+        isWinner: true,
+        prizeName: "AirPods Pro"
+      },
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "4c2",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
+      targetUnit: "count",
+      tierEligibility: "tier_3",
       rewardType: "gift_card",
-      rewardValue: 100,
-      rewardCustomText: null,
-      status: "completed" as const, // TEST: CARD STATE: Raffle Claim (gift card)
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: true,
-      enabled: true,
-      redemptions: { status: "claimable" },
-      raffle_participations: { isWinner: true },
+      rewardDescription: "You won a $100 Gift Card!",
+      status: "raffle_claim",
+      progress: null,
+      deadline: null,
+      valueData: { amount: 100 },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-01-17T23:59:59Z",
+        raffleEndFormatted: "Jan 17, 2025",
+        daysUntilDraw: 0,
+        isWinner: true,
+        prizeName: "a $100 Gift Card"
+      },
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "4c3",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
-      rewardType: "gift",
-      rewardValue: null,
-      rewardCustomText: "Apple Watch",
-      status: "won" as const, // TEST: CARD STATE: Raffle Won
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: null,
-      activated: true,
-      enabled: true,
-      redemptions: { status: "claimed" },
+      targetUnit: "count",
+      tierEligibility: "tier_3",
+      rewardType: "physical_gift",
+      rewardDescription: "You won an Apple Watch!",
+      status: "raffle_won",
+      progress: null,
+      deadline: null,
+      valueData: {
+        displayText: "Apple Watch",
+        requiresSize: false
+      },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-01-16T23:59:59Z",
+        raffleEndFormatted: "Jan 16, 2025",
+        daysUntilDraw: 0,
+        isWinner: true,
+        prizeName: "an Apple Watch"
+      },
+      lockedData: null,
+      flippableCard: null
     },
     {
       id: "4d",
-      missionType: "raffle" as const,
+      missionType: "raffle",
       displayName: "VIP Raffle",
-      description: "Raffle starts soon",
-      currentProgress: 0,
-      goal: 1,
-      progressPercentage: 0,
-      remainingValue: 0,
-      rewardType: "gift",
-      rewardValue: null,
-      rewardCustomText: "Apple Watch",
-      status: "dormant" as const, // TEST: CARD STATE: Dormant
-      checkpointEnd: null,
-      requiredTier: null,
-      raffleEndDate: "2025-03-01T23:59:59Z",
-      activated: false,
-      enabled: true,
-      redemptions: { status: "claimable" },
+      targetUnit: "count",
+      tierEligibility: "tier_3",
+      rewardType: "physical_gift",
+      rewardDescription: "Win an Apple Watch!",
+      status: "dormant",
+      progress: null,
+      deadline: null,
+      valueData: {
+        displayText: "Apple Watch",
+        requiresSize: false
+      },
+      scheduling: null,
+      raffleData: {
+        raffleEndDate: "2025-03-01T23:59:59Z",
+        raffleEndFormatted: "Mar 1, 2025",
+        daysUntilDraw: 40,
+        isWinner: null,
+        prizeName: "an Apple Watch"
+      },
+      lockedData: null,
+      flippableCard: null
     },
   ]
   }
@@ -577,28 +624,28 @@ export default function MissionsPage() {
     console.log("[v0] Claim mission clicked:", mission.id)
 
     // Route to correct modal based on reward type
-    if (mission.reward_type === "discount") {
+    if (mission.rewardType === "discount") {
       setSelectedMission({
         id: mission.id,
-        percent: mission.reward_value || 0,
-        durationDays: 30, // Default duration for mission discounts
+        percent: mission.valueData?.percent || 0,
+        durationDays: mission.valueData?.durationDays || 30
       })
       setShowDiscountModal(true)
       return
     }
 
-    if (mission.reward_type === "commission_boost") {
+    if (mission.rewardType === "commission_boost") {
       setSelectedMission({
         id: mission.id,
-        percent: mission.reward_value || 0,
-        durationDays: 30, // Default duration for mission commission boosts
+        percent: mission.valueData?.percent || 0,
+        durationDays: mission.valueData?.durationDays || 30
       })
       setShowPayboostModal(true)
       return
     }
 
     // If physical gift type, open physical gift claim modal
-    if (mission.reward_type === "physical_gift") {
+    if (mission.rewardType === "physical_gift") {
       setSelectedPhysicalGift(mission)
       setShowPhysicalGiftModal(true)
       return
@@ -616,7 +663,7 @@ export default function MissionsPage() {
 
     try {
       // TODO: POST /api/missions/:id/claim
-      // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
+      // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
 
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -655,7 +702,7 @@ export default function MissionsPage() {
 
     try {
       // TODO: POST /api/missions/:id/claim
-      // Request body: { scheduled_activation_at: scheduledDate.toISOString() }
+      // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
 
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -729,55 +776,23 @@ export default function MissionsPage() {
     }
   }
 
-  // Calculate days remaining
-  const calculateDaysRemaining = (endDate: string): number => {
-    return Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  }
-
-  // Format remaining amount text based on mission type
-  const getRemainingText = (missionType: string, remainingValue: number): string => {
-    switch (missionType) {
-      case "sales_dollars":
-        return `$${remainingValue.toLocaleString()} more to sell!`
-      case "sales_units":
-        return `${remainingValue.toLocaleString()} more units to sell!`
-      case "videos":
-        return `${remainingValue} more ${remainingValue === 1 ? 'video' : 'videos'} to post!`
-      case "likes":
-        return `${remainingValue.toLocaleString()} more likes!`
-      case "views":
-        return `${remainingValue.toLocaleString()} more views!`
-      default:
-        return `${remainingValue} more!`
-    }
-  }
-
-  // Format reward text based on reward type
-  const getRewardText = (
-    rewardType: string,
-    rewardValue: number | null,
-    rewardCustomText: string | null
-  ): string => {
-    switch (rewardType) {
-      case "gift_card":
-        return `Win a $${rewardValue} Gift Card!`
-      case "commission_boost":
-        return `Win a ${rewardValue}% Commission Boost!`
-      case "discount":
-        return `Win a ${rewardValue}% Follower Discount!`
-      case "physical_gift":
-        return `Win ${rewardCustomText}!`
-      case "gift":
-        return `Win a ${rewardCustomText} Gift!`
-      case "trip":
-        return `Win a ${rewardCustomText}!`
-      default:
-        return "Win a reward!"
-    }
-  }
+  // ✅ REMOVED FORMATTING FUNCTIONS (3 functions, ~45 lines)
+  // Backend now provides all formatted text:
+  // - mission.rewardDescription (replaces getRewardText)
+  // - mission.progress.remainingText (replaces getRemainingText)
+  // - mission.deadline.daysRemaining (replaces calculateDaysRemaining)
 
   // ✅ Backend already filters out: fulfilled, lost, cancelled, and disabled missions
-  // ✅ Backend already sorts by status priority (completed → active → raffle → locked)
+  // ✅ Backend already sorts missions by priority (actionable → status updates → informational):
+  //    1. Featured mission (matches home page)
+  //    2. Actionable raffles (raffle_available, raffle_claim)
+  //    3. Claimable rewards (default_claim, default_schedule)
+  //    4. Pending payment → Clearing → Sending
+  //    5. Active → Scheduled → Redeeming
+  //    6. In progress
+  //    7. Informational raffles (raffle_won, raffle_processing, dormant)
+  //    8. Locked (tier-gated previews)
+  // ✅ First mission in array is ALWAYS the featuredMissionId
   const displayMissions = mockData.missions
 
   return (
@@ -795,127 +810,38 @@ export default function MissionsPage() {
         {/* Mission Cards */}
         <div className="space-y-4">
           {displayMissions.map((mission) => {
-            const isRaffle = mission.mission_type === "raffle"
+            const isRaffle = mission.missionType === "raffle"
 
-            // CARD STATE: Default Claim - Instant rewards (gift_card, spark_ads, experience, physical_gift)
-            const isInstantReward = mission.reward_type === "gift_card" ||
-                                   mission.reward_type === "spark_ads" ||
-                                   mission.reward_type === "experience" ||
-                                   mission.reward_type === "physical_gift"
-
-            // CARD STATE: Redeeming - Instant rewards being processed (non-physical gifts, flippable)
-            // Applies when: reward_type is gift_card/spark_ads/experience AND redemptions.status='claimed'
-            const isRedeeming = (mission.reward_type === "gift_card" ||
-                                mission.reward_type === "spark_ads" ||
-                                mission.reward_type === "experience") &&
-                               mission.status === "completed" &&
-                               (mission as any).redemptions?.status === "claimed"
-
-            // CARD STATE: Redeeming Physical - Physical gifts being shipped (NOT flippable)
-            // Applies when: reward_type='physical_gift' AND redemptions.status='claimed' AND physical_gift_redemptions.shipping_city is set AND shipped_at is NULL
-            const isRedeemingPhysical = mission.reward_type === "physical_gift" &&
-                                       mission.status === "completed" &&
-                                       (mission as any).redemptions?.status === "claimed" &&
-                                       (mission as any).physical_gift_redemptions?.shipping_city &&
-                                       !(mission as any).physical_gift_redemptions?.shipped_at
-
-            // CARD STATE: Sending - Physical gifts shipped (flippable)
-            // Applies when: reward_type='physical_gift' AND physical_gift_redemptions.shipped_at IS NOT NULL
-            const isSending = mission.reward_type === "physical_gift" &&
-                             mission.status === "completed" &&
-                             (mission as any).physical_gift_redemptions?.shipped_at
-
-            // CARD STATE: Locked - Tier-locked missions
-            // Applies when: status='locked' (user's tier < required_tier)
+            // ✅ Backend pre-computes all CARD STATES - just check the status value
+            const isRedeeming = mission.status === "redeeming"
+            const isRedeemingPhysical = mission.status === "redeeming_physical"
+            const isSending = mission.status === "sending"
             const isLocked = mission.status === "locked"
+            const isRaffleAvailable = mission.status === "raffle_available"
+            const isRaffleProcessing = mission.status === "raffle_processing"
+            const isRaffleClaim = mission.status === "raffle_claim"
+            const isRaffleWon = mission.status === "raffle_won"
+            const isDormant = mission.status === "dormant"
+            const isInProgress = mission.status === "in_progress"
+            const isScheduled = mission.status === "scheduled"
+            const isActive = mission.status === "active"
+            const isPendingInfo = mission.status === "pending_info"
+            const isClearing = mission.status === "clearing"
+            const isDefaultClaim = mission.status === "default_claim"
+            const isDefaultSchedule = mission.status === "default_schedule"
 
-            // CARD STATE: Raffle Available - Raffle ready to participate
-            // Applies when: mission_type='raffle' AND status='available'
-            const isRaffleAvailable = isRaffle && mission.status === "available"
-
-            // CARD STATE: Raffle Processing - Waiting for raffle draw
-            // Applies when: mission_type='raffle' AND status='processing'
-            const isRaffleProcessing = isRaffle && mission.status === "processing"
-
-            // CARD STATE: Raffle Claim - Won raffle, needs to claim reward
-            // Applies when: mission_type='raffle' AND redemptions.status='claimable' AND raffle_participations.is_winner=TRUE
-            const isRaffleClaim = isRaffle &&
-                                 (mission as any).redemptions?.status === "claimable" &&
-                                 (mission as any).raffle_participations?.is_winner === true
-
-            // CARD STATE: Raffle Won - Won raffle prize
-            // Applies when: mission_type='raffle' AND status='won'
-            const isRaffleWon = isRaffle && mission.status === "won"
-
-            // CARD STATE: Dormant - Raffle not started yet
-            // Applies when: mission_type='raffle' AND missions.activated='false' AND mission_progress.status='dormant'
-            const isDormant = isRaffle && mission.status === "dormant"
-
-            // CARD STATE: In Progress - Active missions with progress tracking
-            // Applies when: missions.activated='true' AND mission_progress.status='active'
-            const isInProgress = (mission as any).activated === true &&
-                                mission.status === "active"
-
-            // CARD STATE: Default Schedule - Scheduled rewards (commission_boost, discount)
-            // Applies when: reward_type is commission_boost/discount AND status='completed'
-            const isScheduledReward = mission.reward_type === "commission_boost" ||
-                                     mission.reward_type === "discount"
-
-            // CARD STATE: Scheduled - Scheduled rewards that have been claimed and have activation date set
-            // Applies when: reward_type is commission_boost/discount AND redemptions.status='claimed' AND scheduled_activation_date is set
-            const isScheduled = isScheduledReward &&
-                               mission.status === "completed" &&
-                               (mission as any).redemptions?.status === "claimed" &&
-                               (mission as any).redemptions?.scheduled_activation_date
-
-            // CARD STATE: Active - Active rewards currently running
-            // Applies when: reward_type is commission_boost/discount AND redemptions.status='claimed'/'fulfilled' AND statusDetails has activation/expiration dates
-            const isActive = isScheduledReward &&
-                            mission.status === "completed" &&
-                            ((mission as any).redemptions?.status === "claimed" || (mission as any).redemptions?.status === "fulfilled") &&
-                            (mission as any).statusDetails?.activationDate &&
-                            (mission as any).statusDetails?.expirationDate
-
-            // CARD STATE: Pending Payment - Commission boost rewards pending payment info
-            // Applies when: reward_type is commission_boost AND redemptions.status='claimed' AND boost_status='pending_info'
-            const isPendingPayment = mission.reward_type === "commission_boost" &&
-                                     mission.status === "completed" &&
-                                     (mission as any).redemptions?.status === "claimed" &&
-                                     (mission as any).commission_boost_redemption?.boost_status === "pending_info"
-
-            // CARD STATE: Clearing - Commission boost waiting for sales to clear
-            // Applies when: redemptions.status='claimed' AND boost_status='pending_payout'
-            const isClearing = mission.status === "completed" &&
-                              (mission as any).redemptions?.status === "claimed" &&
-                              (mission as any).commission_boost_redemption?.boost_status === "pending_payout"
-
-            // Build reward text
-            let rewardText = ""
-            if (isRaffle) {
-              // For raffles, use reward data (reward_custom_text for physical_gift or reward_value for gift_card)
-              const prizeName = mission.reward_custom_text || `$${mission.reward_value} Gift Card`
-              if (mission.status === "won" || isRaffleClaim) {
-                rewardText = `You won ${prizeName}!`
-              } else if (mission.status === "available" || mission.status === "processing") {
-                rewardText = getRewardText(mission.reward_type, mission.reward_value,
-  mission.reward_custom_text)
-              }
-            } else {
-              // For regular missions, use reward fields
-              rewardText = getRewardText(mission.reward_type, mission.reward_value,
-  mission.reward_custom_text)
-            }
+            // ✅ Use backend's pre-formatted rewardDescription
+            const rewardText = mission.rewardDescription
 
             // Build mission description for special raffle states
-            let missionDescription = mission.description
+            let missionDescription = ""
             if (isRaffle) {
               if (mission.status === "locked") {
-                missionDescription = `Unlock at ${mission.required_tier}`
+                missionDescription = mission.lockedData?.unlockMessage || ""
               } else if (mission.status === "dormant") {
-                missionDescription = `${mission.reward_custom_text} Raffle starts soon`
-              } else if (mission.status === "processing") {
-                const days = calculateDaysRemaining(mission.raffle_end_date!)
-                missionDescription = `${days} days until raffle`
+                missionDescription = `${mission.raffleData?.prizeName} Raffle starts soon`
+              } else if (mission.status === "raffle_processing") {
+                missionDescription = `${mission.raffleData?.daysUntilDraw || 0} days until raffle`
               }
             }
 
@@ -937,7 +863,7 @@ export default function MissionsPage() {
               // CARD STATE: Sending - Green for physical gifts shipped
               isSending && "bg-green-50 border-green-200",
               // CARD STATE: Pending Payment - Amber for commission boost pending payment info
-              isPendingPayment && "bg-amber-50 border-amber-200",
+              isPendingInfo && "bg-amber-50 border-amber-200",
               // CARD STATE: Clearing - Slate for commission boost waiting for sales to clear
               isClearing && "bg-slate-50 border-slate-200",
               // CARD STATE: Scheduled - Grey for scheduled rewards with activation date set
@@ -945,23 +871,19 @@ export default function MissionsPage() {
               // CARD STATE: Active - Green for active rewards currently running
               isActive && "bg-green-50 border-green-200",
               // CARD STATE: Default Claim - Green for completed instant rewards (claimable)
-              (mission.status === "completed" && isInstantReward && !isRedeeming && !isRedeemingPhysical) &&
-                "bg-green-50 border-green-200",
+              isDefaultClaim && "bg-green-50 border-green-200",
               // CARD STATE: Default Schedule - Green for completed scheduled rewards ready to schedule (claimable)
-              (mission.status === "completed" && isScheduledReward && !isScheduled && !isPendingPayment && (mission as any).redemptions?.status === "claimable") &&
-                "bg-green-50 border-green-200",
+              isDefaultSchedule && "bg-green-50 border-green-200",
               // CARD STATE: Raffle Claim - Green background for claimable raffle prizes
               isRaffleClaim && "bg-green-50 border-green-200",
               // CARD STATE: Raffle Won - Green background for won raffle prizes
               isRaffleWon && "bg-green-50 border-green-200",
-              // Other green states (claimed)
-              mission.status === "claimed" && "bg-green-50 border-green-200",
               // CARD STATE: Locked - Slate with reduced opacity for tier-locked missions
               isLocked && "bg-slate-50 border-slate-200 opacity-60",
             )
 
             // CARD STATE: Redeeming, Scheduled, Active, Pending Payment, Clearing, or Sending - Entire card is flippable
-            return isRedeeming || isScheduled || isActive || isPendingPayment || isClearing || isSending ? (
+            return isRedeeming || isScheduled || isActive || isPendingInfo || isClearing || isSending ? (
               <FlippableCardMissions key={mission.id} id={`mission-${mission.id}`}>
                 {({ isFlipped, flip, flipBack }) => (
                   <>
@@ -970,13 +892,13 @@ export default function MissionsPage() {
                       {/* Mission Title with Icon and Info Button */}
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
-                          {getIconForMissionType(mission.mission_type, mission.status)}
+                          {getIconForMissionType(mission.missionType, mission.status)}
                           <h3 className="text-lg font-bold text-slate-900">
                             {isActive
-                              ? mission.reward_type === "commission_boost"
-                                ? `${mission.reward_value}% Commission Boost`
-                                : `${mission.reward_value}% Follower Discount`
-                              : mission.display_name
+                              ? mission.rewardType === "commission_boost"
+                                ? `${mission.valueData?.percent || mission.valueData?.amount}% Commission Boost`
+                                : `${mission.valueData?.percent || mission.valueData?.amount}% Follower Discount`
+                              : mission.displayName
                             }
                           </h3>
                         </div>
@@ -989,15 +911,15 @@ export default function MissionsPage() {
                       )}
                       {isActive && (
                         <p className="text-base text-slate-600 mb-3 font-medium">
-                          {mission.reward_type === "commission_boost"
+                          {mission.rewardType === "commission_boost"
                             ? "Earning extra for every sale!"
                             : "Your fans pay less!"
                           }
                         </p>
                       )}
 
-                      {/* Progress Section - Hide for Active state */}
-                      {!isRaffle && !isActive && (
+                      {/* Progress Section - Only show if progress data exists */}
+                      {!isRaffle && !isActive && mission.progress && (
                         <>
                           {/* Progress Bar */}
                           <div className="mb-3">
@@ -1005,11 +927,11 @@ export default function MissionsPage() {
                               <div className="w-full bg-slate-200 rounded-full h-3 mr-3">
                                 <div
                                   className="bg-blue-600 h-3 rounded-full transition-all duration-500"
-                                  style={{ width: `${mission.progress_percentage}%` }}
+                                  style={{ width: `${mission.progress.percentage}%` }}
                                 />
                               </div>
                               <span className="text-base font-semibold text-slate-900 whitespace-nowrap">
-                                {mission.progress_percentage}%
+                                {mission.progress.percentage}%
                               </span>
                             </div>
                           </div>
@@ -1046,12 +968,12 @@ export default function MissionsPage() {
                         </Button>
                       )}
                       {/* CARD STATE: Pending Payment - Amber "Add Info" button (clickable) */}
-                      {isPendingPayment && (
+                      {isPendingInfo && (
                         <Button
                           onClick={() => {
                             setSelectedPaymentMission({
                               id: mission.id,
-                              name: mission.display_name
+                              name: mission.displayName
                             })
                             setShowPaymentInfoModal(true)
                           }}
@@ -1097,7 +1019,7 @@ export default function MissionsPage() {
                           <div className="flex items-center gap-2 justify-center mb-1">
                             <Calendar className="h-4 w-4 text-purple-500" />
                             <p className="text-sm font-semibold text-purple-700">
-                              {(mission as any).redemptions?.scheduled_activation_date || "Scheduled"}
+                              {mission.scheduling?.scheduledActivationFormatted || "Scheduled"}
                             </p>
                           </div>
                           <p className="text-sm text-slate-600">
@@ -1123,7 +1045,7 @@ export default function MissionsPage() {
                         </div>
                       )}
                       {/* CARD STATE: Pending Payment - Backside with payout setup message */}
-                      {isPendingPayment && (
+                      {isPendingInfo && (
                         <div className="flex items-center gap-2 justify-center">
                           <p className="text-base text-amber-800 font-medium">
                             Setup your payout info
@@ -1156,15 +1078,15 @@ export default function MissionsPage() {
                 {/* Mission Title with Icon and Lock Badge */}
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
-                    {getIconForMissionType(mission.mission_type, mission.status)}
+                    {getIconForMissionType(mission.missionType, mission.status)}
                     <h3 className="text-lg font-bold text-slate-900">
-                      {mission.display_name}
+                      {mission.displayName}
                     </h3>
                   </div>
                   {/* CARD STATE: Locked - Lock badge with required tier */}
                   {isLocked && (
                     <div className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full text-xs font-medium">
-                      🔒 {mission.required_tier}
+                      🔒 {mission.lockedData?.requiredTierName || ""}
                     </div>
                   )}
                 </div>
@@ -1180,8 +1102,7 @@ export default function MissionsPage() {
                 )}
 
                 {/* Progress Section (only for active/completed regular missions) */}
-                {!isRaffle && (mission.status === "active" || mission.status === "completed")
-   && (
+                {!isRaffle && mission.progress !== null && (
                   <>
                     {/* Progress Bar */}
                     <div className="mb-3">
@@ -1190,20 +1111,20 @@ export default function MissionsPage() {
                           <div
                             className="bg-blue-600 h-3 rounded-full transition-all
   duration-500"
-                            style={{ width: `${mission.progress_percentage}%` }}
+                            style={{ width: `${mission.progress.percentage}%` }}
                           />
                         </div>
                         <span className="text-base font-semibold text-slate-900
   whitespace-nowrap">
-                          {mission.progress_percentage}%
+                          {mission.progress.percentage}%
                         </span>
                       </div>
                     </div>
 
                     {/* Remaining Amount Text - Only for active missions */}
-                    {mission.remaining_value > 0 && mission.status === "active" && (
+                    {mission.progress && mission.progress.percentage < 100 && (
                       <p className="text-base font-semibold text-slate-900 mb-3">
-                        {getRemainingText(mission.mission_type, mission.remaining_value)}
+                        {mission.progress.remainingText}
                       </p>
                     )}
                   </>
@@ -1216,7 +1137,7 @@ export default function MissionsPage() {
 
                 {/* Status-specific actions/displays */}
                 {/* CARD STATE: Default Claim - Green "Claim Reward" button for instant rewards */}
-                {mission.status === "completed" && isInstantReward && !isRedeemingPhysical && !isRaffleClaim && (
+                {isDefaultClaim && (
                   <Button
                     onClick={() => handleClaimMission(mission)}
                     className="w-full bg-gradient-to-r from-green-500 to-green-600
@@ -1227,7 +1148,7 @@ export default function MissionsPage() {
                 )}
 
                 {/* CARD STATE: Default Schedule - Green "Schedule Reward" button for scheduled rewards */}
-                {mission.status === "completed" && isScheduledReward && (
+                {isDefaultSchedule && (
                   <Button
                     onClick={() => handleClaimMission(mission)}
                     className="w-full bg-gradient-to-r from-green-500 to-green-600
@@ -1237,7 +1158,7 @@ export default function MissionsPage() {
                   </Button>
                 )}
 
-                {mission.status === "claimed" && (
+                {(isScheduled || isActive) && (
                   <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3
   py-2 rounded-lg text-sm font-medium w-fit">
                     <Loader2 className="h-4 w-4 animate-spin" />

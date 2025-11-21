@@ -360,7 +360,7 @@ Flippable card Date: scheduled_activation_date
 Flippable card duration: Will be active for {{XX}} days (duration_days)
 
 ### Stage 3
-redemptions.status='fulfilled' value_data.coupon_code activated
+redemptions.status='fulfilled' redemptions.fulfilled_at set
 UI = CARD STATE: Active
 
 **Dynamic Elements:**

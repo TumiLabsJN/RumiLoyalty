@@ -16,12 +16,12 @@ import { toast } from "sonner"
 
 interface PhysicalGiftReward {
   id: string
-  name: string
-  type: "physical_gift"
-  value_data: {
-    requires_size?: boolean
-    size_category?: string
-    size_options?: string[]
+  displayName: string
+  rewardType: "physical_gift"
+  valueData: {
+    requiresSize?: boolean
+    sizeCategory?: string
+    sizeOptions?: string[]
   }
 }
 
@@ -40,7 +40,7 @@ export function ClaimPhysicalGiftModal({
   reward,
   onSuccess,
 }: ClaimPhysicalGiftModalProps) {
-  const requiresSize = reward.value_data.requires_size === true
+  const requiresSize = reward.valueData.requiresSize === true
   const [currentStep, setCurrentStep] = useState<ModalStep>(requiresSize ? "size" : "shipping")
   const [selectedSize, setSelectedSize] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -72,8 +72,8 @@ export function ClaimPhysicalGiftModal({
     try {
       // Prepare payload
       const payload = {
-        reward_id: reward.id,
-        ...(requiresSize && { size_value: selectedSize }),
+        rewardId: reward.id,
+        ...(requiresSize && { sizeValue: selectedSize }),
         ...address,
       }
 
@@ -128,12 +128,12 @@ export function ClaimPhysicalGiftModal({
             {currentStep === "size" ? (
               <>
                 Choose your size for{" "}
-                <span className="font-semibold text-slate-900">{reward.name}</span>
+                <span className="font-semibold text-slate-900">{reward.displayName}</span>
               </>
             ) : (
               <>
                 Where should we send your{" "}
-                <span className="font-semibold text-slate-900">{reward.name}</span>?
+                <span className="font-semibold text-slate-900">{reward.displayName}</span>?
               </>
             )}
           </DialogDescription>
@@ -144,11 +144,11 @@ export function ClaimPhysicalGiftModal({
           <div className="space-y-6 py-4">
             <div className="space-y-3">
               <Label className="text-sm font-medium text-slate-700">
-                {reward.value_data.size_category === "shoes" ? "Shoe Size" : "Size"}{" "}
+                {reward.valueData.sizeCategory === "shoes" ? "Shoe Size" : "Size"}{" "}
                 <span className="text-red-500">*</span>
               </Label>
               <div className="grid grid-cols-4 gap-2">
-                {reward.value_data.size_options?.map((size) => (
+                {reward.valueData.sizeOptions?.map((size) => (
                   <Button
                     key={size}
                     type="button"

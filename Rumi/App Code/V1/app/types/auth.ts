@@ -178,3 +178,62 @@ export interface UserStatusResponse {
   redirectTo: string     // Backend-determined route ("/home" or "/login/welcomeunr")
   emailVerified: boolean // Email verification status (for debugging)
 }
+
+// ============================================================================
+// GET /api/auth/onboarding-info
+// ============================================================================
+
+/**
+ * Response from onboarding-info endpoint
+ * Provides client-specific welcome message for first-time users
+ */
+export interface OnboardingInfoResponse {
+  heading: string      // Welcome heading (can include emojis)
+  message: string      // Main onboarding message (can include dynamic dates)
+  submessage: string   // Secondary message (communication channel info)
+  buttonText: string   // CTA button text
+}
+
+// ============================================================================
+// POST /api/auth/forgot-password
+// ============================================================================
+
+/**
+ * Request body for forgot password (Forgot Password page)
+ * User provides email OR handle to receive password reset link
+ */
+export interface ForgotPasswordRequest {
+  identifier: string  // Email OR TikTok handle (user can provide either)
+}
+
+/**
+ * Response from forgot password endpoint
+ * Provides masked email confirmation and expiration time
+ */
+export interface ForgotPasswordResponse {
+  sent: boolean       // Email sent successfully
+  emailHint: string   // Masked email "cr****@example.com"
+  expiresIn: number   // Minutes until token expires (15)
+}
+
+// ============================================================================
+// POST /api/auth/reset-password
+// ============================================================================
+
+/**
+ * Request body for reset password (Reset Password page)
+ * Token from email link + new password
+ */
+export interface ResetPasswordRequest {
+  token: string       // Reset token from URL query parameter
+  newPassword: string // New plaintext password (8-128 chars, validated server-side)
+}
+
+/**
+ * Response from reset password endpoint
+ * Confirms successful password update
+ */
+export interface ResetPasswordResponse {
+  success: boolean
+  message: string  // Success message: "Password updated successfully..."
+}

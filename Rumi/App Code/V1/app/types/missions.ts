@@ -77,7 +77,7 @@ export type MissionStatus =
   | 'redeeming'             // Instant reward being processed
   | 'redeeming_physical'    // Physical gift being shipped
   | 'sending'               // Physical gift shipped
-  | 'pending_payment'       // Commission boost pending payment info
+  | 'pending_info'          // Commission boost pending payment info
   | 'clearing'              // Commission boost waiting for sales to clear
   | 'dormant'               // Raffle not started yet
   | 'raffle_available'      // Raffle ready to participate

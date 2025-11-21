@@ -6,6 +6,7 @@ import { AuthLayout } from "@/components/authlayout"
 import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import type { ResetPasswordRequest, ResetPasswordResponse, AuthErrorResponse } from "@/types/auth"
 
 /**
  * RESET PASSWORD PAGE - Create New Password
@@ -14,16 +15,17 @@ import { useSearchParams } from "next/navigation"
  * URL: /login/resetpw?token=xyz123abc
  *
  * Features:
- * - Token validation on load
+ * - Token extraction from URL
  * - Password strength requirements
  * - Password confirmation match
  * - Show/hide password toggle
  * - Error states (invalid token, weak password, mismatch)
  * - Success redirect to login
  *
- * Backend Integration:
- * - Validate token on mount: GET /api/auth/validate-reset-token?token=xyz
- * - Submit new password: POST /api/auth/reset-password
+ * Security Note:
+ * - Token validation happens on submit (not on mount)
+ * - This prevents enumeration attacks (attackers can't probe if token is valid)
+ * - Industry standard: GitHub, Google, Auth0 all use this approach
  */
 
 export default function ResetPasswordPage() {
@@ -39,62 +41,25 @@ export default function ResetPasswordPage() {
   const [tokenValid, setTokenValid] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
-  const logoUrl = "/images/fizee-logo.png"
-  const privacyPolicyUrl = "/privacy-policy"
+  const logoUrl = process.env.NEXT_PUBLIC_CLIENT_LOGO_URL || "/images/fizee-logo.png"
+  const privacyPolicyUrl = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL || "/privacy-policy"
 
   // ============================================
-  // VALIDATE TOKEN ON MOUNT
+  // CHECK TOKEN EXISTS ON MOUNT
   // ============================================
 
   useEffect(() => {
-    const validateToken = async () => {
-      if (!token) {
-        setTokenValid(false)
-        setErrorMessage("Invalid reset link. Please request a new one.")
-        setIsValidatingToken(false)
-        return
-      }
-
-      try {
-        // TODO: Replace with actual API call
-        // Backend endpoint: GET /api/auth/validate-reset-token?token=xyz
-        // Request: { token: token }
-        //
-        // Backend actions:
-        // 1. Decode JWT token
-        // 2. Check expiration (15 minutes)
-        // 3. Verify token hash exists in password_resets table
-        // 4. Check if token already used (one-time use)
-        //
-        // Success response:
-        // {
-        //   valid: true,
-        //   user_id: "uuid",
-        //   expires_at: "2025-01-15T12:30:00Z"
-        // }
-        //
-        // Error responses:
-        // - { valid: false, error: "Token expired" }
-        // - { valid: false, error: "Token already used" }
-        // - { valid: false, error: "Invalid token" }
-
-        // Simulate API call (remove in production)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        // MOCK: Token is valid
-        setTokenValid(true)
-        setErrorMessage("")
-
-      } catch (error) {
-        console.error("Error validating token:", error)
-        setTokenValid(false)
-        setErrorMessage("Invalid reset link. Please request a new one.")
-      } finally {
-        setIsValidatingToken(false)
-      }
+    // Simple check: does token exist in URL?
+    // Backend will validate token when user submits form (security best practice)
+    if (!token) {
+      setErrorMessage("Invalid or missing reset token. Please request a new reset link.")
+      setTokenValid(false)
+    } else {
+      // Token exists in URL, show form
+      // Don't validate yet (anti-enumeration: don't leak if token is valid/expired)
+      setTokenValid(true)
     }
-
-    validateToken()
+    setIsValidatingToken(false)
   }, [token])
 
   // ============================================
@@ -105,9 +70,7 @@ export default function ResetPasswordPage() {
     if (password.length < 8) {
       return "Password must be at least 8 characters"
     }
-    // Add more rules as needed:
-    // - Must contain uppercase, lowercase, number, special char
-    // - No common passwords
+    // Backend also validates (defense in depth)
     return null
   }
 
@@ -119,7 +82,7 @@ export default function ResetPasswordPage() {
     // Clear previous errors
     setErrorMessage("")
 
-    // Validate password strength
+    // Validate password strength (UI validation)
     const strengthError = validatePasswordStrength(newPassword)
     if (strengthError) {
       setErrorMessage(strengthError)
@@ -132,41 +95,38 @@ export default function ResetPasswordPage() {
       return
     }
 
+    if (!token) {
+      setErrorMessage("Invalid reset token")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      // TODO: Replace with actual API call
-      // Backend endpoint: POST /api/auth/reset-password
-      // Request body:
-      // {
-      //   token: token,
-      //   new_password: newPassword
-      // }
-      //
-      // Backend actions:
-      // 1. Validate token again (double-check)
-      // 2. Hash new password (bcrypt)
-      // 3. Update users.password_hash
-      // 4. Mark token as used (password_resets.used_at = NOW())
-      // 5. Invalidate all user sessions (force re-login)
-      // 6. Send confirmation email
-      //
-      // Success response:
-      // {
-      //   success: true,
-      //   message: "Password reset successfully"
-      // }
+      // API call: POST /api/auth/reset-password
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          newPassword
+        } satisfies ResetPasswordRequest)
+      })
 
-      // Simulate API call (remove in production)
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      if (!response.ok) {
+        const errorData = (await response.json()) as AuthErrorResponse
+        throw new Error(errorData.message || 'Failed to reset password')
+      }
 
-      // Success - redirect to login
-      console.log("Password reset successful")
+      const data = (await response.json()) as ResetPasswordResponse
+
+      // Success - redirect to login with success message
+      console.log('Password reset successful:', data.message)
       window.location.href = "/login/wb?reset=success"
 
-    } catch (error) {
-      console.error("Error resetting password:", error)
-      setErrorMessage("Failed to reset password. Please try again.")
+    } catch (err) {
+      console.error('Reset password failed:', err)
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reset password. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -181,7 +141,7 @@ export default function ResetPasswordPage() {
   }
 
   // ============================================
-  // RENDER VALIDATING STATE
+  // RENDER VALIDATING STATE (token check)
   // ============================================
 
   if (isValidatingToken) {
@@ -189,7 +149,7 @@ export default function ResetPasswordPage() {
       <AuthLayout logoUrl={logoUrl} privacyPolicyUrl={privacyPolicyUrl}>
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="h-12 w-12 text-pink-600 animate-spin mb-4" />
-          <p className="text-slate-600">Validating reset link...</p>
+          <p className="text-slate-600">Loading...</p>
         </div>
       </AuthLayout>
     )
@@ -276,7 +236,9 @@ export default function ResetPasswordPage() {
           <div className="relative">
             <Input
               id="new-password"
+              name="new-password"
               type={showNewPassword ? "text" : "password"}
+              autoComplete="new-password"
               placeholder="Enter new password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -304,7 +266,9 @@ export default function ResetPasswordPage() {
           <div className="relative">
             <Input
               id="confirm-password"
+              name="confirm-password"
               type={showConfirmPassword ? "text" : "password"}
+              autoComplete="new-password"
               placeholder="Confirm new password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

@@ -650,7 +650,7 @@ WHERE tiktok_handle = '@creator_handle';
 
 **Trigger:** Creator visits platform URL for first time (from agency outreach OR word-of-mouth discovery)
 
-**7-Page Authentication Journey:**
+**8-Page Authentication Journey:**
 
 ---
 
@@ -1068,7 +1068,15 @@ Prevents duplicate submissions
 Frontend: Show loading modal
 
 Backend: POST /api/auth/login
-Body: { tiktok_handle, password }
+Body: { handle, password }
+
+Example:
+{
+  "handle": "@creatorpro",
+  "password": "SecurePass123"
+}
+
+Note: Backend queries users.tiktok_handle but API accepts "handle" (camelCase)
 
 Process:
 - Query user by tiktok_handle
@@ -1102,7 +1110,7 @@ Error: Show inline error, clear password
      │                                                 ↓
      │                                         /login/loading
      │                                                 ↓
-     │                                    POST /api/auth/check-recognition
+     │                                    GET /api/auth/user-status
      │                                                 ↓
      │                                         ┌───────┴────────┐
      │                                         ↓                ↓
@@ -1164,7 +1172,7 @@ Error: Show inline error, clear password
 Frontend: Show loading modal "Sending reset link..."
 
 Backend: POST /api/auth/forgot-password
-Body: { tiktok_handle: "@handle" }
+Body: { identifier: "email_or_handle" }
 
 Process:
 1. Look up user by tiktok_handle
@@ -1172,12 +1180,12 @@ Process:
 3. Generate JWT token:
    Payload: { user_id, type: "password_reset", exp: 15min }
 4. Create magic link:
-   https://app.com/auth/reset-password?token=eyJhbG...
+   https://app.com/login/resetpw?token=eyJhbG...
 5. Send email with button/link
-6. Store token hash in password_resets table
+6. Store token hash in password_reset_tokens table
 7. Return masked email
 
-Response: { success: true, email_hint: "cr****@example.com" }
+Response: { sent: true, emailHint: "cr****@example.com", expiresIn: 15 }
 
 Email template:
 - Subject: "Reset Your Password - {Client Name}"
@@ -1210,7 +1218,7 @@ Reset 15-minute expiration
 
 ---
 
-#### **Step 3: Reset Password Page** (`/auth/reset-password?token=xyz`)
+#### **Step 3: Reset Password Page** (`/login/resetpw?token=xyz`)
 
 **Page displays:**
 - "Create New Password" header
@@ -1221,7 +1229,7 @@ Reset 15-minute expiration
 **On submit:**
 ```
 Backend: POST /api/auth/reset-password
-Body: { token: "xyz123abc", new_password }
+Body: { token: "xyz123abc", newPassword: "SecurePass123" }
 
 Validation:
 1. Verify JWT signature
@@ -1237,7 +1245,7 @@ Validation:
 5. If invalid:
    - Return error: "Link expired or invalid"
 
-Success: Route to /home + toast "Password updated successfully"
+Success: Route to /login/wb?reset=success
 Error: Show error, allow new reset request
 ```
 
@@ -2206,7 +2214,7 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
 - CSV format changes
 
 **Recovery Workflow:**
-1. Automation fails at midnight UTC
+1. Automation fails at scheduled time
 2. Admin receives email alert within 15 minutes
 3. Admin downloads CSVs from Cruva manually (2 minutes)
 4. Admin uploads via admin panel (30 seconds)

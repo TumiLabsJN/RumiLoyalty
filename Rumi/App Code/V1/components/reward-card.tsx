@@ -35,7 +35,7 @@
             "h-6 w-6",
             status === "redeeming" && "text-amber-500",
             status === "redeemed" && "text-slate-300",
-            (status === "available" || status === "locked") && "text-slate-400",
+            !["redeeming", "redeemed"].includes(status) && "text-slate-400",
           )}
         />
       )

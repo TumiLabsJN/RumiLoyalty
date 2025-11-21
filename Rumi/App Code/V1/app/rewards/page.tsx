@@ -354,7 +354,7 @@ export default function RewardsPage() {
             name: "Gift Drop: Headphones",
             description: "Headphones",
             displayText: "Premium wireless earbuds",
-            valueData: { requiresSize: false, displayText: "Premium wireless earbuds" },
+            valueData: { requiresSize: false },
             status: "sending",
             canClaim: false,
             isLocked: false,
@@ -453,8 +453,7 @@ export default function RewardsPage() {
             valueData: {
               requiresSize: true,
               sizeCategory: "clothing",
-              sizeOptions: ["S", "M", "L", "XL"],
-              displayText: "Premium branded hoodie"
+              sizeOptions: ["S", "M", "L", "XL"]
             },
             status: "redeeming_physical",
             canClaim: false,
@@ -497,7 +496,7 @@ export default function RewardsPage() {
             name: "Mystery Trip",
             description: "Mystery Trip",
             displayText: "A hidden adventure",
-            valueData: { displayText: "A hidden adventure" },
+            valueData: {},
             status: "claimable",
             canClaim: true,
             isLocked: false,
@@ -628,7 +627,13 @@ export default function RewardsPage() {
        * - preview_from_tier: Tier that can preview this benefit (NULL = only eligible tier sees it)
        */
 
-      // Backend already filters and sorts rewards - just use directly
+      // ✅ Backend already filters and sorts rewards by priority (actionable → status updates → informational):
+      //    1. Pending info (payment method needed)
+      //    2. Claimable (ready to claim)
+      //    3. Clearing → Sending → Active → Scheduled
+      //    4. Redeeming → Redeeming Physical
+      //    5. Limit reached → Locked
+      // ✅ Within same status, sorted by display_order (admin-defined)
       const displayBenefits = rewards;
 
       return (

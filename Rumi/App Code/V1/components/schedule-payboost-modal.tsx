@@ -37,7 +37,7 @@ interface SchedulePayboostModalProps {
  * - Converts to UTC for backend
  *
  * Backend expects: POST /api/benefits/:id/claim
- * Request body: { scheduled_activation_at: ISO8601_timestamp }
+ * Request body: { scheduledActivationAt: ISO8601_timestamp }
  */
 export function SchedulePayboostModal({
   open,

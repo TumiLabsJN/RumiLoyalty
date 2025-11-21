@@ -1295,13 +1295,474 @@ WHERE id = $1;
 
 ---
 
+## Welcome Unrecognized
+
+**Page:** `/app/login/welcomeunr/page.tsx`
+
+### Endpoints
+
+#### GET /api/auth/onboarding-info
+
+**Purpose:** Provide client-specific welcome and onboarding information for first-time users after authentication.
+
+**Route:** `GET /api/auth/onboarding-info`
+
+**Authentication:** Required (session cookie from login or OTP verification)
+
+**Query Parameters:** None
+
+**Request Headers:**
+- Cookie: `auth-token` (HTTP-only session cookie)
+
+**Success Response (200 OK):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| heading | string | Welcome heading (can include emojis) |
+| message | string | Main onboarding message (can include dynamic dates) |
+| submessage | string | Secondary message (communication channel info) |
+| buttonText | string | CTA button text |
+
+**TypeScript Interface:**
+```typescript
+export interface OnboardingInfoResponse {
+  heading: string      // Welcome heading (e.g., "🎉 Welcome! 🎉")
+  message: string      // Main message (e.g., "Our onboarding begins January 27th!")
+  submessage: string   // Secondary message (e.g., "Watch your DMs for details")
+  buttonText: string   // Button CTA (e.g., "Explore Program", "Get Started")
+}
+```
+
+**Example Response (TikTok influencer client):**
+```json
+{
+  "heading": "🎉 Welcome! 🎉",
+  "message": "You're all set! Our onboarding begins this coming Monday.",
+  "submessage": "👀 Watch your DMs for your sample request link.",
+  "buttonText": "Explore Program"
+}
+```
+
+**Example Response (Different client with email onboarding):**
+```json
+{
+  "heading": "Welcome to the Program!",
+  "message": "Your onboarding starts on January 27th, 2025.",
+  "submessage": "Check your email inbox for next steps.",
+  "buttonText": "Get Started"
+}
+```
+
+**Business Logic:**
+
+```sql
+-- Step 1: Get authenticated user from session token
+-- (JWT decode or session lookup from HTTP-only cookie)
+
+-- Step 2: Get user's client_id
+SELECT client_id
+FROM users
+WHERE id = $1;  -- From authenticated session
+
+-- Step 3: Get client-specific onboarding configuration
+-- MVP: Return hardcoded default response (single client)
+-- Future: Query onboarding_messages table by client_id
+
+-- Step 4: Build response with dynamic content
+-- Can include:
+-- - Dynamic dates (next Monday, specific date calculated server-side)
+-- - Client-specific communication channels (DMs, email, SMS)
+-- - Localization (language based on user preference)
+-- - A/B testing variants (randomize and track)
+
+-- Step 5: Return response
+```
+
+**Backend Implementation Notes:**
+
+1. **MVP Implementation (Single Client):**
+   - Hardcode response in backend
+   - Return default onboarding message for all users
+   - Simple JavaScript object returned by endpoint
+
+2. **Future Multi-Client Implementation:**
+   - Create `onboarding_messages` table with client_id foreign key
+   - Schema: `{ id, client_id, heading, message, submessage, button_text, created_at }`
+   - Query: `SELECT * FROM onboarding_messages WHERE client_id = $1`
+
+3. **Dynamic Date Calculation:**
+   - Backend can calculate "next Monday" based on current date
+   - Example: If today is Thursday, return "this coming Monday"
+   - Example: If today is Tuesday, return "next Monday"
+   - Or return specific formatted date: "January 27th, 2025"
+
+4. **Localization (Future):**
+   - Add `language` field to users table or detect from Accept-Language header
+   - Store translations in onboarding_messages table
+   - Return content in user's preferred language
+
+5. **A/B Testing (Future):**
+   - Store multiple variants in database
+   - Randomize which variant is returned
+   - Track conversion rates (which variant leads to more engagement)
+
+6. **Caching:**
+   - Response can be cached per client_id (doesn't change per user)
+   - Cache duration: 1 hour (or until admin updates messaging)
+
+#### Error Responses
+
+**401 Unauthorized - Not Authenticated:**
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Please log in to continue."
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "INTERNAL_ERROR",
+  "message": "Something went wrong. Please try again."
+}
+```
+
+#### Security Notes
+
+- Requires valid session token (HTTP-only cookie)
+- No sensitive data exposed (just UI copy/text)
+- Can be cached per client (onboarding info doesn't change per request)
+- Rate limiting not critical (one-time page load per user session)
+- No PII exposed (only marketing copy)
+
+#### Database Tables Used
+
+**Primary (MVP):**
+- `users` (SchemaFinalv2.md:131-172) - Get user's client_id
+- `clients` (SchemaFinalv2.md:105-128) - Client configuration
+
+**Future (Multi-Client):**
+- `onboarding_messages` (to be created) - Store client-specific onboarding copy
+
+**Fields Referenced:**
+- `users.id` - UUID PRIMARY KEY
+- `users.client_id` - UUID REFERENCES clients(id)
+- `clients.id` - UUID PRIMARY KEY
+- `clients.name` - VARCHAR(255) (for logging/debugging)
+
+---
+
 ## Forgot Password
 
 **Page:** `/app/login/forgotpw/page.tsx`
 
 ### Endpoints
 
-_To be defined_
+#### POST /api/auth/forgot-password
+
+**Purpose:** Generate password reset token and send email with reset link
+
+**Route:** `POST /api/auth/forgot-password`
+
+**Authentication:** None required
+
+**Request Body:**
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| identifier | string | ✅ Yes | Valid email OR handle format | User's email or TikTok handle (user can provide either) |
+
+**TypeScript Interface:**
+```typescript
+export interface ForgotPasswordRequest {
+  identifier: string  // Email OR handle (e.g., "user@example.com" or "@creatorpro")
+}
+```
+
+**Example Request:**
+```json
+{
+  "identifier": "creator@example.com"
+}
+```
+OR
+```json
+{
+  "identifier": "@creatorpro"
+}
+```
+
+**Success Response (200 OK):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| sent | boolean | Email sent successfully (always true on 200) |
+| emailHint | string | Masked email for confirmation (e.g., "cr****@example.com") |
+| expiresIn | number | Minutes until token expires (15) |
+
+**TypeScript Interface:**
+```typescript
+export interface ForgotPasswordResponse {
+  sent: boolean       // Email sent successfully
+  emailHint: string   // Masked email "cr****@example.com"
+  expiresIn: number   // Minutes until token expires (15)
+}
+```
+
+**Example Response:**
+```json
+{
+  "sent": true,
+  "emailHint": "cr****@example.com",
+  "expiresIn": 15
+}
+```
+
+**Business Logic:**
+```sql
+-- 1. Lookup user by email OR handle
+SELECT id, email FROM users
+WHERE email = $1 OR handle = $1
+LIMIT 1;
+
+-- 2. If user not found, still return success (prevent enumeration)
+-- But don't send email
+
+-- 3. If user found, generate secure token
+-- Token format: crypto.randomBytes(32).toString('base64url') (44 chars)
+-- Example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2"
+
+-- 4. Hash token with bcrypt before storing
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+VALUES ($1, $2, NOW() + INTERVAL '15 minutes', NOW());
+
+-- 5. Send email via SendGrid/AWS SES
+-- Email template:
+--   Subject: Reset Your Password - {Client Name}
+--   Body:
+--     Hi @{handle},
+--
+--     Click the link below to reset your password:
+--     [Reset Password Button] → https://app.com/login/resetpw?token={token}
+--
+--     This link expires in 15 minutes.
+--
+--     If you didn't request this, ignore this email.
+
+-- 6. Mask email for response
+-- Example: "creator@example.com" → "cr****@example.com"
+-- Logic: Show first 2 chars + **** + @ + domain
+```
+
+**Error Responses:**
+
+| Status | Error Code | Message | When |
+|--------|-----------|---------|------|
+| 400 | MISSING_IDENTIFIER | Please provide an email or handle. | identifier field missing or empty |
+| 400 | INVALID_IDENTIFIER | Please provide a valid email or handle. | identifier format invalid (not email or handle) |
+| 429 | TOO_MANY_REQUESTS | Too many reset requests. Please try again in 1 hour. | More than 3 requests in 1 hour from same identifier |
+| 500 | EMAIL_SEND_FAILED | Failed to send reset email. Please try again. | Email service error (SendGrid/SES down) |
+
+**Error Response Format:**
+```typescript
+{
+  error: "TOO_MANY_REQUESTS",
+  message: "Too many reset requests. Please try again in 1 hour."
+}
+```
+
+**Security Notes:**
+- **Anti-Enumeration:** Always return success (200) even if user not found (prevents attackers from discovering valid emails/handles)
+- **Rate Limiting:** Max 3 requests per hour per identifier (prevents abuse)
+- **Token Storage:** Token stored as bcrypt hash, not plaintext (prevents token theft if DB compromised)
+- **Token Expiration:** 15 minutes only (reduces attack window)
+- **One-Time Use:** Token marked as used after successful reset (prevents replay attacks)
+- **HTTPS Only:** Reset links must use HTTPS (prevents man-in-the-middle)
+
+**Database Tables Used:**
+
+**Primary (MVP):**
+- `users` (SchemaFinalv2.md:131-172) - Lookup by email or handle
+- `password_reset_tokens` (to be created) - Store token hash and expiration
+
+**Future Table: password_reset_tokens**
+```sql
+CREATE TABLE password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL,      -- bcrypt hashed token
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMP NOT NULL,          -- created_at + 15 minutes
+  used_at TIMESTAMP NULL,                 -- NULL = not used yet
+  ip_address VARCHAR(45) NULL,            -- For security audit log
+  INDEX idx_token_hash (token_hash),
+  INDEX idx_user_id (user_id),
+  INDEX idx_expires_at (expires_at)
+);
+```
+
+**Fields Referenced:**
+- `users.id` - UUID PRIMARY KEY
+- `users.email` - VARCHAR(255) (for lookup and email sending)
+- `users.handle` - VARCHAR(31) UNIQUE (stored as tiktok_handle in DB)
+- `password_reset_tokens.token_hash` - VARCHAR(255) (bcrypt hash)
+- `password_reset_tokens.expires_at` - TIMESTAMP (for validation)
+- `password_reset_tokens.used_at` - TIMESTAMP (for one-time use check)
+
+---
+
+## Reset Password
+
+**Page:** `/app/login/resetpw/page.tsx`
+
+### Endpoints
+
+#### POST /api/auth/reset-password
+
+**Purpose:** Verify reset token and update user's password
+
+**Route:** `POST /api/auth/reset-password`
+
+**Authentication:** None required (token provides authentication)
+
+**Request Body:**
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| token | string | ✅ Yes | 44-char base64url string | Reset token from email link (URL query param) |
+| newPassword | string | ✅ Yes | 8-128 chars | New plaintext password (hashed server-side) |
+
+**TypeScript Interface:**
+```typescript
+export interface ResetPasswordRequest {
+  token: string       // Reset token from URL query parameter
+  newPassword: string // New plaintext password (8-128 chars, validated server-side)
+}
+```
+
+**Example Request:**
+```json
+{
+  "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2",
+  "newPassword": "NewSecureP@ss123"
+}
+```
+
+**Success Response (200 OK):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| success | boolean | Password updated successfully (always true on 200) |
+| message | string | Success message for display to user |
+
+**TypeScript Interface:**
+```typescript
+export interface ResetPasswordResponse {
+  success: boolean
+  message: string  // "Password updated successfully. You can now log in with your new password."
+}
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "message": "Password updated successfully. You can now log in with your new password."
+}
+```
+
+**Business Logic:**
+```sql
+-- 1. Find token in password_reset_tokens table
+SELECT user_id, created_at, used_at, expires_at
+FROM password_reset_tokens
+WHERE token_hash = $1  -- Use bcrypt.compare(token, token_hash)
+LIMIT 1;
+
+-- 2. Validate token
+-- Check: token exists
+-- Check: NOT expired (expires_at > NOW())
+-- Check: NOT used (used_at IS NULL)
+
+-- 3. Validate new password
+-- Length: 8-128 characters
+-- (Optional) Strength: uppercase, lowercase, number, special char
+-- (Optional) Not in common passwords list (rockyou.txt top 10k)
+
+-- 4. Hash new password with bcrypt (rounds=10)
+UPDATE users
+SET
+  password_hash = $1,  -- bcrypt.hash(newPassword, 10)
+  updated_at = NOW()
+WHERE id = $2;
+
+-- 5. Mark token as used (prevent reuse)
+UPDATE password_reset_tokens
+SET used_at = NOW()
+WHERE token_hash = $1;
+
+-- 6. Invalidate all user sessions (force re-login for security)
+DELETE FROM user_sessions WHERE user_id = $1;
+
+-- 7. (Optional) Send confirmation email
+-- "Your password was changed on {date} at {time}"
+-- "If you didn't make this change, contact support immediately."
+```
+
+**Error Responses:**
+
+| Status | Error Code | Message | When |
+|--------|-----------|---------|------|
+| 400 | MISSING_FIELDS | Please provide token and new password. | token or newPassword missing |
+| 400 | INVALID_TOKEN | Invalid or expired reset link. Please request a new one. | Token not found, expired, or already used |
+| 400 | TOKEN_EXPIRED | This reset link has expired. Please request a new one. | Token older than 15 minutes |
+| 400 | TOKEN_USED | This reset link has already been used. Please request a new one. | Token's used_at is not NULL |
+| 400 | WEAK_PASSWORD | Password must be at least 8 characters. | Password too short |
+| 400 | PASSWORD_TOO_COMMON | This password is too common. Please choose a stronger password. | Password in common passwords list |
+| 500 | UPDATE_FAILED | Failed to update password. Please try again. | Database error during update |
+
+**Error Response Format:**
+```typescript
+{
+  error: "INVALID_TOKEN",
+  message: "Invalid or expired reset link. Please request a new one."
+}
+```
+
+**Security Notes:**
+- **Token Validation:** Expiration checked (15 minutes from creation)
+- **One-Time Use:** Token can only be used once (used_at timestamp prevents reuse)
+- **Password Hashing:** Password hashed with bcrypt rounds=10 (industry standard)
+- **Session Invalidation:** All user sessions invalidated after reset (forces re-login on all devices)
+- **Confirmation Email:** User notified of password change (alerts to unauthorized changes)
+- **No Token in Logs:** Token never logged server-side (prevents token theft from logs)
+- **HTTPS Only:** Endpoint must use HTTPS (prevents password interception)
+
+**Database Tables Used:**
+
+**Primary (MVP):**
+- `password_reset_tokens` (to be created) - Validate token hash
+- `users` (SchemaFinalv2.md:131-172) - Update password_hash
+- `user_sessions` (if exists) - Invalidate all sessions
+
+**Fields Referenced:**
+- `password_reset_tokens.token_hash` - VARCHAR(255) (for bcrypt compare)
+- `password_reset_tokens.expires_at` - TIMESTAMP (for expiration check)
+- `password_reset_tokens.used_at` - TIMESTAMP (for one-time use check)
+- `users.password_hash` - VARCHAR(255) (update with new hash)
+- `users.updated_at` - TIMESTAMP (track when password changed)
+
+**Password Requirements:**
+- **Minimum Length:** 8 characters
+- **Maximum Length:** 128 characters
+- **Recommended Strength:** Uppercase + lowercase + number + special char
+- **Common Passwords:** Check against rockyou.txt top 10k (optional but recommended)
+
+**Post-Reset Behavior:**
+- User redirected to `/login/wb` (Welcome Back login page)
+- Success message can be shown via query param: `/login/wb?reset=success`
+- User must log in with new password (all sessions invalidated)
 
 ---
 
@@ -1331,7 +1792,7 @@ interface FeaturedMissionResponse {
   mission: {
     id: string                        // UUID for claim API call
     type: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
-    displayName: string               // Static per mission_type: "Unlock Payday" (sales), "Fan Favorite" (likes), "Road to Viral" (views), "Lights, Camera, Go!" (videos), "VIP Raffle" (raffle)
+    displayName: string               // Static per mission_type: "Sales Sprint" (sales), "Fan Favorite" (likes), "Road to Viral" (views), "Lights, Camera, Go!" (videos), "VIP Raffle" (raffle)
 
     // Progress
     currentProgress: number           // mission_progress.current_value
@@ -1372,7 +1833,7 @@ interface FeaturedMissionResponse {
   "mission": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "type": "sales_dollars",
-    "displayName": "Unlock Payday",
+    "displayName": "Sales Sprint",
     "currentProgress": 300,
     "targetValue": 500,
     "progressPercentage": 60,
@@ -1399,7 +1860,7 @@ interface FeaturedMissionResponse {
   "mission": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "type": "sales_dollars",
-    "displayName": "Unlock Payday",
+    "displayName": "Sales Sprint",
     "currentProgress": 500,
     "targetValue": 500,
     "progressPercentage": 100,
@@ -1443,8 +1904,8 @@ Mission display names are **static** and stored in `missions.display_name`. They
 
 | Mission Type | `display_name` | Example Targets | Notes |
 |--------------|----------------|-----------------|-------|
-| `sales_dollars` | "Unlock Payday" | $500, $1K, $5K | Same name for all sales missions in dollars mode |
-| `sales_units` | "Unlock Payday" | 100, 500, 1000 units | Same name for all sales missions in units mode |
+| `sales_dollars` | "Sales Sprint" | $500, $1K, $5K | Same name for all sales missions in dollars mode |
+| `sales_units` | "Sales Sprint" | 100, 500, 1000 units | Same name for all sales missions in units mode |
 | `likes` | "Fan Favorite" | 5K, 50K, 100K likes | Same name regardless of like count target |
 | `views` | "Road to Viral" | 10K, 100K, 1M views | Same name regardless of view count target |
 | `videos` | "Lights, Camera, Go!" | 10, 20, 50 videos | Same name regardless of video count target |
@@ -1455,8 +1916,8 @@ Mission display names are **static** and stored in `missions.display_name`. They
 // Auto-populate display_name on mission creation
 function getDisplayNameForMissionType(missionType: string): string {
   const displayNameMap = {
-    'sales_dollars': 'Unlock Payday',
-    'sales_units': 'Unlock Payday',
+    'sales_dollars': 'Sales Sprint',
+    'sales_units': 'Sales Sprint',
     'likes': 'Fan Favorite',
     'views': 'Road to Viral',
     'videos': 'Lights, Camera, Go!',
@@ -1468,8 +1929,8 @@ function getDisplayNameForMissionType(missionType: string): string {
 
 #### **Mission Priority (Fallback Order):**
 1. Raffle (VIP Raffle) - **ONLY if activated=true**
-2. Sales Dollars (Unlock Payday)
-3. Sales Units (Unlock Payday)
+2. Sales Dollars (Sales Sprint)
+3. Sales Units (Sales Sprint)
 4. Videos (Lights, Camera, Go!)
 5. Likes (Fan Favorite)
 6. Views (Road to Viral)
@@ -1775,7 +2236,7 @@ interface DashboardResponse {
     "mission": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "type": "sales_dollars",
-      "displayName": "Unlock Payday",
+      "displayName": "Sales Sprint",
       "currentProgress": 300,
       "targetValue": 500,
       "progressPercentage": 60,
@@ -2510,9 +2971,9 @@ interface MissionsPageResponse {
   }
 
   // Featured mission ID (for home page sync)
-  featuredMissionId: string             // ID of highest priority mission
+  featuredMissionId: string             // ID of highest priority mission (always first in missions array)
 
-  // Missions list (sorted by status priority + mission type)
+  // Missions list (sorted by actionable priority - see Sorting Logic below)
   missions: Array<{
     // Core mission data
     id: string                          // UUID from missions.id
@@ -2528,7 +2989,7 @@ interface MissionsPageResponse {
     // PRE-COMPUTED status (backend derives from multiple tables)
     status: 'in_progress' | 'default_claim' | 'default_schedule' |
             'scheduled' | 'active' | 'redeeming' | 'redeeming_physical' | 'sending' |
-            'pending_payment' | 'clearing' |
+            'pending_info' | 'clearing' |
             'dormant' | 'raffle_available' | 'raffle_processing' | 'raffle_claim' | 'raffle_won' |
             'locked'
 
@@ -2610,8 +3071,8 @@ interface MissionsPageResponse {
 
 | mission_type | displayName |
 |--------------|-------------|
-| sales_dollars | "Unlock Payday" |
-| sales_units | "Unlock Payday" |
+| sales_dollars | "Sales Sprint" |
+| sales_units | "Sales Sprint" |
 | videos | "Lights, Camera, Go!" |
 | likes | "Fan Favorite" |
 | views | "Road to Viral" |
@@ -2635,8 +3096,8 @@ interface MissionsPageResponse {
 | Sales | sales_dollars | "$350" | "$500" | "$150 more to go!" |
 | Units | sales_units | "35 units" | "50 units" | "15 more units to go!" |
 | Both | videos | "8 videos" | "15 videos" | "7 more videos to post!" |
-| Both | likes | "800 likes" | "1,000 likes" | "200 more likes!" |
-| Both | views | "25,000 views" | "50,000 views" | "25,000 more views!" |
+| Both | likes | "800 likes" | "1,000 likes" | "200 more likes to go!" |
+| Both | views | "25,000 views" | "50,000 views" | "25,000 more views to go!" |
 
 ### Example Response
 
@@ -2654,7 +3115,7 @@ interface MissionsPageResponse {
     {
       "id": "mission-sales-500",
       "missionType": "sales_dollars",
-      "displayName": "Unlock Payday",
+      "displayName": "Sales Sprint",
       "targetUnit": "dollars",
       "tierEligibility": "tier_3",
       "rewardType": "gift_card",
@@ -2742,7 +3203,7 @@ interface MissionsPageResponse {
     {
       "id": "mission-platinum-exclusive",
       "missionType": "sales_dollars",
-      "displayName": "Unlock Payday",
+      "displayName": "Sales Sprint",
       "targetUnit": "dollars",
       "tierEligibility": "tier_4",
       "rewardType": "gift_card",
@@ -2768,6 +3229,245 @@ interface MissionsPageResponse {
 
 ### Business Logic
 
+#### **Sorting Logic (Backend Sort Order)**
+
+**Missions array is sorted to prioritize actionable items first, then status updates, then informational items:**
+
+**Priority 1 - Featured Mission (Home Page Sync):**
+- The mission matching `featuredMissionId` MUST appear first in the array
+- This ensures missions page and home page show the same mission at the top
+- Featured mission selection follows home page priority (see `GET /api/dashboard/featured-mission`)
+
+**Priority 2 - Actionable Raffle States (Urgent Action Required):**
+- `status='raffle_available'` - Raffle accepting entries (user can participate NOW)
+  - Database condition: `mission.mission_type='raffle'` AND `mission.activated=true` AND `raffle_participation IS NULL`
+- `status='raffle_claim'` - User won raffle, needs to claim prize
+  - Database condition: `raffle_participation.is_winner=true` AND `redemptions.status='claimable'`
+
+**Priority 3 - Claimable Rewards (Action Required):**
+- `status='default_claim'` - Instant rewards ready to claim
+  - Database condition: `mission_progress.status='completed'` AND `redemptions IS NULL` AND `reward.redemption_type='instant'`
+- `status='default_schedule'` - Scheduled rewards ready to claim
+  - Database condition: `mission_progress.status='completed'` AND `redemptions IS NULL` AND `reward.redemption_type='scheduled'`
+
+**Priority 4 - Pending Payment Info (Action Required):**
+- `status='pending_info'` - Commission boost waiting for payment method
+  - Database condition: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='pending_info'`
+
+**Priority 5 - Clearing (Money Processing):**
+- `status='clearing'` - Commission boost in payout clearing period
+  - Database condition: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='pending_payout'`
+
+**Priority 6 - Sending (Physical Gifts Shipped):**
+- `status='sending'` - Physical gift shipped, tracking available
+  - Database condition: `redemptions.status='claimed'` AND `physical_gift_redemptions.shipped_at IS NOT NULL`
+
+**Priority 7 - Active (Currently Running):**
+- `status='active'` - Commission boost or discount currently active
+  - Commission boost: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='active'`
+  - Discount: `redemptions.status='fulfilled'` AND `redemptions.fulfilled_at IS NOT NULL`
+
+**Priority 8 - Scheduled (Future Activation):**
+- `status='scheduled'` - Commission boost or discount scheduled for future
+  - Commission boost: `redemptions.status='claimed'` AND `commission_boost_redemption.scheduled_activation_date IS NOT NULL`
+  - Discount: `redemptions.status='claimed'` AND `redemptions.scheduled_activation_date IS NOT NULL`
+
+**Priority 9 - Redeeming (Processing):**
+- `status='redeeming'` - Instant rewards being processed (gift cards, spark ads, experiences)
+  - Database condition: `redemptions.status='claimed'` AND `reward.type IN ('gift_card', 'spark_ads', 'experience')`
+- `status='redeeming_physical'` - Physical gift claimed, address provided, not yet shipped
+  - Database condition: `redemptions.status='claimed'` AND `physical_gift_redemptions.shipping_city IS NOT NULL` AND `shipped_at IS NULL`
+
+**Priority 10 - In Progress (Making Progress):**
+- `status='in_progress'` - User actively working toward goal
+  - Database condition: `mission_progress.status='active'` AND `current_value < target_value`
+
+**Priority 11 - Informational Raffle States (No Action Required):**
+- `status='raffle_won'` - User claimed raffle prize (informational - shows in history)
+  - Database condition: `raffle_participation.is_winner=true` AND `redemptions.status='claimed'`
+- `status='raffle_processing'` - User entered raffle, waiting for draw (informational)
+  - Database condition: `raffle_participation EXISTS` AND `raffle_participation.is_winner IS NULL`
+- `status='dormant'` - Raffle not yet activated (informational - coming soon)
+  - Database condition: `mission.mission_type='raffle'` AND `mission.activated=false`
+
+**Priority 12 - Locked (Tier-Gated Preview):**
+- `status='locked'` - Mission from higher tier shown as preview
+  - Database condition: `mission.tier_eligibility != user.current_tier` AND `mission.preview_from_tier IS NOT NULL`
+
+**Secondary Sort (within same status priority):**
+- Mission type priority: raffle → sales (based on VIP metric) → videos → likes → views
+
+**Guarantee:** The first mission in the sorted array will ALWAYS be the `featuredMissionId` mission.
+
+---
+
+#### **Flippable Card Population Logic**
+
+**Flippable cards are ONLY populated for specific statuses. Most statuses have `flippableCard: null`.**
+
+**Card 1 - Redeeming (Instant Rewards):**
+- **Conditions:**
+  - `status='redeeming'`
+  - `reward.type IN ('gift_card', 'spark_ads', 'experience')`
+  - `redemptions.status='claimed'`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'message',
+  message: "We will deliver your reward in up to 72 hours",
+  dates: null
+}
+```
+
+**Card 2 - Sending (Physical Gifts Shipped):**
+- **Conditions:**
+  - `status='sending'`
+  - `reward.type='physical_gift'`
+  - `physical_gift_redemptions.shipped_at IS NOT NULL`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'message',
+  message: "Your gift is on its way 🚚",
+  dates: null
+}
+```
+
+**Card 3 - Scheduled (Commission Boost):**
+- **Conditions:**
+  - `status='scheduled'`
+  - `reward.type='commission_boost'`
+  - `redemptions.status='claimed'`
+  - `commission_boost_redemption.scheduled_activation_date IS NOT NULL`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'dates',
+  message: null,
+  dates: [
+    {
+      label: "Scheduled",
+      value: scheduledActivationFormatted  // "Jan 25, 2025 at 6:00 PM"
+    },
+    {
+      label: "Duration",
+      value: durationText  // "Will be active for 30 days"
+    }
+  ]
+}
+```
+
+**Card 4 - Active (Commission Boost):**
+- **Conditions:**
+  - `status='active'`
+  - `reward.type='commission_boost'`
+  - `redemptions.status='claimed'`
+  - `commission_boost_redemption.boost_status='active'`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'dates',
+  message: null,
+  dates: [
+    {
+      label: "Started",
+      value: activationDateFormatted  // "Jan 15, 2025"
+    },
+    {
+      label: "Expires",
+      value: expirationDateFormatted  // "Feb 14, 2025"
+    }
+  ]
+}
+```
+
+**Card 5 - Pending Payment (Commission Boost):**
+- **Conditions:**
+  - `status='pending_info'`
+  - `reward.type='commission_boost'`
+  - `redemptions.status='claimed'`
+  - `commission_boost_redemption.boost_status='pending_info'`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'message',
+  message: "Setup your payout info 💵",
+  dates: null
+}
+```
+
+**Card 6 - Clearing (Commission Boost):**
+- **Conditions:**
+  - `status='clearing'`
+  - `reward.type='commission_boost'`
+  - `redemptions.status='claimed'`
+  - `commission_boost_redemption.boost_status='pending_payout'`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'message',
+  message: "Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.",
+  dates: null
+}
+```
+
+**Card 7 - Scheduled (Discount):**
+- **Conditions:**
+  - `status='scheduled'`
+  - `reward.type='discount'`
+  - `redemptions.status='claimed'`
+  - `redemptions.scheduled_activation_date IS NOT NULL`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'dates',
+  message: null,
+  dates: [
+    {
+      label: "Scheduled",
+      value: scheduledActivationFormatted  // "Jan 25, 2025 at 6:00 PM"
+    },
+    {
+      label: "Duration",
+      value: durationText  // "Will be active for 30 days"
+    }
+  ]
+}
+```
+
+**Card 8 - Active (Discount):**
+- **Conditions:**
+  - `status='active'`
+  - `reward.type='discount'`
+  - `redemptions.status='fulfilled'`
+  - `redemptions.fulfilled_at IS NOT NULL`
+- **Content:**
+```typescript
+flippableCard: {
+  backContentType: 'dates',
+  message: null,
+  dates: [
+    {
+      label: "Started",
+      value: activationDateFormatted  // "Jan 15, 2025"
+    },
+    {
+      label: "Expires",
+      value: expirationDateFormatted  // "Feb 14, 2025"
+    }
+  ]
+}
+```
+
+**All Other Statuses:**
+- `flippableCard: null` for:
+  - `in_progress`, `default_claim`, `default_schedule`
+  - `redeeming_physical` (address provided but not shipped)
+  - All raffle states
+  - `locked`
+
+---
+
 #### **Status Computation (Backend Derives from Multiple Tables)**
 
 **Priority Rank 1 - Completed Missions (Show First):**
@@ -2789,7 +3489,7 @@ if (redemption?.status === 'claimed') {
     switch (boost_redemption.boost_status) {
       case 'scheduled': status = 'scheduled'; break;
       case 'active': status = 'active'; break;
-      case 'pending_info': status = 'pending_payment'; break;
+      case 'pending_info': status = 'pending_info'; break;
       case 'pending_payout': status = 'clearing'; break;
     }
   } else if (reward.type === 'discount') {
@@ -2939,7 +3639,7 @@ function generateProgressText(currentValue, targetValue, missionType, vipMetric)
     currentFormatted: `${currentValue.toLocaleString()} ${metricName}`,
     targetFormatted: `${targetValue.toLocaleString()} ${metricName}`,
     progressText: `${currentValue.toLocaleString()} of ${targetValue.toLocaleString()} ${metricName}`,
-    remainingText: `${(targetValue - currentValue).toLocaleString()} more ${metricName}!`
+    remainingText: `${(targetValue - currentValue).toLocaleString()} more ${metricName} to go!`
   };
 }
 ```
@@ -3142,7 +3842,7 @@ interface MissionHistoryResponse {
     // Mission identity
     id: string
     missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
-    displayName: string             // "Unlock Payday", "VIP Raffle", etc.
+    displayName: string             // "Sales Sprint", "VIP Raffle", etc.
 
     // Status (only concluded or rejected)
     status: 'concluded' | 'rejected_raffle'
@@ -3150,7 +3850,7 @@ interface MissionHistoryResponse {
     // Reward information (focus on what was earned/lost)
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardName: string              // Backend-formatted "$50 Gift Card"
-    rewardSubtitle: string          // Backend-formatted "From: Unlock Payday mission"
+    rewardSubtitle: string          // Backend-formatted "From: Sales Sprint mission"
 
     // Completion timeline
     completedAt: string             // ISO 8601
@@ -3190,7 +3890,7 @@ rewardSubtitle = `From: ${mission.displayName} mission`
 ```
 
 Examples:
-- "From: Unlock Payday mission"
+- "From: Sales Sprint mission"
 - "From: VIP Raffle mission"
 - "From: Lights, Camera, Go! mission"
 
@@ -3208,11 +3908,11 @@ Examples:
     {
       "id": "mission-sales-500",
       "missionType": "sales_dollars",
-      "displayName": "Unlock Payday",
+      "displayName": "Sales Sprint",
       "status": "concluded",
       "rewardType": "gift_card",
       "rewardName": "$50 Gift Card",
-      "rewardSubtitle": "From: Unlock Payday mission",
+      "rewardSubtitle": "From: Sales Sprint mission",
       "completedAt": "2025-01-10T14:30:00Z",
       "completedAtFormatted": "Jan 10, 2025",
       "claimedAt": "2025-01-10T14:35:00Z",
@@ -3368,7 +4068,7 @@ interface RewardsPageResponse {
   // Redemption history count (for "View Redemption History" link)
   redemptionCount: number               // COUNT of status='concluded' redemptions
 
-  // Rewards list (sorted by status priority + display_order)
+  // Rewards list (sorted by actionable priority - see Sorting Logic below)
   rewards: Array<{
     // Core reward data
     id: string                          // UUID from rewards.id
@@ -3701,7 +4401,18 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
 
 #### **Status Computation (Backend Derives from Multiple Tables)**
 
-**Priority Rank 1 - Clearing:**
+**Priority Rank 1 - Pending Info:**
+```typescript
+// Commission boost waiting for payment information
+if (reward.type === 'commission_boost' &&
+    redemption.status === 'claimed' &&
+    boost_redemption.boost_status === 'pending_info') {
+  status = 'pending_info'
+  statusDetails = null  // No additional details needed
+}
+```
+
+**Priority Rank 2 - Clearing:**
 ```typescript
 // Commission boost pending payout (20-day clearing period)
 if (reward.type === 'commission_boost' &&
@@ -3714,7 +4425,7 @@ if (reward.type === 'commission_boost' &&
 }
 ```
 
-**Priority Rank 2 - Sending:**
+**Priority Rank 3 - Sending:**
 ```typescript
 // Physical gift shipped by admin
 if (reward.type === 'physical_gift' &&
@@ -3727,7 +4438,7 @@ if (reward.type === 'physical_gift' &&
 }
 ```
 
-**Priority Rank 2 - Active:**
+**Priority Rank 4 - Active:**
 ```typescript
 // Commission boost currently active
 if (reward.type === 'commission_boost' &&
@@ -3757,7 +4468,7 @@ if (reward.type === 'discount' &&
 }
 ```
 
-**Priority Rank 4 - Scheduled:**
+**Priority Rank 5 - Scheduled:**
 ```typescript
 // Commission boost or discount scheduled for future activation
 if ((reward.type === 'commission_boost' || reward.type === 'discount') &&
@@ -3771,7 +4482,7 @@ if ((reward.type === 'commission_boost' || reward.type === 'discount') &&
 }
 ```
 
-**Priority Rank 5 - Redeeming Physical:**
+**Priority Rank 6 - Redeeming Physical:**
 ```typescript
 // Physical gift claimed, address provided, but not shipped yet
 if (reward.type === 'physical_gift' &&
@@ -3782,7 +4493,7 @@ if (reward.type === 'physical_gift' &&
 }
 ```
 
-**Priority Rank 6 - Redeeming:**
+**Priority Rank 7 - Redeeming:**
 ```typescript
 // Instant rewards (gift_card, spark_ads, experience) claimed but not fulfilled
 if (reward.type IN ('gift_card', 'spark_ads', 'experience') &&
@@ -3791,7 +4502,7 @@ if (reward.type IN ('gift_card', 'spark_ads', 'experience') &&
 }
 ```
 
-**Priority Rank 7 - Claimable:**
+**Priority Rank 8 - Claimable:**
 ```typescript
 // No active claim AND within limits
 if (!hasActiveClaim && usedCount < totalQuantity && tier matches) {
@@ -3800,7 +4511,7 @@ if (!hasActiveClaim && usedCount < totalQuantity && tier matches) {
 }
 ```
 
-**Priority Rank 8 - Limit Reached:**
+**Priority Rank 9 - Limit Reached:**
 ```typescript
 // All uses exhausted (only shows AFTER last reward is concluded)
 if (usedCount >= totalQuantity && allClaimsConcluded) {
@@ -3809,7 +4520,7 @@ if (usedCount >= totalQuantity && allClaimsConcluded) {
 }
 ```
 
-**Priority Rank 9 - Locked:**
+**Priority Rank 10 - Locked:**
 ```typescript
 // Tier requirement not met (preview from higher tier)
 if (reward.tier_eligibility != user.current_tier &&
@@ -3939,25 +4650,60 @@ if (reward.type === 'discount') {
 
 #### **Sorting Logic (Backend Dual-Sort)**
 
+**Rewards array is sorted to prioritize actionable items first, then status updates, then informational items:**
+
+**Priority 1-2: Actionable (Requires User Action)**
+- `pending_info` (1) - Commission boost waiting for payment method (ACTION REQUIRED)
+  - Database condition: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='pending_info'`
+- `claimable` (2) - Ready to claim (ACTION REQUIRED)
+  - Database condition: User has no active redemption AND redemption limit not reached
+
+**Priority 3-6: Status Updates (Active/Processing)**
+- `clearing` (3) - Commission boost payout clearing period
+  - Database condition: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='pending_payout'`
+- `sending` (4) - Physical gift shipped, tracking available
+  - Database condition: `redemptions.status='claimed'` AND `physical_gift_redemptions.shipped_at IS NOT NULL`
+- `active` (5) - Commission boost or discount currently running
+  - Commission boost: `redemptions.status='claimed'` AND `commission_boost_redemption.boost_status='active'`
+  - Discount: `redemptions.status='fulfilled'` AND `redemptions.fulfilled_at IS NOT NULL`
+- `scheduled` (6) - Commission boost or discount scheduled for future activation
+  - Commission boost: `redemptions.status='claimed'` AND `commission_boost_redemption.scheduled_activation_date IS NOT NULL`
+  - Discount: `redemptions.status='claimed'` AND `redemptions.scheduled_activation_date IS NOT NULL`
+
+**Priority 7-8: Processing (Being Fulfilled)**
+- `redeeming` (7) - Instant rewards being processed (gift cards, spark ads, experiences)
+  - Database condition: `redemptions.status='claimed'` AND `reward.type IN ('gift_card', 'spark_ads', 'experience')`
+- `redeeming_physical` (8) - Physical gift claimed, address provided, awaiting shipment
+  - Database condition: `redemptions.status='claimed'` AND `physical_gift_redemptions.shipping_city IS NOT NULL` AND `shipped_at IS NULL`
+
+**Priority 9-10: Informational/Unavailable**
+- `limit_reached` (9) - Redemption limit reached (monthly/one-time cap hit)
+  - Database condition: User has reached `redemption_quantity` limit for this reward
+- `locked` (10) - Tier-gated preview (requires higher tier)
+  - Database condition: `reward.tier_eligibility != user.current_tier` AND `reward.preview_from_tier IS NOT NULL`
+
+**Implementation:**
+
 ```typescript
-// Step 1: Sort by status priority
+// Step 1: Sort by status priority (actionable → status updates → informational)
 const statusPriority = {
-  clearing: 1,
-  sending: 2,
-  active: 2,
-  scheduled: 4,
-  redeeming_physical: 5,
-  redeeming: 6,
-  claimable: 7,
-  limit_reached: 8,
-  locked: 9
+  pending_info: 1,        // Action required
+  claimable: 2,           // Action required
+  clearing: 3,            // Status update
+  sending: 4,             // Status update
+  active: 5,              // Status update
+  scheduled: 6,           // Status update
+  redeeming: 7,           // Processing
+  redeeming_physical: 8,  // Processing
+  limit_reached: 9,       // Informational
+  locked: 10              // Informational
 }
 
-// Step 2: Within same status, sort by display_order (admin-defined)
+// Step 2: Within same status priority, sort by display_order (admin-defined)
 rewards.sort((a, b) => {
   const statusDiff = statusPriority[a.status] - statusPriority[b.status]
   if (statusDiff !== 0) return statusDiff
-  return a.displayOrder - b.displayOrder  // Tiebreaker
+  return a.displayOrder - b.displayOrder  // Tiebreaker: admin-defined order
 })
 ```
 
@@ -4852,7 +5598,7 @@ interface MissionsPageResponse {
   missions: Array<{
     id: string  // mission_progress.id (NOT missions.id - for claim/participate calls)
     missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
-    displayName: string  // Static per mission_type from missions.display_name (e.g., "Unlock Payday", "VIP Raffle")
+    displayName: string  // Static per mission_type from missions.display_name (e.g., "Sales Sprint", "VIP Raffle")
     description: string  // Admin-customized description
 
     // Progress tracking (non-raffle missions)
@@ -5037,7 +5783,7 @@ WHERE mp.user_id = $userId
     {
       "id": "mission-progress-xyz-789",
       "missionType": "sales_dollars",
-      "displayName": "Unlock Payday",
+      "displayName": "Sales Sprint",
       "description": "Reach your sales target",
       "currentProgress": 1500,
       "goal": 2000,

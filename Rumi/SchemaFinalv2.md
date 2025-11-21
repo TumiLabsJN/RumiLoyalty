@@ -211,7 +211,53 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.4 metrics Table - **REMOVED** ❌
+### 1.4 password_reset_tokens Table
+
+**Purpose:** Secure password reset via email magic links
+
+**Current Attributes:**
+- `id` - UUID PRIMARY KEY DEFAULT uuid_generate_v4()
+- `user_id` - UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+- `token_hash` - VARCHAR(255) NOT NULL - Bcrypt hash of reset token (never store plaintext)
+- `created_at` - TIMESTAMP NOT NULL DEFAULT NOW() - When token was generated
+- `expires_at` - TIMESTAMP NOT NULL - Token valid for 15 minutes (created_at + 15 minutes)
+- `used_at` - TIMESTAMP NULLABLE - NULL = not used yet, timestamp = already used (one-time use)
+- `ip_address` - VARCHAR(45) NULLABLE - IP address that requested reset (for security audit log)
+
+**Indexes:**
+- `idx_token_hash` - Fast token lookups during validation (bcrypt compare)
+- `idx_user_id` - User-specific queries (e.g., revoke all tokens for user)
+- `idx_expires_at` - Cleanup job for expired tokens (daily cron)
+
+**Status:** **KEEP** ✅
+
+**Rationale:**
+- Required for password reset flow (POST /api/auth/forgot-password, POST /api/auth/reset-password)
+- One-time use tokens prevent replay attacks (used_at timestamp)
+- 15-minute expiration prevents token theft abuse (short attack window)
+- Similar pattern to otp_codes table (proven security approach)
+- Bcrypt hashing prevents token theft if database compromised
+- Backend implements daily cleanup job for expired tokens (DELETE WHERE expires_at < NOW() - INTERVAL '1 day')
+
+**Security Features:**
+- Token stored as bcrypt hash (even if DB breached, tokens are secure)
+- Expires in 15 minutes (short-lived, reduces attack window)
+- One-time use prevents replay attacks (used_at flag)
+- Anti-enumeration: Always return success even if user not found
+- Rate limiting: Max 3 reset requests per hour per identifier
+
+**Flow:**
+1. User requests reset → backend generates crypto.randomBytes(32) token (44 chars)
+2. Backend hashes token with bcrypt, stores hash in password_reset_tokens table
+3. Backend sends plaintext token in email link: `/login/resetpw?token=abc123xyz`
+4. User clicks link → frontend sends token to backend
+5. Backend validates: bcrypt.compare(token, token_hash), checks expiration, checks used_at
+6. If valid → update users.password_hash, set used_at = NOW()
+7. Token can never be reused (used_at prevents replay)
+
+---
+
+### 1.5 metrics Table - **REMOVED** ❌
 
 **Previous Purpose:** Consolidated user-level aggregates from Cruva affiliates.csv + videos.csv
 
@@ -236,7 +282,7 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.4 videos Table
+### 1.5 videos Table
 
 **Purpose:** Per-video analytics from Cruva CSV (videos.csv) - Each row represents ONE video with its individual metrics
 
@@ -272,7 +318,7 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.5 tiers Table
+### 1.6 tiers Table
 
 **Purpose:** Dynamic tier configuration (3-6 tiers per client, admin-customizable)
 
@@ -303,7 +349,7 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.6 sales_adjustments Table
+### 1.7 sales_adjustments Table
 
 **Purpose:** Manual sales corrections (offline sales, refunds, bonuses)
 
@@ -330,7 +376,7 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.7 tier_checkpoints Table
+### 1.8 tier_checkpoints Table
 
 **Purpose:** Audit trail for tier maintenance evaluations
 
@@ -362,7 +408,7 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
-### 1.8 handle_changes Table
+### 1.9 handle_changes Table
 
 **Purpose:** Audit trail for TikTok handle changes (detect when creator changes handle)
 
