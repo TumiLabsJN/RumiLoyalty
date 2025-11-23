@@ -1,7 +1,12 @@
 # Most IMportant 21/11
 
-## Loyalty.md CLI
-Missing API contracts for logo
+# Preparing Repo for Future Work 
+**Future work means not being able to spend full days coding. You are building a system which will help you "jump back into" coding with "ease".
+
+## Documentation Check
+RewardUIFlow.md <> API_CONTRACTS ✅
+MissionsRewards.xlsx <> API_CONTRACTS ⚠️
+- 
 
 
 ## EXECUTION_PLAN
