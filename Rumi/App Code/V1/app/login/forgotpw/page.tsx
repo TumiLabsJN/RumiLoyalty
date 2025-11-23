@@ -6,6 +6,8 @@ import { AuthLayout } from "@/components/authlayout"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useState } from "react"
 import type { ForgotPasswordRequest, ForgotPasswordResponse, AuthErrorResponse } from "@/types/auth"
+import { useClientConfig } from "../ClientConfigProvider"
+import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
 /**
  * FORGOT PASSWORD PAGE - Password Reset Flow
@@ -31,8 +33,9 @@ export default function ForgotPasswordPage() {
   const [expiresIn, setExpiresIn] = useState<number>(15)
   const [error, setError] = useState<string>("")
 
-  const logoUrl = process.env.NEXT_PUBLIC_CLIENT_LOGO_URL || "/images/fizee-logo.png"
-  const privacyPolicyUrl = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL || "/privacy-policy"
+  // Get client config from context (dynamic branding)
+  const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+  const buttonColors = getButtonColors(primaryColor)
 
   // ============================================
   // SEND RESET LINK
@@ -197,7 +200,16 @@ export default function ForgotPasswordPage() {
           <Button
             onClick={handleSendResetLink}
             disabled={!identifier.trim() || isSending}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+            }}
+            className="w-full text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Send Reset Link
           </Button>

@@ -22,6 +22,8 @@
 5. [Rewards](#rewards)
 6. [Rewards History](#rewards-history)
 7. [Tiers](#tiers)
+8. [Internal/System Endpoints](#internalsystem-endpoints)
+   - [Client Configuration](#get-apiinternalclient-config)
 
 ---
 
@@ -6681,3 +6683,94 @@ WHERE mission_id = $missionId
 - Business logic = Backend only
 
 See [Section 10: Authorization & Security Checklists](#authorization--security-checklists) in ARCHITECTURE.md for implementation details.
+
+---
+
+# Internal/System Endpoints
+
+⚠️ **Security Notice:** These endpoints are internal-only and not accessible from client-side code.
+
+## GET /api/internal/client-config
+
+**Purpose:** Server-side endpoint to fetch client branding configuration for auth pages
+
+**Used By:** `/app/login/layout.tsx` (Server Component only)
+
+**Authentication:** Internal header validation only
+- Requires: `x-internal-request: true` header
+- Client-side requests will receive 403 Forbidden
+
+### Request
+
+```http
+GET /api/internal/client-config
+x-internal-request: true
+```
+
+### Response Schema
+
+```typescript
+interface ClientConfigResponse {
+  logoUrl: string           // Supabase Storage URL or fallback path
+  privacyPolicyUrl: string  // Path to privacy API route
+  clientName: string        // Display name from clients.name
+  primaryColor: string      // Hex color from clients.primary_color
+}
+```
+
+### Example Response
+
+**Success (200 OK):**
+```json
+{
+  "logoUrl": "https://xyz.supabase.co/storage/v1/object/public/client-logos/fizee/logo.png",
+  "privacyPolicyUrl": "/api/clients/fizee/privacy",
+  "clientName": "Fizee Rewards",
+  "primaryColor": "#F59E0B"
+}
+```
+
+**Forbidden (403):**
+```json
+{
+  "error": "Forbidden - Internal endpoint only"
+}
+```
+
+### Backend Logic
+
+```sql
+-- Query Supabase clients table
+SELECT logo_url, name, primary_color
+FROM clients
+WHERE id = $CLIENT_ID;
+
+-- Construct privacy URL from CLIENT_ID env var
+privacyPolicyUrl = `/api/clients/${CLIENT_ID}/privacy`
+```
+
+### Caching
+
+- **Cache-Control:** `public, s-maxage=3600, stale-while-revalidate=7200`
+- **Duration:** 1 hour
+- **Revalidation:** 2 hours stale-while-revalidate
+
+### Error Handling
+
+Returns 200 with fallback values if database query fails (to prevent breaking auth flow):
+
+```json
+{
+  "logoUrl": "/images/fizee-logo.png",
+  "privacyPolicyUrl": "/api/clients/fizee/privacy",
+  "clientName": "Rewards Program",
+  "primaryColor": "#F59E0B"
+}
+```
+
+### Security
+
+- ✅ Server-side only (Next.js layout component)
+- ✅ Header validation prevents client access
+- ✅ No sensitive data exposed in response
+- ✅ Graceful fallback on error (doesn't break auth)

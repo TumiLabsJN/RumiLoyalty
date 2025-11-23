@@ -7,6 +7,8 @@
   import { useRouter } from "next/navigation"
   import { useState, useEffect } from "react"
   import type { LoginRequest, LoginResponse, AuthErrorResponse } from "@/types/auth"
+  import { useClientConfig } from "../ClientConfigProvider"
+  import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
   /**
    * LOGIN PAGE - User Authentication
@@ -52,8 +54,9 @@
     // Form validation: Only password length check
     const isFormValid = password.length >= 8 && handle !== ""
 
-    const logoUrl = "/images/fizee-logo.png"
-    const privacyPolicyUrl = "/privacy-policy"
+    // Get client config from context (dynamic branding)
+    const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+    const buttonColors = getButtonColors(primaryColor)
 
     // ============================================
     // FORM SUBMISSION
@@ -191,7 +194,16 @@
               <Button
                 type="submit"
                 disabled={!isFormValid}
-                className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+                }}
+                className="w-full text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue
               </Button>

@@ -6,6 +6,8 @@ import { AuthLayout } from "@/components/authlayout"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import type { CheckHandleRequest, CheckHandleResponse, AuthErrorResponse } from "@/types/auth"
+import { useClientConfig } from "../ClientConfigProvider"
+import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
   /**
    * LOGIN PAGE - Creator Authentication
@@ -33,6 +35,10 @@ export default function LoginPage() {
   const [handle, setHandle] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Get client config from context (dynamic branding)
+  const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+  const buttonColors = getButtonColors(primaryColor)
 
     // Frontend validation: Remove @ symbol if user types it
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,21 +87,7 @@ export default function LoginPage() {
     }
   }
 
-    // ============================================
-    // DYNAMIC DATA - Replace with backend values
-    // ============================================
-
-    // Dynamic from backend: Client logo URL
-    // Database: clients.logo_url
-    // Example: "/images/client-uuid.png" or "https://cdn.example.com/logo.png"
-    const logoUrl = "/images/fizee-logo.png" // ← MOCK DATA: Replace with real client logo
-
-    // Dynamic from backend: Privacy policy URL per client
-    // Database: clients.privacy_policy_url or construct as `/privacy-policy?client=${client_id}`
-    // Example: "/privacy-policy?client=abc123" or "https://clientdomain.com/privacy"
-    const privacyPolicyUrl = "/privacy-policy" // ← MOCK DATA: Replace with client-specific URL
-
-    return (
+  return (
       <AuthLayout logoUrl={logoUrl} privacyPolicyUrl={privacyPolicyUrl}>
         {/* PAGE-SPECIFIC CONTENT (The "Black Box") */}
 
@@ -141,11 +133,19 @@ export default function LoginPage() {
 
         {/* Continue Button */}
         <div className="space-y-4">
-          {/* Static: Continue button */}
           <Button
             onClick={handleContinue}
             disabled={!handle.trim() || isLoading}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+            }}
+            className="w-full text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? 'Checking...' : 'Continue'}
           </Button>

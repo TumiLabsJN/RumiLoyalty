@@ -3,24 +3,24 @@
 
 ## commission_boost (pay boost)
 ### Stage 1 
-Condition: redemptions.status='available'
+Condition: redemptions.status='claimable'
 
 UI = STATUS BADGE: Default Schedule
 
 **Dynamic elements:**
-'name': `percent + "% Pay Boost"`
+'name': `"+" + percent + "% Pay boost for " + duration_days + " Days"`
 'displayText': `"Higher earnings (" + durationDays + "d)"`
 Number of uses
 Duration of extra commission (30 Days)
 
 
 ### Stage 2
-Condition: redemptions.status='claimed' & redemptions.scheduled_activation_date set
+Condition: redemptions.status='claimed' & scheduled_activation_date IS NOT NULL
 
 UI = STATUS BADGE: Scheduled
 
 **Dynamic Elements:**
-'name': `percent + "% Pay Boost"`
+'name': `"+" + percent + "% Pay boost for " + duration_days + " Days"`
 'displayText': `"Higher earnings (" + durationDays + "d)"`
 Number of uses
 Flippable card Date: scheduled_activation_date
@@ -32,7 +32,7 @@ Condition: redemptions.status='claimed' & commission_boost_redemption.boost_stat
 UI = STATUS BADGE: Active
 
 **Dynamic Elements:**
-'name': `percent + "% Pay Boost"`
+'name': `"+" + percent + "% Pay boost for " + duration_days + " Days"`
 'displayText': `"Higher earnings (" + durationDays + "d)"`
 Number of uses
 Flippable card Date: "Started: MM/DD Time" (scheduled_activation_date)
@@ -45,7 +45,7 @@ Condition: redemptions.status='claimed' & commission_boost_redemption.boost_stat
 UI = STATUS BADGE: Pending payment info
 
 **Dynamic Elements:**
-'name': `percent + "% Pay Boost"`
+'name': `"+" + percent + "% Pay boost for " + duration_days + " Days"`
 'displayText': `"Higher earnings (" + durationDays + "d)"`
 Number of uses
 
@@ -55,7 +55,7 @@ Condition: redemptions.status='claimed' & commission_boost_redemption.boost_stat
 UI = STATUS BADGE: Clearing
 
 **Dynamic Elements:**
-'name': `percent + "% Pay Boost"`
+'name': `"+" + percent + "% Pay boost for " + duration_days + " Days"`
 'displayText': `"Higher earnings (" + durationDays + "d)"`
 Number of uses
 
@@ -71,7 +71,7 @@ We need to ensure we can provide dynamic data it needs
 ### OTHER 2
 Here is the hardcoded name and description:
 
-Name: "Pay Boost: {{XX}}%"
+Name: "+{{XX}}% Pay boost for {{YY}} Days"
 Description: "Higher earnings ({{XX}}d)"
     - "Higher earnings 15d"
 
@@ -106,7 +106,11 @@ Flippable card Date: scheduled_activation_date
 Flippable card duration: Will be active for {{XX}} days (duration_days)
 
 ### Stage 3
-Condition: redemptions.status='claimed' & value_data.coupon_code activated
+Condition: redemptions.status='claimed' &       redemption.status === 'fulfilled' &&
+      redemption.activation_date IS NOT NULL &&
+      redemption.expiration_date IS NOT NULL &&
+      NOW() >= redemption.activation_date &&
+      NOW() <= redemption.expiration_date) {
 
 UI = STATUS BADGE: Active
 
@@ -121,7 +125,7 @@ We need to ensure we can provide dynamic data it needs
 ### OTHER 2
 Here is the hardcoded name and description:
 
-Name: "Deal Boost: {{XX}}%"
+Name: "+{{XX}}% Deal Boost for {{YY}} Days"
 Description: "Follower discount ({{XX}}d)
     - "Follower discount (5d)
 
@@ -141,7 +145,14 @@ Flippable card Date: "Expires: MM/DD Time" (scheduled_activation_date+duration_d
 Applies to the following reward types: gift_card, spark_ads, experience
 
 ### Stage 1 
-Condition: redemptions.status='claimable'
+Condition:   // Mission completed but not claimed yet
+  if (mission_progress.status === 'completed' && redemption === null) {
+    if (reward.redemption_type === 'scheduled') {
+      status = 'default_schedule';
+    } else {
+      status = 'default_claim';  // Gift card, spark_ads, experience, physical_gift
+    }
+  }
 
 UI = STATUS BADGE: Default Claim
 
@@ -265,7 +276,12 @@ Description: VARCHARS(27)
 ## commission_boost
 
 ### Stage 0
-Condition: missions.activated='true' & mission_progress.status='active'
+Condition:   // User making progress toward goal
+  if (mission_progress.status === 'active' &&
+      mission_progress.current_value < mission.target_value) {
+    status = 'in_progress';
+  }
+
 UI = CARD STATE: In Progress
 
 **Dynamic elements:**
@@ -360,7 +376,10 @@ Flippable card Date: scheduled_activation_date
 Flippable card duration: Will be active for {{XX}} days (duration_days)
 
 ### Stage 3
-redemptions.status='fulfilled' redemptions.fulfilled_at set
+  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';
+  }
 UI = CARD STATE: Active
 
 **Dynamic Elements:**
@@ -474,48 +493,47 @@ mission_type='raffle' & missions.activated='false' & mission_progress.status='do
 UI = CARD STATE: Dormant
 
 Mission name: missions.display_name for Raffle which = VIP Raffle
-Reward Description: 
-IF physical_gift: {rewards.value_data displayText} Raffle starts soon.
-IF rest of rewards: From ## Hardcoded Reward descriptions for cards
+Reward Description:
+IF physical_gift or experience: {mission.reward.description} Raffle starts soon.
+IF gift_card or spark_ads: From ## Hardcoded Reward descriptions for cards
+
+**Note:** Backend uses addArticle() function to add grammatical articles ("a", "an") to reward descriptions automatically.
 
 #### Stage 1 - Raffle Available 
 mission_type='raffle missions.activated='true' & mission_progress.status='active'
 UI = CARD STATE: Raffle Available
 
 Mission name: missions.display_name for Raffle which = VIP Raffle
-Reward Description: 
-IF physical_gift: Win {rewards.value_data mdisplayText}!
-IF rest of rewards: From ## Hardcoded Reward descriptions for cards
+Reward Description:
+IF physical_gift or experience: Win {addArticle(mission.reward.description)}!
+IF gift_card: Win a ${mission.reward.value_data.amount} Gift Card!
+IF spark_ads: Win a ${mission.reward.value_data.amount} Ads Boost!
 
-mdisplayText will be for mission display text and its a new JSONB, its purpose is to include "a" "an" .. to fit into hardcode raffle mission
-displayText - Apple Iphone
-mdisplayText - An Apple Iphone
+**Note:** Backend uses addArticle() function to add grammatical articles ("a", "an") to reward descriptions automatically based on vowel/consonant rules.
 
 #### Stage 2 - Raffle Processing
 mission_type='raffle redemptions.status='claimable' & raffle_participations.is_winner=NULL 
 UI = CARD STATE: Raffle Processing
 
 Mission name: Winmissions.display_name for Raffle which = VIP Raffle
-Reward Description: 
-IF physical_gift: Win {rewards.value_data mdisplayText}!
-IF rest of rewards: From ## Hardcoded Reward descriptions for cards
+Reward Description:
+IF physical_gift or experience: Win {addArticle(mission.reward.description)}!
+IF gift_card: Win a ${mission.reward.value_data.amount} Gift Card!
+IF spark_ads: Win a ${mission.reward.value_data.amount} Ads Boost!
 
-mdisplayText will be for mission display text and its a new JSONB, its purpose is to include "a" "an" .. to fit into hardcode raffle mission
-displayText - Apple Iphone
-mdisplayText - An Apple Iphone
+**Note:** Backend uses addArticle() function to add grammatical articles ("a", "an") to reward descriptions automatically based on vowel/consonant rules.
 
 #### STAGE 3 - Raffle Claim
 redemptions.status='claimable' & raffle_participations.is_winner=TRUE
 UI = CARD STATE: Raffle Claim
 
 Mission name: Winmissions.display_name for Raffle which = VIP Raffle
-Reward Description: 
-IF physical_gift: You won {rewards.value_data mdisplayText}!
-IF rest of rewards: From ## Hardcoded Reward Descriptions > ### Raffle Claim
+Reward Description:
+IF physical_gift or experience: You won {addArticle(mission.reward.description)}!
+IF gift_card: You won a ${mission.reward.value_data.amount} Gift Card!
+IF spark_ads: You won a ${mission.reward.value_data.amount} Ads Boost!
 
-mdisplayText will be for mission display text and its a new JSONB, its purpose is to include "a" "an" .. to fit into hardcode raffle mission
-displayText - Apple Iphone
-mdisplayText - An Apple Iphone
+**Note:** Backend uses addArticle() function to add grammatical articles ("a", "an") to reward descriptions automatically based on vowel/consonant rules.
 
 While the raffle mission can be used with any reward type, we will only enable its use for:
 physical_gift, gift_card and experience
@@ -546,13 +564,12 @@ raffle_participations.is_winner='TRUE' & 'status='claimed'
 UI = CARD STATE: Raffle Won
 
 Mission name: Winmissions.display_name for Raffle which = VIP Raffle
-Reward Description: 
-IF physical_gift: You won {rewards.value_data mdisplayText}!
-IF rest of rewards: From ## Hardcoded Reward Descriptions > ### Raffle Claim
+Reward Description:
+IF physical_gift or experience: You won {addArticle(mission.reward.description)}!
+IF gift_card: You won a ${mission.reward.value_data.amount} Gift Card!
+IF spark_ads: You won a ${mission.reward.value_data.amount} Ads Boost!
 
-mdisplayText will be for mission display text and its a new JSONB, its purpose is to include "a" "an" .. to fit into hardcode raffle mission
-displayText - Apple Iphone
-mdisplayText - An Apple Iphone
+**Note:** Backend uses addArticle() function to add grammatical articles ("a", "an") to reward descriptions automatically based on vowel/consonant rules.
 
 ## Hardcoded Reward Descriptions
 Here is the hardcoded name and description for each reward type
@@ -560,8 +577,10 @@ Here is the hardcoded name and description for each reward type
 'gift_card' = "Win a ${XX} Gift Card!
 'spark_ads' = "Win a ${XX} Ads Boost!
 'discount' = "Win a Follower Discount of {XX}% for {y} days"
-'physical_gift' = "Win a {rewards.value_data displayText}"
-'experience' = "Win a {rewards.value_data displayText}
+'physical_gift' = "Win {addArticle(mission.reward.description)}"
+'experience' = "Win {addArticle(mission.reward.description)}"
+
+**Note:** For physical_gift and experience rewards, backend uses mission.reward.description field and applies addArticle() function for grammatical articles.
 
 ### Raffle Claim
 We will need a similar logic to this for the reward name text for The CARD STATE: Raffle Claim:
@@ -570,8 +589,8 @@ When serving `GET /api/rewards`, backend generates `name` and `displayText` fiel
 | Type | name | displayText |
 |------|------|-------------|
 | gift_card | `"$${amount} Gift Card"` | `"Amazon Gift Card"` |
-| commission_boost | `"${percent}% Pay Boost"` | `"Higher earnings (${durationDays}d)"` |
+| commission_boost | `"+${percent}% Pay boost for ${durationDays} Days"` | `"Higher earnings (${durationDays}d)"` |
 | spark_ads | `"$${amount} Ads Boost"` | `"Spark Ads Promo"` |
-| discount | `"${percent}% Deal Boost"` | `"Follower Discount (${durationDays}d)"` |
+| discount | `"+${percent}% Deal Boost for ${durationDays} Days"` | `"Follower Discount (${durationDays}d)"` |
 | physical_gift | `"Gift Drop: ${description}"` | `value_data.display_text \|\| description` |
 | experience | `description` | `value_data.display_text \|\| description` |

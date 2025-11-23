@@ -5,6 +5,8 @@ import { AuthLayout } from "@/components/authlayout"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import type { OnboardingInfoResponse } from "@/types/auth"
+import { useClientConfig } from "../ClientConfigProvider"
+import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
 /**
  * WELCOME UNRECOGNIZED PAGE
@@ -16,8 +18,9 @@ import type { OnboardingInfoResponse } from "@/types/auth"
 export default function WelcomeUnrecognizedPage() {
   const router = useRouter()
 
-  const logoUrl = process.env.NEXT_PUBLIC_CLIENT_LOGO_URL || "/images/fizee-logo.png"
-  const privacyPolicyUrl = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL || "/privacy-policy"
+  // Get client config from context (dynamic branding)
+  const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+  const buttonColors = getButtonColors(primaryColor)
 
   const [onboardingInfo, setOnboardingInfo] = useState<OnboardingInfoResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -54,8 +57,8 @@ export default function WelcomeUnrecognizedPage() {
         // Fallback to default content
         setOnboardingInfo({
           heading: "🎉 Welcome! 🎉",
-          message: "You're all set! Our onboarding begins soon.",
-          submessage: "Watch for updates.",
+          message: "You’re all set! Our onboarding begins this coming Monday.",
+          submessage: "Keep an eye 👀 on your DMs for your sample request link.",
           buttonText: "Explore Program"
         })
       } finally {
@@ -97,7 +100,16 @@ export default function WelcomeUnrecognizedPage() {
           <div className="mt-8 flex justify-center">
             <Button
               onClick={handleExploreProgram}
-              className="w-64 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md"
+              style={{
+                background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+              }}
+              className="w-64 text-white font-semibold py-6 rounded-full shadow-md"
             >
               {onboardingInfo.buttonText}
             </Button>

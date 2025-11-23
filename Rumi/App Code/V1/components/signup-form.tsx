@@ -9,6 +9,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import type { SignupRequest, SignupResponse, AuthErrorResponse, TermsResponse, PrivacyResponse } from "@/types/auth"
+import { useClientConfig } from "../app/login/ClientConfigProvider"
+import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
 interface SignupFormProps {
   terms: TermsResponse
@@ -41,6 +43,10 @@ export function SignupForm({ terms, privacy }: SignupFormProps) {
   // Sheet state
   const [showTerms, setShowTerms] = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
+
+  // Get client config from context (dynamic branding)
+  const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+  const buttonColors = getButtonColors(primaryColor)
 
   // Form validation
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -83,7 +89,7 @@ export function SignupForm({ terms, privacy }: SignupFormProps) {
   }
 
   return (
-    <AuthLayout logoUrl="/images/fizee-logo.png" privacyPolicyUrl="/privacy-policy">
+    <AuthLayout logoUrl={logoUrl} privacyPolicyUrl={privacyPolicyUrl}>
       {/* Header */}
       <div className="text-center space-y-2 mb-8">
         <h1 className="text-lg font-semibold text-slate-900">
@@ -165,7 +171,16 @@ export function SignupForm({ terms, privacy }: SignupFormProps) {
           <Button
             type="submit"
             disabled={!isFormValid || isLoading}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+            }}
+            className="w-full text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? 'Creating Account...' : 'Sign Up'}
           </Button>

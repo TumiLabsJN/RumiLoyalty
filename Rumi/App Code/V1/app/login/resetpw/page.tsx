@@ -7,6 +7,8 @@ import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import type { ResetPasswordRequest, ResetPasswordResponse, AuthErrorResponse } from "@/types/auth"
+import { useClientConfig } from "../ClientConfigProvider"
+import { getButtonColors, adjustBrightness } from "@/lib/color-utils"
 
 /**
  * RESET PASSWORD PAGE - Create New Password
@@ -41,8 +43,9 @@ export default function ResetPasswordPage() {
   const [tokenValid, setTokenValid] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
-  const logoUrl = process.env.NEXT_PUBLIC_CLIENT_LOGO_URL || "/images/fizee-logo.png"
-  const privacyPolicyUrl = process.env.NEXT_PUBLIC_PRIVACY_POLICY_URL || "/privacy-policy"
+  // Get client config from context (dynamic branding)
+  const { logoUrl, privacyPolicyUrl, primaryColor } = useClientConfig()
+  const buttonColors = getButtonColors(primaryColor)
 
   // ============================================
   // CHECK TOKEN EXISTS ON MOUNT
@@ -297,11 +300,20 @@ export default function ResetPasswordPage() {
         )}
 
         {/* Reset Password Button */}
-        <div className="mb-6">
+        <div className="mt-8 mb-6">
           <Button
             onClick={handleResetPassword}
             disabled={!isFormValid || isSubmitting}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.hover}, ${adjustBrightness(primaryColor, -30)})`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = `linear-gradient(to right, ${buttonColors.base}, ${buttonColors.hover})`
+            }}
+            className="w-full text-white font-semibold py-6 rounded-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
