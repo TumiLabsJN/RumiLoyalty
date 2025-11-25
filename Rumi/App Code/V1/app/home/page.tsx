@@ -86,8 +86,8 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-1", type: "gift_card", name: "$25 Amazon Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-2", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-1", type: "gift_card", name: "$25 Amazon Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-2", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
         ],
         totalRewardsCount: 2
       },
@@ -127,10 +127,10 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-3", type: "physical_gift", name: "Wireless Headphones", displayText: "Win a Wireless Headphones", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-4", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-5", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 3 },
-          { id: "reward-6", type: "discount", name: "8% Follower Discount", displayText: "+8% Deal Boost for 30 Days", description: "", valueData: { percent: 8, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 4 },
+          { id: "reward-3", type: "physical_gift", name: "Wireless Headphones", displayText: "Win a Wireless Headphones", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-4", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
+          { id: "reward-5", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
+          { id: "reward-6", type: "discount", name: "8% Follower Discount", displayText: "+8% Deal Boost for 30 Days", description: "", valueData: { percent: 8, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 4 },
         ],
         totalRewardsCount: 4
       },
@@ -170,10 +170,10 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-7", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-8", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-9", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, redemptionQuantity: 2, displayOrder: 3 },
-          { id: "reward-10", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 4 },
+          { id: "reward-7", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-8", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-9", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 3 },
+          { id: "reward-10", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 4 },
         ],
         totalRewardsCount: 6
       },
@@ -213,10 +213,10 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-11", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-12", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-13", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-14", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, redemptionQuantity: 2, displayOrder: 4 },
+          { id: "reward-11", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-12", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-13", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
+          { id: "reward-14", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
         ],
         totalRewardsCount: 6
       },
@@ -256,9 +256,9 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-15", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, redemptionQuantity: 2, displayOrder: 1 },
-          { id: "reward-16", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-17", type: "spark_ads", name: "$100 Ad Boost", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, redemptionQuantity: 3, displayOrder: 3 },
+          { id: "reward-15", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 1 },
+          { id: "reward-16", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-17", type: "spark_ads", name: "$100 Ad Boost", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
         ],
         totalRewardsCount: 3
       },
@@ -298,8 +298,8 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-18", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-19", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, redemptionQuantity: 2, displayOrder: 2 },
+          { id: "reward-18", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-19", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
         ],
         totalRewardsCount: 2
       },
@@ -339,9 +339,9 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-20", type: "spark_ads", name: "$100 Spark Ads Budget", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, redemptionQuantity: 3, displayOrder: 1 },
-          { id: "reward-21", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-22", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 3 },
+          { id: "reward-20", type: "spark_ads", name: "$100 Spark Ads Budget", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 1 },
+          { id: "reward-21", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
+          { id: "reward-22", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
         ],
         totalRewardsCount: 3
       },
@@ -381,9 +381,9 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-23", type: "discount", name: "10% Follower Discount", displayText: "+10% Deal Boost for 30 Days", description: "", valueData: { percent: 10, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-24", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-25", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 3 },
+          { id: "reward-23", type: "discount", name: "10% Follower Discount", displayText: "+10% Deal Boost for 30 Days", description: "", valueData: { percent: 10, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-24", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
+          { id: "reward-25", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
         ],
         totalRewardsCount: 3
       },
@@ -423,10 +423,10 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-26", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-27", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-28", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-29", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, redemptionQuantity: 2, displayOrder: 4 },
+          { id: "reward-26", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-27", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-28", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
+          { id: "reward-29", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
         ],
         totalRewardsCount: 4
       },
@@ -466,8 +466,8 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-30", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-31", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-30", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-31", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
         ],
         totalRewardsCount: 2
       },
@@ -507,9 +507,9 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-32", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-33", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-34", type: "spark_ads", name: "$50 Ad Boost", displayText: "+$50 Ads Boost", description: "", valueData: { amount: 50 }, redemptionQuantity: 1, displayOrder: 3 },
+          { id: "reward-32", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-33", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-34", type: "spark_ads", name: "$50 Ad Boost", displayText: "+$50 Ads Boost", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
         ],
         totalRewardsCount: 3
       },
@@ -549,10 +549,10 @@ export default function Home() {
           emptyStateMessage: null
         },
         currentTierRewards: [
-          { id: "reward-35", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-36", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-37", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-38", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, redemptionQuantity: 2, displayOrder: 4 },
+          { id: "reward-35", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
+          { id: "reward-36", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
+          { id: "reward-37", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
+          { id: "reward-38", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
         ],
         totalRewardsCount: 6
       },

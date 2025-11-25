@@ -80,6 +80,50 @@ Navigation Change in Phase 2:
 
 ## Phase 3
 
+
+### Admin Add Creator manually
+
+**Trigger:** Admin needs to add a creator before they appear in Cruva CSV (soft launch, VIP early access, special partnerships, etc.)
+
+**Steps:**
+1. **Admin accesses form:**
+   - Navigate to Admin Panel → Creators → "Add Creator"
+   - Simple 2-field form displayed
+
+2. **Enter creator data:**
+   - TikTok Handle (e.g., @newcreator) - required
+   - Initial Tier (dropdown displays tier names from `tiers` table, stores `tier_id`) - defaults to tier_1
+
+3. **Validation:**
+   - Handle must start with @
+   - Handle must not already exist in database
+   - Admin authentication verified (requireAdmin)
+
+4. **Create user account:**
+   - Insert to users table:
+     - `tiktok_handle = '@newcreator'`
+     - `email = NULL` (collected when creator activates)
+     - `current_tier = selected tier`
+     - `tier_achieved_at = TODAY`
+   - Success message displayed
+
+5. **Admin notifies creator:**
+   - Admin uses existing DM/SMS workflow to notify creator
+   - Shares platform URL (loyalty.brand.com)
+   - Creator activates account via Flow 3 (Creator First Login)
+
+**Conflict resolution:**
+- If creator later appears in Cruva CSV, daily sync updates user data but preserves manually-set tier
+- Tier only changes during checkpoint evaluation (Flow 6)
+- No duplicate accounts created (tiktok_handle is unique)
+
+**Use cases:**
+- Soft launch with test creators (add 10 creators before public launch)
+- VIP early access (brand partners, top performers)
+- Data lag (creator posted video but not in Cruva yet)
+- Special partnerships (influencer campaigns, brand ambassadors)
+
+
 ### Automated Creator SMS Communication
 
 ### Amazon Gift Card API Integrated
@@ -102,6 +146,18 @@ Watch X Training Content
 ### Enhanced Reward Types
 - 50% Discount on Products
 
+### Privacy and Terms update 
+**For true SaaS**
+  Option A: Database Storage (Recommended)
+
+  Add to SchemaFinalv2.md:
+  -- Add to clients table
+  terms_content TEXT,
+  terms_version VARCHAR(10),
+  terms_last_updated TIMESTAMP,
+  privacy_content TEXT,
+  privacy_version VARCHAR(10),
+  privacy_last_updated TIMESTAMP
 
 ### Codex Audit
 For all of the below, remember you can **ctrl+v your existing repo, and apply all changes in a fresh repo. No need for backwards compatibility or data migration**

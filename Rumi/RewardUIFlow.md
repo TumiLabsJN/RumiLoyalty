@@ -77,7 +77,7 @@ Description: "Higher earnings ({{XX}}d)"
 
 ## discount 
 ### Stage 1 
-Condition: redemptions.status='available'
+Condition: redemptions.status='claimable'
 
 UI = STATUS BADGE: Default Schedule
 

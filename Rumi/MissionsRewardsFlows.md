@@ -11,8 +11,12 @@
 | **2** | User participates | **Manual** | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` | **ROW CREATED:**<br>`is_winner=NULL`<br>`participated_at` set |
 | **3** | Admin picks winner | **Manual** | - | `status='completed'` | **Winner:** `status='claimable'`<br>**Losers:** `status='rejected'`<br>`rejection_reason` set | **Winner:** `is_winner=TRUE`<br>**Losers:** `is_winner=FALSE`<br>`winner_selected_at` set<br>`selected_by` set |
 | **4** | Winner claims | **Manual** | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set | `is_winner=TRUE` |
-| **5** | Admin fulfills | **Manual** | - | `status='completed'` | `status='fulfilled'`<br>`fulfilled_at` set<br>`fulfilled_by` set | `is_winner=TRUE` |
-| **6** | Delivered | **Manual** | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set | `is_winner=TRUE` |
+
+**Important:** Raffle flow ends at Step 4 (winner claims). The `mission_progress.status` remains `'completed'` from Step 2 onwards. Subsequent prize fulfillment steps vary by reward type:
+- **Physical gifts**: `'claimed'` → `'concluded'` (3-state) - See Physical Gift Reward Flow
+- **Gift cards, Spark Ads, Experiences**: `'claimed'` → `'concluded'` (3-state) - See Instant Rewards Flow
+- **Commission boost**: `'claimed'` → `'fulfilled'` → `'concluded'` (4-state) - See Commission Boost Reward Flow
+- **Discount**: `'claimed'` → `'fulfilled'` → `'concluded'` (4-state) - See Discount Reward Flow
 
 ---
 
@@ -31,7 +35,11 @@
 
 ### redemptions (Reward Claim Status)
 - `mission_progress_id` - Links to mission_progress.id (which raffle participation created this redemption)
-- `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded' (winner) OR 'rejected' (loser)
+- `status` - Varies by outcome and prize type:
+  - **Losers:** 'claimable' → 'rejected' (terminal state)
+  - **Winners:** 'claimable' → 'claimed' → (varies by prize type)
+    - **3-state prizes** (physical gift, gift card, spark ads, experience): 'claimed' → 'concluded'
+    - **4-state prizes** (commission boost, discount): 'claimed' → 'fulfilled' → 'concluded'
 - `rejection_reason` - Set for losers: "Raffle entry - not selected as winner"
 
 ### raffle_participations (Sub-State)
@@ -148,8 +156,12 @@ rewards (the prize):
 | **2** | User making progress<br>(Daily cron updates from Cruva CSV) | **Automatic** | `target_value` (goal) | `current_value` incrementing<br>e.g., 0 → 3 → 7 → 10 | - |
 | **3** | User completes mission<br>(current_value >= target_value) | **Automatic** | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type` set (from reward) |
 | **4** | User claims reward | **Manual** | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set |
-| **5** | Admin fulfills (if needed) | **Manual** | - | `status='completed'` | `status='fulfilled'`<br>`fulfilled_at` set<br>`fulfilled_by` set |
-| **6** | Reward complete | **Manual** | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set |
+
+**Important:** Mission flow ends at Step 4 (user claims). The `mission_progress.status` remains `'completed'` from Step 3 onwards. Subsequent reward fulfillment steps vary by reward type and are documented in the reward-specific sections below:
+- **Instant rewards** (gift_card, spark_ads, experience): `'claimed'` → `'concluded'` (3-state)
+- **Physical gifts**: `'claimed'` → `'concluded'` (3-state)
+- **Commission boost**: `'claimed'` → `'fulfilled'` → `'concluded'` (4-state with payment flow)
+- **Discount**: `'claimed'` → `'fulfilled'` → `'concluded'` (4-state with activation)
 
 ---
 
@@ -173,7 +185,11 @@ rewards (the prize):
 
 ### redemptions (Reward Claim Status)
 - `mission_progress_id` - Links to mission_progress.id (which mission completion created this redemption)
-- `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
+- `status` - 'claimable' → 'claimed' → (varies by reward type)
+  - **Note:** After 'claimed', the status flow varies by reward type:
+    - **3-state flow** (instant rewards, physical gifts): 'claimed' → 'concluded'
+    - **4-state flow** (commission boost, discount): 'claimed' → 'fulfilled' → 'concluded'
+  - See individual reward flow sections below for detailed status transitions
 
 ---
 
@@ -321,8 +337,13 @@ for (const mp of missionProgress) {
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` | - |
 | **3a** | User claims (requires_size=false)<br>Shipping modal only | - | `value_data.requires_size=false` | `status='completed'` | `status='claimed'`<br>`claimed_at` set | **ROW CREATED:**<br>`requires_size=false`<br>`size_category=NULL`<br>`size_value=NULL`<br>`shipping_address_line1` set<br>`shipping_city` set<br>`shipping_state` set<br>`shipping_postal_code` set<br>`shipping_info_submitted_at` set |
 | **3b** | User claims (requires_size=true)<br>Size modal → Shipping modal | - | `value_data.requires_size=true`<br>`value_data.size_category` shown<br>`value_data.size_options` shown | `status='completed'` | `status='claimed'`<br>`claimed_at` set | **ROW CREATED:**<br>`requires_size=true`<br>`size_category` set (from reward)<br>`size_value` set (user selected)<br>`size_submitted_at` set<br>`shipping_address_line1` set<br>`shipping_city` set<br>`shipping_state` set<br>`shipping_postal_code` set<br>`shipping_info_submitted_at` set |
-| **4** | Admin ships item | - | - | `status='completed'` | `status='fulfilled'`<br>`fulfilled_at` set<br>`fulfilled_by` set<br>`fulfillment_notes` set | `tracking_number` set<br>`carrier` set<br>`shipped_at` set |
+| **4** | Admin ships item | - | - | `status='completed'` | `status='claimed'` ← **STAYS 'claimed'** | `tracking_number` set<br>`carrier` set<br>`shipped_at` set |
 | **5** | Package delivered | - | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set | `delivered_at` set |
+
+**Important:** The `redemptions.status` field stays `'claimed'` from Step 3 through Step 4. The frontend determines the UI display status by checking `physical_gift_redemption.shipped_at`:
+- **Step 3a/3b** (address submitted, not shipped): `shipped_at IS NULL` → UI shows **"Redeeming Physical"** badge
+- **Step 4** (admin shipped item): `shipped_at IS NOT NULL` → UI shows **"Sending"** badge
+- **Step 5** (delivered): `redemptions.status='concluded'` → Moves to **Rewards History** page
 
 ---
 
@@ -347,7 +368,11 @@ for (const mp of missionProgress) {
 
 #### redemptions (Reward Claim Status)
 - `mission_progress_id` - Links to mission_progress.id (which mission completion created this redemption)
-- `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
+- `status` - 'claimable' → 'claimed' → 'concluded'
+  - **Note:** Physical gifts do NOT use 'fulfilled' status. Status stays 'claimed' from Step 3 through Step 4.
+  - **Frontend UI status** is determined by `physical_gift_redemption.shipped_at`:
+    - `shipped_at IS NULL` → UI shows 'redeeming_physical' (processing order)
+    - `shipped_at IS NOT NULL` → UI shows 'sending' (gift on the way)
 
 #### physical_gift_redemptions (Sub-State: Size + Shipping + Tracking)
 - `requires_size` - Copied from reward config
@@ -376,8 +401,11 @@ for (const mp of missionProgress) {
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` |
 | **3** | User claims | - | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set |
-| **4** | Admin fulfills | - | - | `status='completed'` | `status='fulfilled'`<br>`fulfilled_by` set<br>`fulfillment_notes` set<br>`fulfilled_at` set |
-| **5** | Complete | - | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set |
+| **4** | Admin marks delivered | - | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set |
+
+**Important:** The `redemptions.status` field transitions directly from `'claimed'` to `'concluded'`. Instant rewards do NOT use `'fulfilled'` status. The frontend determines the UI display status:
+- **Step 3** (user claimed): `status='claimed'` → UI shows **"Redeeming"** badge
+- **Step 4** (admin delivered): `status='concluded'` → Moves to **Rewards History** page
 
 ---
 
@@ -401,8 +429,13 @@ for (const mp of missionProgress) {
 
 #### redemptions (Reward Claim Status)
 - `mission_progress_id` - Links to mission_progress.id (which mission completion created this redemption)
-- `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
-- `fulfillment_notes` - Admin notes (gift card code, ad activation confirmation, experience details, etc.)
+- `status` - 'claimable' → 'claimed' → 'concluded'
+  - **Note:** Instant rewards do NOT use 'fulfilled' status (unlike commission_boost/discount which do)
+  - **Frontend UI status** is determined by `redemptions.status`:
+    - `status='claimed'` → UI shows 'redeeming' (being processed)
+    - `status='concluded'` → Moved to Rewards History page
+
+**NOTE:** Instant rewards have NO sub-state table (similar to discount rewards). All status tracking is stored directly in the `redemptions` table. This is simpler than commission_boost (which has `commission_boost_redemptions` sub-table) and physical_gift (which has `physical_gift_redemptions` sub-table).
 
 ---
 ---

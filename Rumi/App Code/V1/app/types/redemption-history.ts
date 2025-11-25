@@ -32,6 +32,7 @@ export interface RedemptionHistoryItem {
   name: string                 // Backend-formatted name (e.g., "$50 Gift Card", "5% Pay Boost")
   description: string          // Backend-formatted displayText
   type: RewardType             // 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+  rewardSource: 'vip_tier' | 'mission'  // From rewards.reward_source
   claimedAt: string            // ISO 8601 timestamp - when user claimed
   concludedAt: string          // ISO 8601 timestamp - when moved to history
   status: 'concluded'          // Always 'concluded' in history (terminal state)

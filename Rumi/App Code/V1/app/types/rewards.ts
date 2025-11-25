@@ -62,6 +62,9 @@ export interface Reward {
 
   // Redemption type (workflow type)
   redemptionType: RedemptionType
+
+  // Reward source (distinguishes VIP tier vs mission rewards)
+  rewardSource: 'vip_tier' | 'mission'
 }
 
 // ============================================================================
@@ -116,6 +119,9 @@ export interface ValueData {
   requiresSize?: boolean
   sizeCategory?: string
   sizeOptions?: string[]
+
+  // For physical_gift, experience
+  displayText?: string       // Client-provided custom text (max 27 chars)
 }
 
 // ============================================================================
@@ -152,13 +158,15 @@ export interface ClaimRewardRequest {
 
   // Shipping information for physical gifts
   shippingInfo?: {
+    firstName: string           // Required - Recipient first name
+    lastName: string            // Required - Recipient last name
     addressLine1: string
     addressLine2?: string
     city: string
     state: string
     postalCode: string
     country: string
-    phone?: string
+    phone: string               // Required - Contact phone for delivery
   }
 }
 

@@ -345,7 +345,8 @@ export default function RewardsPage() {
             displayOrder: 1,
             statusDetails: { clearingDays: 15 },
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           },
           // Status 2: Sending
           {
@@ -366,7 +367,8 @@ export default function RewardsPage() {
             displayOrder: 2,
             statusDetails: { shippingCity: "Los Angeles" },
             redemptionFrequency: "one-time",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // Status 3: Active
           {
@@ -396,7 +398,8 @@ export default function RewardsPage() {
               daysRemaining: 3
             },
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           },
           // Status 4: Pending Info (NEW)
           {
@@ -417,7 +420,8 @@ export default function RewardsPage() {
             displayOrder: 4,
             statusDetails: null,
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           },
           // Status 5: Scheduled
           {
@@ -441,7 +445,8 @@ export default function RewardsPage() {
               scheduledDateRaw: "2025-01-20T23:00:00Z"
             },
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           },
           // Status 6: Redeeming Physical
           {
@@ -466,7 +471,8 @@ export default function RewardsPage() {
             displayOrder: 6,
             statusDetails: null,
             redemptionFrequency: "one-time",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // Status 7: Redeeming
           {
@@ -487,7 +493,8 @@ export default function RewardsPage() {
             displayOrder: 7,
             statusDetails: null,
             redemptionFrequency: "monthly",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // Status 8: Claimable (Experience example)
           {
@@ -508,7 +515,8 @@ export default function RewardsPage() {
             displayOrder: 8,
             statusDetails: null,
             redemptionFrequency: "one-time",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // Status 9: Limit Reached
           {
@@ -529,7 +537,8 @@ export default function RewardsPage() {
             displayOrder: 9,
             statusDetails: null,
             redemptionFrequency: "one-time",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // Status 10: Locked
           {
@@ -550,7 +559,8 @@ export default function RewardsPage() {
             displayOrder: 10,
             statusDetails: null,
             redemptionFrequency: "monthly",
-            redemptionType: "instant"
+            redemptionType: "instant",
+            rewardSource: "vip_tier"
           },
           // TEST 1: Discount - Claimable (opens schedule discount modal)
           {
@@ -576,7 +586,8 @@ export default function RewardsPage() {
             displayOrder: 11,
             statusDetails: null,
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           },
           // TEST 2: Commission Boost - Claimable (opens schedule payboost modal)
           {
@@ -597,7 +608,8 @@ export default function RewardsPage() {
             displayOrder: 12,
             statusDetails: null,
             redemptionFrequency: "monthly",
-            redemptionType: "scheduled"
+            redemptionType: "scheduled",
+            rewardSource: "vip_tier"
           }
         ]
       };

@@ -17,6 +17,8 @@ const US_STATES = [
 ]
 
 export interface ShippingAddress {
+  shipping_recipient_first_name: string
+  shipping_recipient_last_name: string
   shipping_address_line1: string
   shipping_address_line2: string
   shipping_city: string
@@ -27,6 +29,8 @@ export interface ShippingAddress {
 }
 
 interface ValidationErrors {
+  shipping_recipient_first_name?: string
+  shipping_recipient_last_name?: string
   shipping_address_line1?: string
   shipping_city?: string
   shipping_state?: string
@@ -53,6 +57,8 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
   const firstInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState<ShippingAddress>({
+    shipping_recipient_first_name: initialData?.shipping_recipient_first_name || "",
+    shipping_recipient_last_name: initialData?.shipping_recipient_last_name || "",
     shipping_address_line1: initialData?.shipping_address_line1 || "",
     shipping_address_line2: initialData?.shipping_address_line2 || "",
     shipping_city: initialData?.shipping_city || "",
@@ -73,6 +79,18 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
   const validateField = (name: keyof ShippingAddress, value: string): string | undefined => {
     switch (name) {
+      case "shipping_recipient_first_name":
+        if (!value.trim()) return "First name is required"
+        if (value.length > 100) return "First name must be 100 characters or less"
+        if (!/^[a-zA-Z\s\-'.]+$/.test(value)) return "First name contains invalid characters"
+        return undefined
+
+      case "shipping_recipient_last_name":
+        if (!value.trim()) return "Last name is required"
+        if (value.length > 100) return "Last name must be 100 characters or less"
+        if (!/^[a-zA-Z\s\-'.]+$/.test(value)) return "Last name contains invalid characters"
+        return undefined
+
       case "shipping_address_line1":
         if (!value.trim()) return "Street address is required"
         if (value.length > 255) return "Address must be 255 characters or less"
@@ -142,6 +160,8 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
     // Validate all required fields
     const requiredFields: (keyof ShippingAddress)[] = [
+      "shipping_recipient_first_name",
+      "shipping_recipient_last_name",
       "shipping_address_line1",
       "shipping_city",
       "shipping_state",
@@ -170,6 +190,8 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
   }
 
   const isFormValid =
+    formData.shipping_recipient_first_name.trim() !== "" &&
+    formData.shipping_recipient_last_name.trim() !== "" &&
     formData.shipping_address_line1.trim() !== "" &&
     formData.shipping_city.trim() !== "" &&
     formData.shipping_state.trim() !== "" &&
@@ -180,13 +202,57 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 py-4">
+      {/* First Name - Required */}
+      <div className="space-y-2">
+        <Label htmlFor="shipping_recipient_first_name" className="text-sm font-medium text-slate-700">
+          First Name <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          ref={firstInputRef}
+          id="shipping_recipient_first_name"
+          name="shipping_recipient_first_name"
+          type="text"
+          placeholder="John"
+          value={formData.shipping_recipient_first_name}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          disabled={isSubmitting}
+          className={errors.shipping_recipient_first_name ? "border-red-500" : ""}
+          maxLength={100}
+        />
+        {errors.shipping_recipient_first_name && (
+          <p className="text-sm text-red-500">{errors.shipping_recipient_first_name}</p>
+        )}
+      </div>
+
+      {/* Last Name - Required */}
+      <div className="space-y-2">
+        <Label htmlFor="shipping_recipient_last_name" className="text-sm font-medium text-slate-700">
+          Last Name <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="shipping_recipient_last_name"
+          name="shipping_recipient_last_name"
+          type="text"
+          placeholder="Doe"
+          value={formData.shipping_recipient_last_name}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          disabled={isSubmitting}
+          className={errors.shipping_recipient_last_name ? "border-red-500" : ""}
+          maxLength={100}
+        />
+        {errors.shipping_recipient_last_name && (
+          <p className="text-sm text-red-500">{errors.shipping_recipient_last_name}</p>
+        )}
+      </div>
+
       {/* Address Line 1 - Required */}
       <div className="space-y-2">
         <Label htmlFor="shipping_address_line1" className="text-sm font-medium text-slate-700">
           Street Address <span className="text-red-500">*</span>
         </Label>
         <Input
-          ref={firstInputRef}
           id="shipping_address_line1"
           name="shipping_address_line1"
           type="text"

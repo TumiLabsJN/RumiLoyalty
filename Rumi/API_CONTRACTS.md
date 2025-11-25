@@ -2185,8 +2185,9 @@ interface DashboardResponse {
     valueData: {                        // From rewards.value_data (JSONB) - transformed to camelCase
       amount?: number                   // For gift_card, spark_ads
       percent?: number                  // For commission_boost, discount
-      duration_days?: number            // For commission_boost, discount
+      durationDays?: number             // For commission_boost, discount
     } | null
+    rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'vip_tier' for this endpoint)
     redemptionQuantity: number          // From rewards.redemption_quantity
     displayOrder: number                // From rewards.display_order (used for sorting)
   }>
@@ -2373,7 +2374,7 @@ interface DashboardResponse {
       "description": "Temporary commission increase",
       "valueData": {
         "percent": 5,
-        "duration_days": 30
+        "durationDays": 30
       },
       "redemptionQuantity": 1,
       "displayOrder": 4
@@ -2684,6 +2685,7 @@ The API layer transforms database snake_case to JavaScript-idiomatic camelCase:
 | `tiers.tier_name` | `currentTier.name` | `"Gold"` |
 | `tiers.tier_color` | `currentTier.color` | `"#F59E0B"` |
 | `users.tiktok_handle` | `user.handle` | `"creatorpro"` |
+| `rewards.reward_source` | `reward.rewardSource` | `"vip_tier"` |
 
 **Backend Transformation Example:**
 ```typescript
@@ -2730,6 +2732,7 @@ FROM rewards r
 WHERE r.tier_eligibility = $currentTierId
   AND r.client_id = $clientId
   AND r.enabled = true
+  AND r.reward_source = 'vip_tier'  -- Only VIP tier rewards (not mission rewards)
 ORDER BY r.display_order ASC  -- Backend sorts by admin-defined order
 LIMIT 4;                      -- Backend limits to top 4 rewards
 
@@ -2738,7 +2741,8 @@ SELECT COUNT(*) as total_count
 FROM rewards r
 WHERE r.tier_eligibility = $currentTierId
   AND r.client_id = $clientId
-  AND r.enabled = true;
+  AND r.enabled = true
+  AND r.reward_source = 'vip_tier';  -- Only VIP tier rewards (not mission rewards)
 ```
 
 **Backend Responsibilities:**
@@ -2978,7 +2982,7 @@ interface MissionsPageResponse {
   // Missions list (sorted by actionable priority - see Sorting Logic below)
   missions: Array<{
     // Core mission data
-    id: string                          // UUID from missions.id
+    id: string                          // UUID from mission_progress.id (NOT missions.id - for claim/participate calls)
     missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
     displayName: string                 // Backend-generated from missions.display_name
     targetUnit: 'dollars' | 'units' | 'count'  // From missions.target_unit
@@ -2987,6 +2991,7 @@ interface MissionsPageResponse {
     // Reward information
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardDescription: string           // Backend-generated (see Formatting Rules)
+    rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'mission' for missions endpoint)
 
     // PRE-COMPUTED status (backend derives from multiple tables)
     status: 'in_progress' | 'default_claim' | 'default_schedule' |
@@ -3122,6 +3127,7 @@ interface MissionsPageResponse {
       "tierEligibility": "tier_3",
       "rewardType": "gift_card",
       "rewardDescription": "Win a $50 Gift Card!",
+      "rewardSource": "mission",
       "status": "in_progress",
       "progress": {
         "currentValue": 350,
@@ -3151,6 +3157,7 @@ interface MissionsPageResponse {
       "tierEligibility": "tier_3",
       "rewardType": "commission_boost",
       "rewardDescription": "Win +5% commission for 30 days!",
+      "rewardSource": "mission",
       "status": "scheduled",
       "progress": null,
       "deadline": null,
@@ -3184,6 +3191,7 @@ interface MissionsPageResponse {
       "tierEligibility": "tier_3",
       "rewardType": "physical_gift",
       "rewardDescription": "Win an iPhone 16 Pro!",
+      "rewardSource": "mission",
       "status": "raffle_available",
       "progress": null,
       "deadline": null,
@@ -3210,6 +3218,7 @@ interface MissionsPageResponse {
       "tierEligibility": "tier_4",
       "rewardType": "gift_card",
       "rewardDescription": "Win a $200 Gift Card!",
+      "rewardSource": "mission",
       "status": "locked",
       "progress": null,
       "deadline": null,
@@ -3248,9 +3257,9 @@ interface MissionsPageResponse {
 
 **Priority 3 - Claimable Rewards (Action Required):**
 - `status='default_claim'` - Instant rewards ready to claim
-  - Database condition: `mission_progress.status='completed'` AND `redemptions IS NULL` AND `reward.redemption_type='instant'`
+  - Database condition: `redemptions.status='claimable'` AND `reward.redemption_type='instant'`
 - `status='default_schedule'` - Scheduled rewards ready to claim
-  - Database condition: `mission_progress.status='completed'` AND `redemptions IS NULL` AND `reward.redemption_type='scheduled'`
+  - Database condition: `redemptions.status='claimable'` AND `reward.redemption_type='scheduled'`
 
 **Priority 4 - Pending Payment Info (Action Required):**
 - `status='pending_info'` - Commission boost waiting for payment method
@@ -3475,8 +3484,8 @@ flippableCard: {
 **Priority Rank 1 - Completed Missions (Show First):**
 
 ```typescript
-// Mission completed but not claimed yet
-if (mission_progress.status === 'completed' && redemption === null) {
+// Mission completed, reward ready to claim (redemption auto-created with status='claimable')
+if (redemption?.status === 'claimable') {
   if (reward.redemption_type === 'scheduled') {
     status = 'default_schedule';  // Commission boost or discount
   } else {
@@ -3484,7 +3493,7 @@ if (mission_progress.status === 'completed' && redemption === null) {
   }
 }
 
-// Mission completed and claimed
+// Mission reward claimed (user clicked "Claim" button)
 if (redemption?.status === 'claimed') {
   // Check reward type for specific states
   if (reward.type === 'commission_boost') {
@@ -3854,6 +3863,7 @@ interface MissionHistoryResponse {
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardName: string              // Backend-formatted "$50 Gift Card"
     rewardSubtitle: string          // Backend-formatted "From: Sales Sprint mission"
+    rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'mission' for missions)
 
     // Completion timeline
     completedAt: string             // ISO 8601
@@ -3916,6 +3926,7 @@ Examples:
       "rewardType": "gift_card",
       "rewardName": "$50 Gift Card",
       "rewardSubtitle": "From: Sales Sprint mission",
+      "rewardSource": "mission",
       "completedAt": "2025-01-10T14:30:00Z",
       "completedAtFormatted": "Jan 10, 2025",
       "claimedAt": "2025-01-10T14:35:00Z",
@@ -3932,6 +3943,7 @@ Examples:
       "rewardType": "physical_gift",
       "rewardName": "iPhone 16 Pro",
       "rewardSubtitle": "From: VIP Raffle mission",
+      "rewardSource": "mission",
       "completedAt": "2025-01-15T12:00:00Z",
       "completedAtFormatted": "Jan 15, 2025",
       "claimedAt": null,
@@ -3953,6 +3965,7 @@ Examples:
       "rewardType": "commission_boost",
       "rewardName": "5% Pay Boost",
       "rewardSubtitle": "From: Lights, Camera, Go! mission",
+      "rewardSource": "mission",
       "completedAt": "2024-12-15T09:00:00Z",
       "completedAtFormatted": "Dec 15, 2024",
       "claimedAt": "2024-12-15T09:05:00Z",
@@ -4112,6 +4125,7 @@ interface RewardsPageResponse {
     // Tier information
     tierEligibility: string             // From rewards.tier_eligibility ("tier_3")
     requiredTierName: string | null     // From tiers.tier_name ("Platinum") if locked, else null
+    rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'vip_tier' for this endpoint)
     displayOrder: number                // From rewards.display_order (admin-defined priority)
 
     // PRE-FORMATTED status details (backend computes all dates/times)
@@ -4198,6 +4212,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 3,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 4,
       "statusDetails": {
         "clearingDays": 15
@@ -4222,6 +4237,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 1,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 2,
       "statusDetails": {
         "shippingCity": "Los Angeles"
@@ -4249,6 +4265,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 2,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 6,
       "statusDetails": {
         "activationDate": "Jan 10, 2025",
@@ -4276,6 +4293,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 3,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 4,
       "statusDetails": {
         "scheduledDate": "Jan 20, 2025 at 6:00 PM",
@@ -4303,6 +4321,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 1,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 2,
       "statusDetails": null,
       "redemptionFrequency": "one-time",
@@ -4325,6 +4344,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 2,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 3,
       "statusDetails": null,
       "redemptionFrequency": "monthly",
@@ -4347,6 +4367,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 2,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 3,
       "statusDetails": null,
       "redemptionFrequency": "monthly",
@@ -4369,6 +4390,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 1,
       "tierEligibility": "tier_3",
       "requiredTierName": null,
+      "rewardSource": "vip_tier",
       "displayOrder": 5,
       "statusDetails": null,
       "redemptionFrequency": "one-time",
@@ -4391,6 +4413,7 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "totalQuantity": 1,
       "tierEligibility": "tier_4",
       "requiredTierName": "Platinum",
+      "rewardSource": "vip_tier",
       "displayOrder": 1,
       "statusDetails": null,
       "redemptionFrequency": "monthly",
@@ -4762,6 +4785,7 @@ LEFT JOIN physical_gift_redemptions pg ON pg.redemption_id = red.id
 
 WHERE r.client_id = $clientId
   AND r.enabled = true
+  AND r.reward_source = 'vip_tier'  -- Only VIP tier rewards (not mission rewards)
   AND (
     -- Show rewards for current tier
     r.tier_eligibility = $currentTier
@@ -4839,13 +4863,15 @@ interface ClaimRewardRequest {
 
   // Optional: Shipping information for physical gifts
   shippingInfo?: {
+    firstName: string            // Required - Recipient first name (1-100 chars, letters/spaces/hyphens/apostrophes only)
+    lastName: string             // Required - Recipient last name (1-100 chars, letters/spaces/hyphens/apostrophes only)
     addressLine1: string
     addressLine2?: string
     city: string
     state: string
     postalCode: string
     country: string
-    phone?: string
+    phone: string                // Required - Contact phone for delivery
   }  // Required if reward type is 'physical_gift'
 }
 ```
@@ -4861,6 +4887,8 @@ interface ClaimRewardRequest {
 ```json
 {
   "shippingInfo": {
+    "firstName": "Jane",
+    "lastName": "Smith",
     "addressLine1": "123 Main St",
     "city": "Los Angeles",
     "state": "CA",
@@ -4876,11 +4904,14 @@ interface ClaimRewardRequest {
 {
   "sizeValue": "L",
   "shippingInfo": {
+    "firstName": "Jane",
+    "lastName": "Smith",
     "addressLine1": "123 Main St",
     "city": "Los Angeles",
     "state": "CA",
     "postalCode": "90001",
-    "country": "USA"
+    "country": "USA",
+    "phone": "555-0123"
   }
 }
 ```
@@ -4907,7 +4938,11 @@ interface ClaimRewardRequest {
 2. **Reward Exists:** Reward ID must exist in database
 3. **Reward Enabled:** `rewards.enabled = true`
 4. **Tier Eligibility:** `reward.tier_eligibility` must match `user.current_tier`
-5. **VIP Tier Reward Only:** This endpoint is for VIP tier rewards (rewards page), not mission rewards
+5. **VIP Tier Reward Only:** `reward.reward_source` must be `'vip_tier'`
+   ```sql
+   SELECT * FROM rewards WHERE id = $rewardId AND reward_source = 'vip_tier';
+   -- Must return 1 row (mission rewards should use POST /api/missions/:id/claim)
+   ```
 6. **No Active Claim:** User must NOT have an active redemption for this reward
    ```sql
    SELECT COUNT(*) FROM redemptions
@@ -4987,6 +5022,7 @@ interface ClaimRewardResponse {
       name: string                    // e.g., "$25 Gift Card", "5% Commission Boost"
       displayText: string             // Pre-formatted: "+5% Pay boost for 30 Days"
       type: string
+      rewardSource: 'vip_tier'        // Always 'vip_tier' for this endpoint
       valueData: {
         amount?: number               // For gift_card, spark_ads
         percent?: number              // For commission_boost, discount
@@ -5037,6 +5073,7 @@ interface ClaimRewardResponse {
       "name": "$25 Amazon Gift Card",
       "displayText": "$25 Gift Card",
       "type": "gift_card",
+      "rewardSource": "vip_tier",
       "valueData": {
         "amount": 25
       }
@@ -5074,6 +5111,7 @@ interface ClaimRewardResponse {
       "name": "10% Commission Boost",
       "displayText": "+10% Pay boost for 30 Days",
       "type": "commission_boost",
+      "rewardSource": "vip_tier",
       "valueData": {
         "percent": 10,
         "durationDays": 30
@@ -5113,6 +5151,7 @@ interface ClaimRewardResponse {
       "name": "Branded Hoodie",
       "displayText": "Win a Branded Hoodie",
       "type": "physical_gift",
+      "rewardSource": "vip_tier",
       "valueData": null
     },
     "usedCount": 1,
@@ -5434,6 +5473,7 @@ SELECT
   rw.type,
   rw.name,
   rw.description,
+  rw.reward_source,
   r.claimed_at,
   r.concluded_at
 FROM redemptions r
@@ -5461,6 +5501,7 @@ interface RedemptionHistoryResponse {
     name: string               // Backend-formatted name (follows same rules as GET /api/rewards)
     description: string        // Backend-formatted displayText
     type: RewardType           // 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
+    rewardSource: 'vip_tier' | 'mission'  // From rewards.reward_source
     claimedAt: string          // ISO 8601 timestamp - when user claimed
     concludedAt: string        // ISO 8601 timestamp - when moved to history
     status: 'concluded'        // Always 'concluded' in history
@@ -5499,6 +5540,7 @@ The backend generates `name` and `description` fields using the SAME formatting 
       "name": "$50 Gift Card",
       "description": "Amazon Gift Card",
       "type": "gift_card",
+      "rewardSource": "vip_tier",
       "claimedAt": "2024-01-15T10:00:00Z",
       "concludedAt": "2024-01-16T14:00:00Z",
       "status": "concluded"
@@ -5509,6 +5551,7 @@ The backend generates `name` and `description` fields using the SAME formatting 
       "name": "5% Pay Boost",
       "description": "Higher earnings (30d)",
       "type": "commission_boost",
+      "rewardSource": "vip_tier",
       "claimedAt": "2024-01-10T09:15:00Z",
       "concludedAt": "2024-01-11T10:30:00Z",
       "status": "concluded"
@@ -5519,6 +5562,7 @@ The backend generates `name` and `description` fields using the SAME formatting 
       "name": "Gift Drop: Headphones",
       "description": "Premium wireless earbuds",
       "type": "physical_gift",
+      "rewardSource": "mission",
       "claimedAt": "2023-12-28T16:45:00Z",
       "concludedAt": "2023-12-30T18:00:00Z",
       "status": "concluded"
@@ -6138,551 +6182,6 @@ Frontend maps `type` to Lucide React icons (backend does NOT send icon names):
 | experience (raffle) | Clover | `<Clover />` |
 | physical_gift | GiftDropIcon | Custom SVG (defined in page) |
 | experience | GiftDropIcon | Custom SVG (defined in page) |
-
----
-
-# 3. MISSIONS PAGE
-
-## 3.1 GET /api/missions
-
-**Purpose:** Fetch all missions for Missions page (active, completed, claimed, raffles)
-
-**Authentication:** Required (Supabase JWT)
-
-**Request:** None (user context from JWT)
-
-**Response Schema:**
-
-```typescript
-interface MissionsPageResponse {
-  user: {
-    id: string
-    handle: string
-    currentTier: string
-    currentTierColor: string  // Hex color (e.g., "#F59E0B")
-  }
-
-  completedMissionsCount: number  // Count for "View Completed Missions" link
-
-  missions: Array<{
-    id: string  // mission_progress.id (NOT missions.id - for claim/participate calls)
-    missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
-    displayName: string  // Static per mission_type from missions.display_name (e.g., "Sales Sprint", "VIP Raffle")
-    description: string  // Admin-customized description
-
-    // Progress tracking (non-raffle missions)
-    currentProgress: number  // mission_progress.current_value
-    goal: number  // missions.target_value
-    progressPercentage: number  // (currentProgress / goal) * 100
-    remainingValue: number  // goal - currentProgress
-
-    // Reward details
-    rewardType: 'gift_card' | 'commission_boost' | 'discount' | 'gift' | 'trip' | 'spark_ads'
-    rewardValue: number | null  // Dollar amount or percentage (null for custom rewards)
-    rewardCustomText: string | null  // For physical_gift, experience rewards
-
-    // Frontend-ready computed status (NOT database status)
-    status: 'active' | 'completed' | 'claimed' | 'processing' | 'won' | 'available' | 'dormant' | 'locked' | 'cancelled'
-
-    // Time tracking
-    checkpointEnd: string | null  // ISO 8601 (mission deadline for non-raffle)
-
-    // Tier restrictions
-    requiredTier: string | null  // Tier name (e.g., "Gold") or null if no restriction
-
-    // Raffle-specific fields (null for non-raffle missions)
-    raffleEndDate: string | null  // ISO 8601
-    // Note: Prize name comes from reward.description (physical_gift/experience) or reward.value_data.amount (gift_card)
-
-    // Admin controls
-    activated: boolean | null  // Raffle activation control (null for non-raffle)
-    enabled: boolean  // Master visibility switch
-  }>
-}
-```
-
----
-
-### **Status Values (Frontend-Ready Computed)**
-
-The `status` field is **computed by backend** from multiple table states:
-
-| Status | Meaning | Database State | Filters | Display |
-|--------|---------|----------------|---------|---------|
-| `active` | Mission in progress | `mission_progress.status='active'` AND `missions.enabled=true` | ✅ Show | Progress bar |
-| `completed` | Ready to claim | `mission_progress.status='completed'` AND no redemption exists | ✅ Show | "Claim Reward" button |
-| `claimed` | Reward claimed, pending fulfillment | `redemptions.status='claimed'` | ✅ Show | "Prize on the way" badge |
-| `processing` | Raffle entry submitted, waiting for draw | `raffle_participations.is_winner=NULL` | ✅ Show | "Waiting for Draw" badge |
-| `won` | Raffle winner selected | `raffle_participations.is_winner=TRUE` AND `redemptions.status='claimed'` | ✅ Show | "Prize on the way" badge |
-| `available` | Raffle accepting entries | `mission_progress.status='active'` AND `missions.mission_type='raffle'` AND `missions.activated=true` | ✅ Show | "Participate" button |
-| `dormant` | Raffle not yet accepting entries | `mission_progress.status='dormant'` AND `missions.activated=false` | ✅ Show | "Raffle starts soon" text |
-| `locked` | Tier requirement not met | `missions.tier_eligibility` > user's current tier | ✅ Show | Lock icon + required tier |
-| `cancelled` | Admin disabled mid-progress | `missions.enabled=false` AND `mission_progress.current_value > 0` | ❌ Hide | N/A |
-| `fulfilled` | Admin completed fulfillment | `redemptions.status='fulfilled'` | ❌ Hide (moved to Mission History) | N/A |
-| `lost` | Raffle entry lost | `raffle_participations.is_winner=FALSE` | ❌ Hide (moved to Mission History) | N/A |
-
-**Frontend Filtering Logic:**
-```typescript
-missions.filter(m => {
-  // Hide fulfilled, lost, cancelled, disabled missions
-  return !['fulfilled', 'lost', 'cancelled'].includes(m.status)
-    && m.enabled === true
-})
-```
-
-**Frontend Sorting Priority:**
-```typescript
-const statusPriority = {
-  won: 1,           // Show raffle wins first
-  completed: 2,     // Then missions ready to claim
-  claimed: 3,       // Then claimed missions (tracking fulfillment)
-  processing: 4,    // Then raffle entries waiting for draw
-  active: 5,        // Then active missions in progress
-  available: 6,     // Then raffles available to join
-  dormant: 7,       // Then dormant raffles (coming soon)
-  locked: 8         // Then locked missions (tier requirement)
-}
-```
-
----
-
-### **Business Logic:**
-
-**Non-Raffle Missions:**
-```typescript
-// Status derivation for sales/videos/likes/views missions
-if (missionProgress.status === 'completed' && !redemptionExists) {
-  status = 'completed'
-} else if (redemption.status === 'claimed') {
-  status = 'claimed'
-} else if (missionProgress.status === 'active') {
-  status = 'active'
-} else if (missions.tier_eligibility > user.currentTier) {
-  status = 'locked'
-} else if (missions.enabled === false && missionProgress.current_value > 0) {
-  status = 'cancelled'
-}
-```
-
-**Raffle Missions:**
-```typescript
-// Status derivation for raffle missions
-if (raffleParticipation.is_winner === true) {
-  status = 'won'
-} else if (raffleParticipation.is_winner === false) {
-  status = 'lost'  // Filtered out on Missions page, shown in History
-} else if (raffleParticipation.is_winner === null && raffleParticipation.participated_at) {
-  status = 'processing'  // Waiting for draw
-} else if (missions.activated === true) {
-  status = 'available'  // Can participate
-} else if (missions.activated === false) {
-  status = 'dormant'  // Coming soon
-} else if (missions.tier_eligibility > user.currentTier) {
-  status = 'locked'
-}
-```
-
----
-
-### **Database Operations:**
-
-```sql
--- Fetch all missions for user
-SELECT
-  mp.id as mission_progress_id,
-  mp.current_value,
-  mp.status as mission_progress_status,
-  mp.checkpoint_end,
-  mp.completed_at,
-  m.id as mission_id,
-  m.mission_type,
-  m.display_name,
-  m.description,
-  m.target_value as goal,
-  m.tier_eligibility,
-  m.raffle_end_date,
-  m.activated,
-  m.enabled,
-  r.type as reward_type,
-  r.value_data,
-  r.name as reward_name,
-  red.status as redemption_status,
-  red.claimed_at,
-  rp.is_winner,
-  rp.participated_at,
-  t.tier_name as current_tier_name,
-  t.tier_color as current_tier_color
-FROM mission_progress mp
-JOIN missions m ON mp.mission_id = m.id
-JOIN rewards r ON m.reward_id = r.id
-JOIN users u ON mp.user_id = u.id
-JOIN tiers t ON u.current_tier = t.tier_id AND t.client_id = u.client_id
-LEFT JOIN redemptions red ON mp.id = red.mission_progress_id
-LEFT JOIN raffle_participations rp ON m.id = rp.mission_id AND rp.user_id = u.id
-WHERE mp.user_id = $userId
-  AND mp.client_id = $clientId
-  AND m.enabled = true  -- Only show enabled missions
-ORDER BY
-  -- Frontend will handle final sorting by computed status priority
-  mp.created_at DESC;
-
--- Count completed missions (for Mission History link)
-SELECT COUNT(*) as completed_count
-FROM mission_progress mp
-JOIN redemptions r ON mp.id = r.mission_progress_id
-WHERE mp.user_id = $userId
-  AND mp.client_id = $clientId
-  AND r.status IN ('fulfilled', 'concluded', 'rejected');
-```
-
----
-
-### **Response Example:**
-
-```json
-{
-  "user": {
-    "id": "user-abc-123",
-    "handle": "@creator_jane",
-    "currentTier": "Gold",
-    "currentTierColor": "#F59E0B"
-  },
-  "completedMissionsCount": 8,
-  "missions": [
-    {
-      "id": "mission-progress-xyz-789",
-      "missionType": "sales_dollars",
-      "displayName": "Sales Sprint",
-      "description": "Reach your sales target",
-      "currentProgress": 1500,
-      "goal": 2000,
-      "progressPercentage": 75,
-      "remainingValue": 500,
-      "rewardType": "gift_card",
-      "rewardValue": 50,
-      "rewardCustomText": null,
-      "status": "active",
-      "checkpointEnd": "2025-03-15T23:59:59Z",
-      "requiredTier": null,
-      "raffleEndDate": null,
-      "activated": null,
-      "enabled": true
-    },
-    {
-      "id": "mission-progress-raffle-456",
-      "missionType": "raffle",
-      "displayName": "VIP Raffle",
-      "description": "",
-      "currentProgress": 0,
-      "goal": 1,
-      "progressPercentage": 0,
-      "remainingValue": 0,
-      "rewardType": "gift",
-      "rewardValue": null,
-      "rewardCustomText": "iPhone 16 Pro",
-      "status": "available",
-      "checkpointEnd": null,
-      "requiredTier": null,
-      "raffleEndDate": "2025-02-15T23:59:59Z",
-      "activated": true,
-      "enabled": true
-    }
-  ]
-}
-```
-
----
-
-### **Error Responses:**
-
-**401 Unauthorized:**
-```json
-{ "error": "Unauthorized", "message": "Authentication required" }
-```
-
-**500 Internal Server Error:**
-```json
-{ "error": "ServerError", "message": "Failed to fetch missions" }
-```
-
----
-
-## 3.2 POST /api/missions/:id/participate
-
-**Purpose:** User participates in a raffle (creates mission_progress, redemption, raffle_participation)
-
-**Authentication:** Required (Supabase JWT)
-
-**URL Parameters:**
-- `:id` - mission_progress.id (NOT missions.id)
-
-**Request Body:** None
-
-**Response Schema:**
-
-```typescript
-interface ParticipateRaffleResponse {
-  success: boolean
-  message: string
-
-  participation: {
-    id: string  // raffle_participations.id
-    missionId: string  // missions.id
-    participatedAt: string  // ISO 8601
-    raffleEndDate: string  // ISO 8601
-    isWinner: null  // Always null when participating
-    // Note: Prize name comes from mission.reward.description or mission.reward.value_data.amount
-  }
-
-  redemption: {
-    id: string  // redemptions.id
-    status: "claimable"  // Always claimable when raffle entry created
-  }
-
-  // Updated mission for UI refresh
-  updatedMission: {
-    id: string  // mission_progress.id
-    status: "processing"  // Changed from 'available' → 'processing'
-    description: string  // "Waiting for draw" or "X days until raffle"
-  }
-}
-```
-
----
-
-### **Business Logic:**
-
-**Pre-Conditions (Validations):**
-```typescript
-// 1. Mission must be a raffle
-if (mission.mission_type !== 'raffle') {
-  throw new Error('Mission is not a raffle')
-}
-
-// 2. Raffle must be accepting entries (activated=true)
-if (mission.activated !== true) {
-  throw new Error('Raffle is not accepting entries')
-}
-
-// 3. User cannot participate twice in same raffle
-const existingParticipation = await checkExistingParticipation(userId, missionId)
-if (existingParticipation) {
-  throw new Error('You have already participated in this raffle')
-}
-
-// 4. Mission must be enabled
-if (mission.enabled !== true) {
-  throw new Error('Mission is disabled')
-}
-
-// 5. Tier eligibility check
-if (mission.tier_eligibility && user.currentTier < mission.tier_eligibility) {
-  throw new Error(`Requires ${mission.tier_eligibility} tier or higher`)
-}
-```
-
-**Post-Conditions (State Changes):**
-```sql
--- Step 1: Update mission_progress status
-UPDATE mission_progress
-SET
-  status = 'completed',  -- Raffle participation = completion
-  completed_at = NOW(),
-  updated_at = NOW()
-WHERE id = $missionProgressId
-  AND user_id = $userId;
-
--- Step 2: Create redemption (claimable state)
-INSERT INTO redemptions (
-  user_id,
-  client_id,
-  reward_id,
-  mission_progress_id,
-  status,
-  tier_at_claim,
-  redemption_type,
-  created_at
-) VALUES (
-  $userId,
-  $clientId,
-  $rewardId,
-  $missionProgressId,
-  'claimable',  -- Raffle redemptions start as claimable
-  $currentTier,
-  'instant',  -- Raffles are instant redemption_type
-  NOW()
-) RETURNING id;
-
--- Step 3: Create raffle_participation record
-INSERT INTO raffle_participations (
-  mission_id,
-  user_id,
-  mission_progress_id,
-  redemption_id,
-  client_id,
-  participated_at,
-  is_winner  -- NULL until admin selects winner
-) VALUES (
-  $missionId,
-  $userId,
-  $missionProgressId,
-  $redemptionId,
-  $clientId,
-  NOW(),
-  NULL
-) RETURNING *;
-```
-
----
-
-### **Database Operations:**
-
-```sql
--- Fetch mission details for validation
-SELECT
-  m.id as mission_id,
-  m.mission_type,
-  m.activated,
-  m.enabled,
-  m.tier_eligibility,
-  m.raffle_end_date,
-  m.reward_id,
-  r.name as reward_name,
-  mp.id as mission_progress_id,
-  mp.status as current_status,
-  u.current_tier,
-  u.client_id
-FROM missions m
-JOIN mission_progress mp ON m.id = mp.mission_id
-JOIN users u ON mp.user_id = u.id
-JOIN rewards r ON m.reward_id = r.id
-WHERE mp.id = $missionProgressId
-  AND u.id = $userId;
-
--- Check if already participated
-SELECT id FROM raffle_participations
-WHERE mission_id = $missionId
-  AND user_id = $userId;
--- Must return 0 rows
-
--- Execute state changes (see Post-Conditions section above)
-```
-
----
-
-### **Response Example:**
-
-**Success:**
-```json
-{
-  "success": true,
-  "message": "Successfully entered raffle for iPhone 16 Pro!",
-  "participation": {
-    "id": "raffle-part-abc-123",
-    "missionId": "mission-xyz-789",
-    "participatedAt": "2025-01-14T15:30:00Z",
-    "raffleEndDate": "2025-02-15T23:59:59Z",
-    "isWinner": null
-  },
-  "redemption": {
-    "id": "redemption-def-456",
-    "status": "claimable"
-  },
-  "updatedMission": {
-    "id": "mission-progress-xyz-789",
-    "status": "processing",
-    "description": "11 days until raffle"
-  }
-}
-```
-
----
-
-### **Error Responses:**
-
-**400 Bad Request - Not a raffle:**
-```json
-{
-  "error": "InvalidMissionType",
-  "message": "Mission is not a raffle"
-}
-```
-
-**400 Bad Request - Not accepting entries:**
-```json
-{
-  "error": "RaffleNotActive",
-  "message": "Raffle is not accepting entries"
-}
-```
-
-**409 Conflict - Already participated:**
-```json
-{
-  "error": "DuplicateParticipation",
-  "message": "You have already participated in this raffle"
-}
-```
-
-**403 Forbidden - Tier requirement not met:**
-```json
-{
-  "error": "InsufficientTier",
-  "message": "Requires Gold tier or higher"
-}
-```
-
-**404 Not Found:**
-```json
-{
-  "error": "MissionNotFound",
-  "message": "Mission not found or does not belong to you"
-}
-```
-
-**500 Internal Server Error:**
-```json
-{
-  "error": "ServerError",
-  "message": "Failed to process raffle participation"
-}
-```
-
----
-
-## NOTES
-
-- All endpoints require Supabase JWT authentication unless explicitly marked as public
-- All timestamps use ISO 8601 format (e.g., "2025-01-10T12:00:00Z")
-- All monetary amounts are in USD cents unless otherwise specified
-- All endpoints return JSON responses
-- Error responses follow standard format: `{ "error": "Type", "message": "Description" }`
-
----
-
-## DESIGN DECISIONS SUMMARY
-
-### Backend vs Frontend Responsibilities (Home Page)
-
-**Decided on 2025-01-10:**
-
-| Responsibility | Backend | Frontend | Rationale |
-|----------------|---------|----------|-----------|
-| **Progress percentage calculation** | ✅ Calculates & sends | ❌ Displays only | Single source of truth, consistent logic |
-| **Date formatting** | ✅ Formats & sends | ❌ Displays only | i18n-ready, backend controls format |
-| **Reward text formatting** | ❌ Sends structured data | ✅ Builds strings | UI flexibility for different screens |
-| **Reward sorting** | ✅ Sends sorted by display_order | ✅ Can override with type priority | MVP uses frontend type-based sorting, future admin UI will control display_order |
-| **SVG circle geometry** | ❌ N/A | ✅ Calculates | Pure UI presentation logic |
-| **Number formatting** | ❌ Raw values | ✅ toLocaleString() | UI presentation |
-
-**Security Principle:**
-> "Never trust the client, but let the client organize trusted data"
-
-- Authorization & validation = Backend only
-- Presentation & formatting = Frontend allowed
-- Business logic = Backend only
-
-See [Section 10: Authorization & Security Checklists](#authorization--security-checklists) in ARCHITECTURE.md for implementation details.
 
 ---
 

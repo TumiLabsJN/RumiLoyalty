@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { CircleDollarSign, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -55,7 +54,7 @@ export function PaymentInfoModal({
   rewardName,
   onSuccess,
 }: PaymentInfoModalProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'venmo'>('paypal')
+  const paymentMethod = 'paypal' // Locked to PayPal only (Venmo support coming later)
   const [paymentAccount, setPaymentAccount] = useState('')
   const [paymentAccountConfirm, setPaymentAccountConfirm] = useState('')
   const [saveAsDefault, setSaveAsDefault] = useState(true)
@@ -90,9 +89,8 @@ export function PaymentInfoModal({
 
       setSavedPaymentInfo(mockSavedInfo)
 
-      // Pre-fill form if saved info exists
-      if (mockSavedInfo.hasPaymentInfo && mockSavedInfo.paymentMethod && mockSavedInfo.paymentAccount) {
-        setPaymentMethod(mockSavedInfo.paymentMethod)
+      // Pre-fill form if saved info exists (PayPal only)
+      if (mockSavedInfo.hasPaymentInfo && mockSavedInfo.paymentMethod === 'paypal' && mockSavedInfo.paymentAccount) {
         setPaymentAccount(mockSavedInfo.paymentAccount)
         setPaymentAccountConfirm(mockSavedInfo.paymentAccount)
       }
@@ -111,22 +109,15 @@ export function PaymentInfoModal({
     return emailRegex.test(email)
   }
 
-  // Validate Venmo handle format
-  const validateVenmoHandle = (handle: string): boolean => {
-    return handle.startsWith('@') && handle.length > 1
-  }
-
   // Validate form
   const validateForm = (): boolean => {
     const newErrors: typeof errors = {}
 
-    // Validate payment account
+    // Validate PayPal email
     if (!paymentAccount.trim()) {
-      newErrors.paymentAccount = 'Payment account is required'
-    } else if (paymentMethod === 'paypal' && !validatePayPalEmail(paymentAccount)) {
+      newErrors.paymentAccount = 'PayPal email is required'
+    } else if (!validatePayPalEmail(paymentAccount)) {
       newErrors.paymentAccount = 'Please enter a valid email address'
-    } else if (paymentMethod === 'venmo' && !validateVenmoHandle(paymentAccount)) {
-      newErrors.paymentAccount = 'Venmo handle must start with @'
     }
 
     // Validate confirmation
@@ -217,15 +208,14 @@ export function PaymentInfoModal({
         ) : (
           <div className="space-y-6 py-4">
             {/* Saved Payment Info Banner */}
-            {savedPaymentInfo?.hasPaymentInfo && (
+            {savedPaymentInfo?.hasPaymentInfo && savedPaymentInfo.paymentMethod === 'paypal' && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-blue-900">Saved payment method found</p>
+                    <p className="text-sm font-semibold text-blue-900">Saved PayPal email found</p>
                     <p className="text-xs text-blue-700 mt-0.5">
-                      Last used: {savedPaymentInfo.paymentMethod === 'paypal' ? 'PayPal' : 'Venmo'}
-                      {savedPaymentInfo.paymentAccount && ` (${savedPaymentInfo.paymentAccount})`}
+                      {savedPaymentInfo.paymentAccount && `${savedPaymentInfo.paymentAccount}`}
                     </p>
                     <p className="text-xs text-slate-600 mt-1">
                       Your saved info has been pre-filled. Update if needed.
@@ -235,43 +225,28 @@ export function PaymentInfoModal({
               </div>
             )}
 
-            {/* Payment Method Selection */}
-            <div className="space-y-3">
+            {/* Payment Method (PayPal Only) */}
+            <div className="space-y-2">
               <Label className="text-sm font-semibold text-slate-900">
                 Payment Method
               </Label>
-              <RadioGroup
-                value={paymentMethod}
-                onValueChange={(value) => {
-                  setPaymentMethod(value as 'paypal' | 'venmo')
-                  setErrors({}) // Clear errors when switching methods
-                }}
-                className="flex gap-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="paypal" id="paypal" />
-                  <Label htmlFor="paypal" className="font-medium cursor-pointer">
-                    PayPal
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="venmo" id="venmo" />
-                  <Label htmlFor="venmo" className="font-medium cursor-pointer">
-                    Venmo
-                  </Label>
-                </div>
-              </RadioGroup>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+                <p className="text-sm font-medium text-slate-900">PayPal</p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  We'll send your earnings to your PayPal account
+                </p>
+              </div>
             </div>
 
-            {/* Payment Account Input */}
+            {/* PayPal Email Input */}
             <div className="space-y-2">
               <Label htmlFor="paymentAccount" className="text-sm font-semibold text-slate-900">
-                {paymentMethod === 'paypal' ? 'PayPal Email' : 'Venmo Handle'}
+                PayPal Email
               </Label>
               <Input
                 id="paymentAccount"
-                type="text"
-                placeholder={paymentMethod === 'paypal' ? 'your.email@example.com' : '@yourhandle'}
+                type="email"
+                placeholder="your.email@example.com"
                 value={paymentAccount}
                 onChange={(e) => {
                   setPaymentAccount(e.target.value)
@@ -288,15 +263,15 @@ export function PaymentInfoModal({
               )}
             </div>
 
-            {/* Payment Account Confirmation */}
+            {/* Confirm PayPal Email */}
             <div className="space-y-2">
               <Label htmlFor="paymentAccountConfirm" className="text-sm font-semibold text-slate-900">
-                Confirm {paymentMethod === 'paypal' ? 'Email' : 'Handle'}
+                Confirm Email
               </Label>
               <Input
                 id="paymentAccountConfirm"
-                type="text"
-                placeholder={paymentMethod === 'paypal' ? 'Re-enter your email' : 'Re-enter your handle'}
+                type="email"
+                placeholder="Re-enter your email"
                 value={paymentAccountConfirm}
                 onChange={(e) => {
                   setPaymentAccountConfirm(e.target.value)

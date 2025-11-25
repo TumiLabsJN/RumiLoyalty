@@ -124,6 +124,7 @@ export interface Reward {
     durationDays?: number       // For commission_boost, discount
   } | null
 
+  rewardSource: 'vip_tier' | 'mission'  // From rewards.reward_source (always 'vip_tier' for dashboard)
   redemptionQuantity: number    // From rewards.redemption_quantity
   displayOrder: number          // Used for backend sorting
 }

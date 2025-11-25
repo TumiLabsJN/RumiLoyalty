@@ -580,9 +580,9 @@ These are creators who have already produced videos for the brand and appear in 
 3. **URL sharing:** Share platform URL (e.g., loyalty.brand.com)
 4. **Database state:** Handle exists in Supabase (imported via Flow 1 - Daily Sync)
 5. **Registration flow:**
-   - **First-time (no email registered):** `/login/start` → check-handle API → `/login/signup` → OTP → `/login/loading` → `/home`
-   - **Returning (email registered):** `/login/start` → check-handle API → `/login/wb` → `/home`
-6. **Result:** Instant full platform access (dashboard, rewards, missions, tier progression)
+   - **First-time (no email registered):** `/login/start` → check-handle API → `/login/signup` → OTP → `/login/loading` → `/login/welcomeunr` → `/home`
+   - **Returning (email registered):** `/login/start` → check-handle API → `/login/wb` → `/login/loading` → `/home`
+6. **Result:** Full platform access after first-time onboarding (dashboard, rewards, missions, tier progression)
 
 **Database characteristics:**
 - `users.tiktok_handle` exists (imported from Cruva)
@@ -599,7 +599,7 @@ These are prospective creators who heard about the program but haven't created a
 **Journey:**
 1. **Organic discovery:** Creator hears about program from peers/social media/brand mentions
 2. **Self-registration:** Visits platform URL, enters TikTok handle
-3. **Database check:** Handle NOT found in Supabase → Sample program flow triggered
+3. **Database check:** Handle NOT found in Supabase → Word-of-mouth signup
 4. **Registration flow:** `/login/start` → check-handle API → `/login/signup` → OTP → `/login/loading` → `/login/welcomeunr`
 5. **Soft onboarding:** Welcome screen displays "Watch your DMs for sample request link"
 6. **Preview access:** Can explore platform features (rewards/missions shown as locked)
@@ -607,9 +607,8 @@ These are prospective creators who heard about the program but haven't created a
    - Brand sends sample product via TikTok DM
    - Creator posts video featuring product
    - Video appears in Cruva CSV export (daily scrape)
-   - Flow 1 imports video → Creates user record in Supabase
-   - Creator becomes "recognized"
-   - Next login → Full access granted (routes to `/home`)
+   - Flow 1 imports video → Platform tracks content
+   - Next login → Full access granted (last_login_at already set, routes to `/home`)
 
 **Database characteristics:**
 - `users.tiktok_handle` does NOT exist initially
@@ -619,29 +618,29 @@ These are prospective creators who heard about the program but haven't created a
 
 ---
 
-#### **Key Differentiator: Does handle exist in Supabase?**
+#### **Key Differentiator: Has user logged in before?**
 
 **Recognition check logic:**
-- **Handle EXISTS in Supabase** (imported from Cruva CSV):
-  - Creator has made videos for brand
-  - Full platform access immediately
-  - Routes to `/home` after login/signup
+- **last_login_at IS NOT NULL** (returning user):
+  - Creator has logged in before
+  - Full platform access
+  - Routes to `/home`
 
-- **Handle NOT in Supabase** (word-of-mouth):
-  - Creator has NOT made videos yet
-  - Sample program candidate
-  - Routes to `/login/welcomeunr` (sample program message)
-  - Preview mode until content created
+- **last_login_at IS NULL** (first-time login):
+  - Creator's first login (even if auto-created from Cruva)
+  - Show welcome/onboarding
+  - Routes to `/login/welcomeunr`
+  - After viewing welcome, full access granted
 
 **Database check:**
 ```sql
 -- Recognition check at /login/loading
-SELECT id, tiktok_handle, email
+SELECT id, email_verified, last_login_at, created_at
 FROM users
-WHERE tiktok_handle = '@creator_handle';
+WHERE id = $authenticated_user_id;
 
--- If found → Recognized (route to /home)
--- If NOT found → Unrecognized (route to /login/welcomeunr)
+-- If last_login_at IS NULL → First login (route to /login/welcomeunr)
+-- If last_login_at IS NOT NULL → Returning user (route to /home)
 ```
 
 ---
@@ -777,57 +776,59 @@ POST /api/auth/resend-otp
 
 #### **Step 4: Loading & Recognition Routing** (`/login/loading`)
 
-**Purpose:** Central routing hub that determines user's destination based on recognition status
+**Purpose:** Central routing hub that determines user's destination based on first-time login status
 
 **Page displays:**
 - Spinner animation
 - "Setting up your account..." message
-- 2-second artificial delay (smooth UX transition)
+- Smooth UX transition
+
+**Backend API call:**
+```
+GET /api/auth/user-status
+Headers: Cookie: auth-token (from signup/login)
+
+Process:
+1. Validate session token from HTTP-only cookie
+2. Query user info (id, email_verified, last_login_at)
+3. Determine recognition status:
+   - last_login_at IS NULL → First-time login (isRecognized=false)
+   - last_login_at IS NOT NULL → Returning user (isRecognized=true)
+4. Determine routing destination:
+   - isRecognized=false → redirectTo="/login/welcomeunr"
+   - isRecognized=true → redirectTo="/home"
+5. Update last_login_at=NOW() (AFTER checking status)
+6. Return { userId, isRecognized, redirectTo, emailVerified }
+```
 
 **Routing logic:**
 ```
-Read sessionStorage.getItem("userType")
+Frontend receives API response:
 
-If userType === "recognized":
-  → User exists in Cruva database (has created content)
-  → Route to /home (full access)
+If isRecognized === false:
+  → First-time login (show welcome)
+  → Route to /login/welcomeunr
 Else:
-  → User NOT in database yet (sample program)
-  → Route to /login/welcomeunr (preview access)
-```
-
-**Backend process during delay:**
-```
-POST /api/auth/check-recognition
-Body: { handle: "@username" }
-
-Check:
-1. Query users table: WHERE tiktok_handle = '@username'
-2. Query videos table: COUNT(*) WHERE user_id = user.id
-3. Determine recognition:
-   - Has videos: recognized = true
-   - No videos or not in users: recognized = false
-
-Return: { recognized: true/false }
+  → Returning user
+  → Route to /home (full access)
 ```
 
 **Recognition criteria:**
-- **Recognized:** Handle exists in `users` table AND has ≥1 video in `videos` table
-- **Unrecognized:** Handle NOT in `users` table OR user exists but 0 videos
+- **Recognized:** `last_login_at IS NOT NULL` (has logged in before)
+- **Unrecognized:** `last_login_at IS NULL` (first-time login, even if auto-created from Cruva)
 
-**Code reference:** `/login/loading/page.tsx` lines 19-39
+**Code reference:** `/login/loading/page.tsx`
 
 ---
 
 #### **Step 5A: Unrecognized User Welcome** (`/login/welcomeunr`)
 
-**When shown:** Creator's TikTok handle NOT found in Supabase database (word-of-mouth user, no Cruva data)
+**When shown:** User's first login (`last_login_at IS NULL`)
 
 **User origin:**
-- NOT in Cruva CSV (no videos created for brand yet)
-- NOT in Supabase `users` table before signup
-- Heard about program through word-of-mouth/social media
-- Sample program candidate
+- First-time accessing platform (never logged in before)
+- May be auto-created from Cruva CSV OR word-of-mouth signup
+- `last_login_at` field is NULL before this welcome screen
 
 **Page displays:**
 - "🎉 Welcome! 🎉" header
@@ -866,29 +867,25 @@ users.current_tier = 'tier_1'
 SELECT COUNT(*) FROM videos WHERE user_id = user.id;  -- Returns 0
 ```
 
-**Transition to recognized (sample program funnel):**
+**After viewing welcome:**
 ```
-1. Brand sends sample product via TikTok DM
-2. Creator receives sample, creates TikTok video featuring product
-3. Video appears in Cruva CSV export (daily scrape)
-4. Flow 1 (Daily Sync) imports video to videos table
-5. Updates recognition_status = 'recognized'
-6. Next login → Full access (routes directly to /home)
+User clicks "Explore Program" → Routes to /home
+last_login_at is now set (user is "recognized" for future logins)
+Next login → Routes directly to /home (skips welcome screen)
 ```
 
-**Code reference:** `/login/welcomeunr/page.tsx` lines 14-50
+**Code reference:** `/login/welcomeunr/page.tsx`
 
 ---
 
 #### **Step 5B: Recognized User Dashboard** (`/home`)
 
-**When shown:** Creator's TikTok handle EXISTS in Supabase database (imported from Cruva CSV)
+**When shown:** Returning user (`last_login_at IS NOT NULL`)
 
 **User origin:**
-- Has created videos for brand (appears in Cruva CSV)
-- Imported into Supabase via Flow 1 (Daily Sync)
-- May or may not have registered email previously
-- Has records in `videos` table
+- Has logged in before (welcome screen already viewed)
+- `last_login_at` field is populated
+- Skips welcome screen on subsequent logins
 
 **Page displays:**
 - Full dashboard with immediate access:
@@ -940,36 +937,37 @@ SELECT COUNT(*) FROM videos WHERE user_id = user.id;  -- Returns ≥1
      ↓
      Backend: POST /api/auth/verify-otp
      ↓
-/login/loading (Recognition Check)
+/login/loading (User Status Check)
      ↓
-     Backend: POST /api/auth/check-recognition
+     Backend: GET /api/auth/user-status
      │
      ├──────────────────┬────────────────────┐
      ↓                  ↓                    ↓
   RECOGNIZED       UNRECOGNIZED
-  (In Supabase)   (NOT in Supabase)
+  (Returning)     (First-time)
      ↓                  ↓
   /home          /login/welcomeunr
-(Full access)    (Sample program +
-                  Preview access)
+(Full access)    (Welcome screen)
+                       ↓
+                    /home
 ```
 
-**Recognized Path:**
-- Handle exists in Supabase (imported from Cruva)
-- Has created videos for brand
-- Routes to `/home` with full access immediately
+**Recognized Path (last_login_at IS NOT NULL):**
+- Returning user (has logged in before)
+- Routes directly to `/home`
+- Full access immediately
 
-**Unrecognized Path:**
-- Handle NOT in Supabase (word-of-mouth user)
-- No videos created for brand yet
-- Routes to `/login/welcomeunr` (sample program message)
-- Preview mode until content created → Cruva import → Full access
+**Unrecognized Path (last_login_at IS NULL):**
+- First-time login
+- Routes to `/login/welcomeunr` (welcome/onboarding)
+- After welcome → Routes to `/home`
+- Subsequent logins skip welcome screen
 
 **Total time:** 3-5 minutes (including email verification)
 
 **Security:** Email verified before platform access granted
 
-**Business context:** Two-tier system supports both Cruva-sourced creators (immediate access) and word-of-mouth creators (sample program funnel)
+**Business context:** First-time users see welcome screen, returning users skip straight to dashboard
 
 ---
 
@@ -996,15 +994,15 @@ SELECT COUNT(*) FROM videos WHERE user_id = user.id;  -- Returns ≥1
 2. Backend checks: Handle exists + email populated
 3. Route to `/login/wb` (Welcome Back - password authentication)
 4. Enter password → Route to `/login/loading`
-5. Recognition check: Handle exists in Supabase?
-   - **YES** → `/home` (full access)
-   - **NO** → `/login/welcomeunr` (sample program message - continues each login until videos imported)
+5. User status check: Has user logged in before?
+   - **last_login_at IS NOT NULL** → `/home` (returning user)
+   - **last_login_at IS NULL** → `/login/welcomeunr` (first-time login, show welcome once)
 
-**Total time:** ~32-35 seconds (includes recognition check)
+**Total time:** ~32-35 seconds (includes user status check)
 
 **No OTP required** - Email already verified during initial signup
 
-**Note:** Word-of-mouth users who registered but haven't created content yet will see `/login/welcomeunr` on EVERY login until their videos appear in Cruva imports
+**Note:** First-time users see welcome screen once, subsequent logins skip directly to `/home`
 
 ---
 
@@ -1114,8 +1112,9 @@ Error: Show inline error, clear password
      │                                                 ↓
      │                                         ┌───────┴────────┐
      │                                         ↓                ↓
-     │                                   RECOGNIZED      UNRECOGNIZED
-     │                                   (In Supabase)  (NOT in Supabase)
+     │                                   RETURNING      FIRST-TIME
+     │                                   (last_login_at  (last_login_at
+     │                                    IS NOT NULL)    IS NULL)
      │                                         ↓                ↓
      │                                      /home       /login/welcomeunr
      │
@@ -1127,27 +1126,28 @@ Error: Show inline error, clear password
                                                        ↓
                                                /login/loading
                                                        ↓
-                                          POST /api/auth/check-recognition
+                                          GET /api/auth/user-status
                                                        ↓
                                                ┌───────┴────────┐
                                                ↓                ↓
-                                         RECOGNIZED      UNRECOGNIZED
-                                         (In Supabase)  (NOT in Supabase)
+                                         RETURNING      FIRST-TIME
+                                         (last_login_at  (last_login_at
+                                          IS NOT NULL)    IS NULL)
                                                ↓                ↓
                                             /home       /login/welcomeunr
 ```
 
 **Scenario A (Email Registered):**
-- Total time: ~32-35 seconds (includes recognition check)
+- Total time: ~32-35 seconds (includes user status check)
 - No OTP required (email already verified)
-- Password authentication + recognition check
-- Word-of-mouth users see welcomeunr until videos imported
+- Password authentication + user status check
+- First-time users see welcome screen once, subsequent logins skip to /home
 
 **Scenario B (Cruva Import, No Email):**
 - Total time: 3-5 minutes
 - OTP verification required (first time collecting email)
 - Same flow as first-time registration
-- Recognition check routes to home or welcomeunr
+- User status check routes to /home (returning) or /login/welcomeunr (first-time)
 
 ---
 
@@ -1175,15 +1175,16 @@ Backend: POST /api/auth/forgot-password
 Body: { identifier: "email_or_handle" }
 
 Process:
-1. Look up user by tiktok_handle
+1. Look up user by tiktok_handle or email
 2. Retrieve user's email from users.email
-3. Generate JWT token:
-   Payload: { user_id, type: "password_reset", exp: 15min }
-4. Create magic link:
-   https://app.com/login/resetpw?token=eyJhbG...
-5. Send email with button/link
-6. Store token hash in password_reset_tokens table
-7. Return masked email
+3. Generate secure random token:
+   Format: crypto.randomBytes(32).toString('base64url') (44 chars)
+4. Hash token with bcrypt before storing
+5. Store token hash in password_reset_tokens table (expires in 15 min)
+6. Create magic link:
+   https://app.com/login/resetpw?token=a1b2c3d4e5f6...
+7. Send email with button/link
+8. Return masked email
 
 Response: { sent: true, emailHint: "cr****@example.com", expiresIn: 15 }
 
@@ -1270,9 +1271,9 @@ Error: Show error, allow new reset request
      ↓
 Email with magic link
      ↓
-/auth/reset-password?token=xyz
+/login/resetpw?token=xyz (Create new password)
      ↓
-/home (Auto-login)
+/login/wb?reset=success (Success message)
 ```
 
 **Total time:** 2-3 minutes (including email retrieval)
@@ -1392,20 +1393,22 @@ Rate limit: 1 request per 60 seconds per user
             │                         │
     /login/loading ◄──────────────────┘
             │
-            │ [Backend: Check recognition]
+            │ [Backend: GET /api/auth/user-status]
+            │ [Check last_login_at field]
             │
    ┌────────┴────────┐
    │                 │
-RECOGNIZED      UNRECOGNIZED
+RETURNING       FIRST-TIME
+(last_login_at  (last_login_at
+ IS NOT NULL)    IS NULL)
    │                 │
 /home          /login/welcomeunr
-(Full         (Sample program +
-access)        Preview access)
+(Full access)  (First-time welcome)
                      │
               "Explore Program"
                      │
                   /home
-            (Preview mode)
+         (Full access - last_login_at now set)
 
 
 ALTERNATIVE PATH: Password Reset
@@ -1416,9 +1419,9 @@ ALTERNATIVE PATH: Password Reset
                                        ↓
                           [User clicks magic link]
                                        ↓
-                        /auth/reset-password?token=xyz
+                        /login/resetpw?token=xyz
                                        ↓
-                                    /home
+                          /login/wb?reset=success
 ```
 
 ---
@@ -1433,10 +1436,10 @@ ALTERNATIVE PATH: Password Reset
 | `/login/signup` | `app/login/signup/page.tsx` | Email + password collection | First-time users | Terms/Privacy sheets, validation |
 | `/login/wb` | `app/login/wb/page.tsx` | Password authentication | Returning users | Inline errors, loading modal |
 | `/login/otp` | `app/login/otp/page.tsx` | Email verification | After signup (first-time) | Auto-submit, paste handling, timer |
-| `/login/loading` | `app/login/loading/page.tsx` | Recognition routing | After OTP verification | Conditional routing logic |
-| `/login/welcomeunr` | `app/login/welcomeunr/page.tsx` | Unrecognized user welcome | Sample program signups | Preview access messaging |
+| `/login/loading` | `app/login/loading/page.tsx` | User status check | After OTP/login | Calls user-status API, routes by last_login_at |
+| `/login/welcomeunr` | `app/login/welcomeunr/page.tsx` | First-time user welcome | First login (last_login_at IS NULL) | Welcome screen, explore button |
 | `/login/forgotpw` | `app/login/forgotpw/page.tsx` | Password reset request | "Forgot password?" click | Magic link email, two-state |
-| `/auth/reset-password` | (TO BE CREATED) | Set new password | Magic link click | Token validation |
+| `/login/resetpw` | `app/login/resetpw/page.tsx` | Set new password | Magic link click | Token validation, password confirmation |
 
 **Mobile-first design:**
 - All pages optimized for 375px viewport
@@ -1605,6 +1608,11 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
    - **Maintained:** Performance meets/exceeds current tier threshold
    - **Demoted:** Performance below current tier threshold (e.g., Gold → Silver)
 
+   **Policy Rules:**
+   - No grace periods - immediate demotion if sales don't meet threshold
+   - Can skip tiers - Platinum can drop to Silver/Bronze if sales only match that level
+   - Strict thresholds - no margin of error (must meet exact threshold)
+
 5. **Update user record (reset checkpoint totals):**
    ```typescript
    await db.from('users').update({
@@ -1664,51 +1672,7 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
 
 ---
 
-### Flow 8: Admin Adds Creator Manually
-
-**Trigger:** Admin needs to add a creator before they appear in Cruva CSV (soft launch, VIP early access, special partnerships, etc.)
-
-**Steps:**
-1. **Admin accesses form:**
-   - Navigate to Admin Panel → Creators → "Add Creator"
-   - Simple 2-field form displayed
-
-2. **Enter creator data:**
-   - TikTok Handle (e.g., @newcreator) - required
-   - Initial Tier (dropdown displays tier names from `tiers` table, stores `tier_id`) - defaults to tier_1
-
-3. **Validation:**
-   - Handle must start with @
-   - Handle must not already exist in database
-   - Admin authentication verified (requireAdmin)
-
-4. **Create user account:**
-   - Insert to users table:
-     - `tiktok_handle = '@newcreator'`
-     - `email = NULL` (collected when creator activates)
-     - `current_tier = selected tier`
-     - `tier_achieved_at = TODAY`
-   - Success message displayed
-
-5. **Admin notifies creator:**
-   - Admin uses existing DM/SMS workflow to notify creator
-   - Shares platform URL (loyalty.brand.com)
-   - Creator activates account via Flow 3 (Creator First Login)
-
-**Conflict resolution:**
-- If creator later appears in Cruva CSV, daily sync updates user data but preserves manually-set tier
-- Tier only changes during checkpoint evaluation (Flow 6)
-- No duplicate accounts created (tiktok_handle is unique)
-
-**Use cases:**
-- Soft launch with test creators (add 10 creators before public launch)
-- VIP early access (brand partners, top performers)
-- Data lag (creator posted video but not in Cruva yet)
-- Special partnerships (influencer campaigns, brand ambassadors)
-
----
-
-### Flow 9: Creator Claims Reward
+### Flow 8: Creator Claims Reward
 
 **Trigger:** Creator wants to claim an available reward from Rewards screen
 
@@ -1720,308 +1684,110 @@ The admin-configured `checkpoint_months` (e.g., 4) is a **DURATION**, not a fixe
 
 **Two Redemption Processes:**
 
----
-
-#### Flow 8A: Instant Claim (Gift Card, Spark Ads, Physical Gift, Experience)
-
-**Steps:**
-1. **Creator browses rewards:**
-   - Navigate to Rewards tab
-   - System displays eligible rewards filtered by tier and claim history
-   - Rewards show: name (auto-generated), description (if applicable), tier requirement
-
-2. **Creator clicks "Claim":**
-   - Button available on eligible instant-type rewards
-   - System validates eligibility (defensive check for edge cases):
-     - Current tier equals tier_eligibility (exact match)
-     - Monthly/weekly limit not exceeded
-     - One-time limit not exceeded (reward-type-specific: forever for gift_card/physical_gift/experience, per tier for commission_boost/spark_ads/discount)
-     - No duplicate pending claim for same reward
-
-3. **Create redemption record:**
-   - Insert to redemptions table:
-     ```
-     user_id = creator.id
-     reward_id = reward.id
-     status = 'claimed'
-     redemption_type = 'instant'
-     tier_at_claim = creator.current_tier (locked)
-     claimed_at = NOW()
-     ```
-
-4. **Show success feedback:**
-   - Toast notification: "Success! You will receive your reward in up to 24 hours"
-   - Reward shows "Claimed" badge on Rewards screen
-   - Claim appears in creator's Claims section
-
-5. **Admin notification:**
-   - Redemption appears in Admin Panel → Fulfillment Queue
-   - Sorted by 24-hour SLA urgency (overdue → due soon → on time)
-
-**Edge cases handled:**
-- Race condition (demoted between page load and claim): Validation catches, shows error
-- Duplicate click: Database unique constraint prevents duplicate pending claims
-- Window expired: Validation catches, shows "Limit exceeded" error
 
 ---
 
-#### Flow 8B: Scheduled Claim (Commission Boost, Discount)
+## Google Calendar Integration
 
-**Steps:**
-1. **Creator browses rewards:**
-   - Navigate to Rewards tab
-   - TikTok Discount shows "Claim"
+### Purpose
+Create calendar events as reminders for all manual tasks, triggered when action becomes needed.
 
-2. **Creator clicks "Schedule Activation":**
-   - Modal appears: "When do you want to activate this discount?"
-   - Date picker: Today through 7 days in advance
-   - Time picker: 10:00 AM - 6:30 PM (displayed in creator's timezone: US Eastern)
-   - Timezone indicator: "Times shown in Eastern Time (EST/EDT)"
+### Event Creation Rules
 
-3. **Creator selects date/time:**
-   - Example: Jan 12, 2:00 PM EST
-   - Clicks "Schedule Activation"
+#### Instant Rewards (gift_card, spark_ads, experience)
+**Trigger:** When redemptions.status changes to 'claimed'
+**Calendar Event:**
+- Title: "🎁 Fulfill {reward_type}: @{handle}"
+- Due: claimed_at + 2 hours
+- Description:
+  ```
+  Reward Type: {rewards.type}
+  Value: ${rewards.value_data.amount}
+  Creator: @{users.tiktok_handle}
+  Email: {users.email}
 
-4. **System validates scheduling:**
-   - Date is within next 7 days ✓
-   - Time is between 10 AM - 6:30 PM Brazil time ✓
-   - Not in the past ✓
-   - Creator hasn't scheduled another activation already ✓
+  Action: Purchase and deliver reward, then mark as concluded in Admin UI
+  ```
 
-5. **Store scheduling fields (always in EST):**
-   - Creator's selection: Jan 12, 2:00 PM EST
-   - Stores as:
-     - `scheduled_activation_date = '2025-01-12'` (DATE)
-     - `scheduled_activation_time = '14:00:00'` (TIME in EST)
-   - Note: Always stored in EST. Application converts to creator's local timezone for display only.
+#### Physical Gift
+**Trigger:** When redemptions.status changes to 'claimed' AND physical_gift_redemptions row created
+**Calendar Event:**
+- Title: "📦 Ship Physical Gift: @{handle}"
+- Due: claimed_at + 2 hours
+- Description:
+  ```
+  Item: {rewards.name}
+  Size: {physical_gift_redemptions.size_value} (if applicable)
 
-6. **Create Google Calendar event:**
-   - Create event in admin's Google Calendar:
-     - Title: "Activate TikTok Discount - @creatorhandle"
-     - Description: "Activate {reward.value_data.percent}% discount in TikTok Seller Center"
-        - Note: Description must be variable - use reward.value_data.percent from rewards table
-        - Example: If reward.value_data = {"percent": 15}, description = "Activate 15% discount..."
-     - DateTime: `{scheduled_activation_date}T{scheduled_activation_time}` (e.g., "2025-01-12T14:00:00")
-     - TimeZone: "America/New_York" (EST)
-     - Duration: 15 minutes
-     - Reminders: 15 minutes before (popup), 1 hour before (email)
-   - Store event ID: `google_calendar_event_id = event.id`
+  Ship To:
+  {shipping_recipient_first_name} {shipping_recipient_last_name}
+  {shipping_address_line1}
+  {shipping_address_line2}
+  {shipping_city}, {shipping_state} {shipping_postal_code}
 
-7. **Create redemption record:**
-   - Insert to redemptions table:
-     ```
-     user_id = creator.id
-     reward_id = reward.id
-     status = 'claimed'
-     redemption_type = 'scheduled'
-     scheduled_activation_date = '2025-01-12' (DATE)
-     scheduled_activation_time = '14:00:00' (TIME in EST)
-     google_calendar_event_id = calendar_event_id
-     tier_at_claim = creator.current_tier (locked)
-     claimed_at = NOW()
-     ```
+  Action: Purchase/ship item, then update shipped_at in Admin UI
+  ```
 
-8. **Show success feedback:**
-   - Success message: "Success! Your discount will be activated on Jan 12 at 2:00 PM EST"
-   - Reward shows "Scheduled for Jan 12, 2:00 PM EST" badge
-   - Claim appears in creator's Rewards Redemption History with scheduled time
+#### Discount Activation
+**Trigger:** When redemptions.status changes to 'claimed' AND redemption_type = 'scheduled'
+**Calendar Event:**
+- Title: "🔔 Activate Discount: @{handle}"
+- Due: scheduled_activation_date + scheduled_activation_time
+- Reminder: 15 minutes before
+- Description:
+  ```
+  Creator: @{users.tiktok_handle}
+  Discount: {rewards.value_data.percent}%
+  Duration: {rewards.value_data.duration_minutes} minutes
+  Coupon Code: {rewards.value_data.coupon_code}
+  Max Uses: {rewards.value_data.max_uses}
 
-9. **Admin notification:**
-   - Redemption appears in Admin Panel → Scheduled Activations Queue
-   - Sorted by scheduled activation time
-   - Google Calendar event created (admin receives notification)
+  Action:
+  1. Go to TikTok Seller Central
+  2. Create coupon with above parameters
+  3. Return to Admin UI and click "Mark as Activated"
+  ```
 
-**Scheduling constraints:**
-- Advance window: Today through 7 days maximum
-- Time window: 10:00 AM - 6:30 PM Brazil time (admin's operational hours)
-- Once scheduled: Cannot be changed (locked)
-- One active scheduled discount per creator at a time
-- Scheduling availability should be modifiable from admin backend
+#### Commission Boost Payout
+**Trigger:** When commission_boost_redemptions.boost_status changes to 'pending_payout'
+**Calendar Event:**
+- Title: "💸 Commission Payout: @{handle}"
+- Due: NOW() + 2 hours
+- Description:
+  ```
+  Creator: @{users.tiktok_handle}
+  Payout Amount: ${commission_boost_redemptions.final_payout_amount}
+  Payment Method: {commission_boost_redemptions.payment_method}
+  Payment Account: {commission_boost_redemptions.payment_account}
 
-**Creator's Claims section shows:**
-- Scheduled date/time (in creator's timezone)
-- Countdown: "Activates in 2 days, 5 hours"
-- Status: "Scheduled"
+  Boost Details:
+  - Percent: {rewards.value_data.percent}%
+  - Duration: {rewards.value_data.duration_days} days
+  - Sales During Boost: ${commission_boost_redemptions.sales_delta}
 
----
+  Action: Send payment via {payment_method}, then record in Admin UI
+  ```
 
-### Flow 10: Admin Fulfills Reward
+#### Raffle Drawing
+**Trigger:** When raffle_end_date = TODAY (daily cron check)
+**Calendar Event:**
+- Title: "🎲 Draw Raffle Winner: {mission_name}"
+- Due: raffle_end_date at 12:00 PM EST
+- Description:
+  ```
+  Raffle: {missions.display_name}
+  Prize: {rewards.name}
+  Total Participants: {COUNT(raffle_participations)}
 
-**Trigger:** Admin needs to complete operational task for pending redemption (within 24-hour SLA for instant, or at scheduled time for scheduled)
-
-**Admin Dashboard Structure:**
-
-**Two Fulfillment Queues:**
-
-1. **Instant Fulfillments Queue** (24-hour SLA tracking)
-   - Displays pending instant redemptions
-   - Sorted by urgency: Overdue (>24h) → Due Soon (<4h) → On Time (>4h)
-   - Shows: creator handle, reward name, tier at claim, claimed timestamp, hours remaining
-   - SLA calculation: `hoursRemaining = 24 - (NOW - claimed_at)`
-
-2. **Scheduled Activations Queue** (by scheduled time)
-   - Displays pending scheduled redemptions
-   - Sorted by scheduled activation time (earliest first)
-   - Shows: creator handle, reward name, scheduled time (Brazil), claimed timestamp
-   - Indicators: Today, Tomorrow, This Week
-   - Google Calendar event link
-
-3. **Create Google Calendar event:**
-   - Create event in admin's Google Calendar:
-     - Title: "Activate TikTok Discount - @creatorhandle"
-     - Description: "Deliver {Reward Type} in TikTok Seller Center"
-        - Description has to be Variable to the actual discount and type of reward
-     - Time: Jan 12, 4:00 PM Brazil time
-     - Duration: 15 minutes
-     - Reminders: 15 minutes before (popup), 1 hour before (email)
-   - Store event ID: `google_calendar_event_id = event.id`
+  Action: Select winner in Admin UI
+  ```
 
 ---
 
-#### Flow 9A: Fulfill Instant Redemption
-
-**Steps:**
-1. **Admin reviews queue:**
-   - Navigate to Admin Panel → Fulfillment Queue → Instant tab
-   - Queue sorted by urgency (overdue items first)
-   - Example display:
-     ```
-     ⚠️ DUE IN 2 HOURS
-     @creator1 - $50 Amazon Gift Card (Gold)
-     Claimed: Jan 4, 10:30 AM (22 hours ago)
-     Task: Buy gift card on Amazon, email to creator
-     [Mark as Fulfilled]
-     ```
-
-2. **Admin completes operational task:**
-   - **Gift Card:** Purchase on Amazon, email code to creator
-   - **Spark Ads:** Set up Spark Ads campaign for creator's content
-   - **Physical Gift:** Collect shipping info, order/ship item
-   - **Experience:** Coordinate event details with creator
-
-3. **Admin clicks "Mark as Fulfilled":**
-   - Modal appears: "Add fulfillment notes (optional)"
-   - Input field examples:
-     - "Gift card code: ABCD-EFGH-IJKL, sent to creator@email.com"
-     - "Spark Ads campaign created, $100 budget"
-     - "Physical gift shipped, tracking: 1Z999AA1"
-     - "VIP event confirmed for Jan 20, sent details via email"
-   - Clicks "Confirm"
-
-4. **Update redemption record:**
-   - Update redemptions table:
-     ```
-     status = 'fulfilled'
-     fulfilled_at = NOW()
-     fulfilled_by = admin.id
-     fulfillment_notes = admin_notes
-     ```
-
-5. **Mark as concluded (optional, for complete closure):**
-   - After fulfillment verified, admin can finalize:
-     ```
-     status = 'concluded'
-     concluded_at = NOW()
-     ```
-   - This moves the redemption to permanent history
-
-6. **Remove from queue:**
-   - Redemption disappears from active fulfillment queue
-   - Moves to completed redemptions history
-
-7. **Creator sees status update:**
-   - Reward moves to Redemption History tab
-   - Status progression: "Claimed" → "Fulfilled ✅" → "Concluded"
-
-**SLA tracking:**
-- Overdue (>24h): Red badge, shown first
-- Due Soon (<4h): Yellow badge, urgent attention
-- On Time (>4h): Green badge, normal priority
-- Email alert sent at 20 hours (4 hours before deadline)
-
----
-
-#### Flow 9B: Fulfill Scheduled Activation
-
-**Steps:**
-1. **Admin receives calendar notification:**
-   - Google Calendar sends reminder 15 minutes before scheduled time
-   - Example (Discount): "Activate TikTok Discount - @creator3" at 3:45 PM Brazil time
-   - Example (Commission Boost): "Activate Commission Boost - @creator5" at 2:45 PM EST
-
-2. **Admin reviews scheduled queue:**
-   - Navigate to Admin Panel → Fulfillment Queue → Scheduled tab
-   - Queue sorted by scheduled time
-   - Example display (Discount):
-     ```
-     🔔 TODAY at 4:00 PM (in 15 minutes) - Brazil Time
-     @creator3 - TikTok Discount {reward.value_data.percent}%
-     Scheduled: Jan 5, 4:00 PM Brazil (2:00 PM EST)
-     Claimed: Jan 2, 3:00 PM
-     📅 View in Google Calendar
-     Task: Activate {reward.value_data.percent}% discount in TikTok Seller Center
-     [Mark as Fulfilled]
-     ```
-   - Example display (Commission Boost):
-     ```
-     🔔 TODAY at 6:00 PM (in 15 minutes) - EST
-     @creator5 - Pay Boost: {reward.value_data.percent}% for {reward.value_data.duration_days} days
-     Scheduled: Jan 6, 6:00 PM EST
-     Claimed: Jan 3, 11:00 AM
-     📅 View in Google Calendar
-     Task: Activate {reward.value_data.percent}% commission boost in TikTok Seller Center
-     [Mark as Fulfilled]
-     ```
-     Note: Percentages and durations are dynamic from reward.value_data
-
-3. **Admin completes operational task:**
-   - **Discount:** At scheduled time (or shortly before), admin activates discount in TikTok Seller Center
-   - **Commission Boost:** At scheduled time, admin activates commission boost in TikTok Seller Center for creator's account
-   - Sets parameters, activation time, duration as specified in reward.value_data
-
-4. **Admin clicks "Mark as Fulfilled":**
-   - Modal appears: "Add fulfillment notes"
-   - Input field examples:
-     - "Discount activated at 4:00 PM, valid for 24 hours"
-     - "Commission boost activated at 3:00 PM, 5% for 30 days, expires Feb 5"
-   - Clicks "Confirm"
-
-5. **Update redemption record:**
-   - Update redemptions table:
-     ```
-     status = 'fulfilled'
-     fulfilled_at = NOW()
-     fulfilled_by = admin.id
-     fulfillment_notes = admin_notes
-     ```
-
-6. **Mark as concluded (optional, for complete closure):**
-   - After activation verified, admin can finalize:
-     ```
-     status = 'concluded'
-     concluded_at = NOW()
-     ```
-   - This moves the redemption to permanent history
-
-7. **Remove from queue:**
-   - Redemption disappears from scheduled queue
-   - Google Calendar event marked as completed (optional)
-
-8. **Creator sees status update:**
-   - Reward moves to Redemption History tab
-   - Status progression: "Claimed" → "Fulfilled ✅" → "Concluded"
-
-**Scheduling accuracy:**
-- No strict SLA (must activate at scheduled time, not within 24 hours)
-- Admin aims to activate within ±15 minutes of scheduled time
-- Google Calendar integration ensures admin doesn't miss activation
-
----
-
-**Performance tracking:**
-- Instant fulfillments: Track % completed within 24 hours
-- Scheduled activations: Track % activated within ±15 min of scheduled time
-- Dashboard shows fulfillment metrics (total pending, overdue count, on-time completion rate)
+### Calendar Event Lifecycle
+1. **Created:** When trigger condition met
+2. **Completed:** When admin completes action in Admin UI (event auto-deleted or marked done)
+3. **Overdue:** Visual indicator in Admin Dashboard if past due time
 
 ---
 
@@ -2479,6 +2245,8 @@ Check Loyalty\Rumi\Loyalty.md → ## Checkpoint
 
 ### Client Branding
 
+**Status:** ✅ Implemented (January 2025)
+
 **Branding Features (MVP):**
 
 **1. Login Screen Logo:**
@@ -2519,12 +2287,45 @@ Check Loyalty\Rumi\Loyalty.md → ## Checkpoint
 - Public read access for login screen display
 - Admin-only write access (RLS policies)
 
+---
+
+**Implementation Summary:**
+
+| File | Purpose |
+|------|---------|
+| `/app/api/internal/client-config/route.ts` | Internal API returns `logoUrl`, `clientName`, `primaryColor`, `privacyPolicyUrl` from `clients` table |
+| `/app/login/layout.tsx` | Server layout fetches config once per session, passes to context |
+| `/app/login/ClientConfigProvider.tsx` | React context shares config with all auth pages via `useClientConfig()` hook |
+| `/lib/color-utils.ts` | `adjustBrightness()` and `getButtonColors()` for dynamic button colors |
+
+**Key Behaviors:**
+- Single fetch per session (cached 1 hour via Next.js)
+- Internal-only endpoint (returns 403 on external access via `x-internal-request` header check)
+- Graceful fallback to defaults if database unavailable (auth flow never breaks)
+- Dynamic button colors derived from `clients.primary_color`
+- API contract: API_CONTRACTS.md lines 6192-6259 (`GET /api/internal/client-config`)
+
+**Pages Using Client Config:**
+- `/app/login/start/page.tsx`
+- `/app/login/wb/page.tsx`
+- `/app/login/forgotpw/page.tsx`
+- `/app/login/resetpw/page.tsx`
+- `/app/login/welcomeunr/page.tsx`
+- `/components/signup-form.tsx`
+
+**Environment Variable Required:**
+- `CLIENT_ID` - Must match a record in `clients` table (fallback values used if missing)
+
+**Database Query:**
+```sql
+SELECT logo_url, name, primary_color FROM clients WHERE id = $CLIENT_ID
+```
+
 
 ### Database & Data
 - Supabase database queries (native integration)
 - Row Level Security (users only see their own data)
 - Uptk automation script integration
-- Data sync status indicator ("Last updated: 2 hours ago")
 
 ### Authentication & User Management
 

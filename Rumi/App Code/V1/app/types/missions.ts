@@ -38,6 +38,7 @@ export interface Mission {
   // Reward information
   rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
   rewardDescription: string           // Backend-generated (with article grammar)
+  rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'mission' for missions)
 
   // PRE-COMPUTED status (backend derives from multiple tables)
   status: MissionStatus

@@ -20,6 +20,7 @@
 | 1.6 | sales_adjustments | Manual sales/units corrections | 190 |
 | 1.7 | tier_checkpoints | Tier maintenance audit trail | 216 |
 | 1.8 | handle_changes | TikTok handle change tracking | 247 |
+| 1.10 | sync_logs | Data sync operation tracking | 327 |
 
 ### SECTION 2: MISSIONS | REWARDS | REWARD SUB-STATES
 
@@ -112,7 +113,7 @@ clients (root)
 - `subdomain` - VARCHAR(100) UNIQUE - Future multi-tenant routing (e.g., 'clientx.loyaltyapp.com')
 - `logo_url` - TEXT - Supabase Storage URL for login screen logo (required for go-live)
 - `primary_color` - VARCHAR(7) DEFAULT '#6366f1' - Global header color (hex format)
-- `tier_calculation_mode` - VARCHAR(50) DEFAULT 'lifetime' - Options: 'lifetime' (Phase 1), 'fixed_checkpoint' (Future)
+- `tier_calculation_mode` - VARCHAR(50) DEFAULT 'fixed_checkpoint' - Options: 'fixed_checkpoint' (default, checkpoint-based tier maintenance), 'lifetime' (tiers never downgrade)
 - `checkpoint_months` - INTEGER DEFAULT 4 - Checkpoint period duration (same for all non-Bronze tiers)
 - `vip_metric` - VARCHAR(20) NOT NULL DEFAULT 'sales' - VIP tier progression metric: 'sales' (revenue $$$) or 'units' (volume #). Immutable after client launch.
 - `created_at`, `updated_at` - TIMESTAMP - Audit trail
@@ -324,6 +325,34 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 
 ---
 
+### 1.10 sync_logs Table
+
+**Purpose:** Track automated and manual data sync operations from Cruva
+
+**Current Attributes:**
+- `id` - UUID PRIMARY KEY DEFAULT uuid_generate_v4()
+- `client_id` - UUID NOT NULL REFERENCES clients(id) - Multi-tenant isolation
+- `status` - VARCHAR(50) NOT NULL DEFAULT 'running' - Options: 'running', 'success', 'failed'
+- `source` - VARCHAR(50) NOT NULL DEFAULT 'auto' - Options: 'auto', 'manual'
+- `started_at` - TIMESTAMP NOT NULL DEFAULT NOW() - When sync started
+- `completed_at` - TIMESTAMP - When sync finished (NULL if running)
+- `records_processed` - INTEGER DEFAULT 0 - Number of records processed
+- `error_message` - TEXT - Error details if status='failed'
+- `file_name` - VARCHAR(255) - Original filename for manual uploads
+- `triggered_by` - UUID REFERENCES users(id) - Admin who triggered manual upload (NULL for auto)
+- `created_at` - TIMESTAMP DEFAULT NOW()
+
+**Indexes:**
+```sql
+CREATE INDEX idx_sync_logs_client ON sync_logs(client_id);
+CREATE INDEX idx_sync_logs_status ON sync_logs(client_id, status);
+CREATE INDEX idx_sync_logs_recent ON sync_logs(client_id, started_at DESC);
+```
+
+**Status:** **NEW** - Added for Admin UI Data Sync screen
+
+---
+
 ## SECTION 2: Missions | Rewards | Reward Sub-states
 
 ### 1. missions Table
@@ -438,6 +467,7 @@ CREATE INDEX idx_mission_progress_tenant ON mission_progress(client_id, user_id,
 | name | VARCHAR(255) | | rewards | Auto-generated from type + value_data | Backend generates at query time (see API_CONTRACTS.md) |
 | description | VARCHAR(12) | | rewards | User-facing display | Max 12 chars, for physical_gift/experience only (used to generate name) |
 | value_data | JSONB | | rewards | Structured reward configuration | See value_data examples below. May include displayText for physical_gift/experience |
+| reward_source | VARCHAR(50) | NOT NULL DEFAULT 'mission' | rewards | Reward classification | Options: 'vip_tier' (automatic tier benefits), 'mission' (goal-based rewards). Determines which UI contexts display this reward. |
 | tier_eligibility | VARCHAR(50) | NOT NULL | rewards | Tier targeting (exact match) | Options: 'tier_1' through 'tier_6' |
 | enabled | BOOLEAN | DEFAULT false | rewards | Visibility control | |
 | preview_from_tier | VARCHAR(50) | DEFAULT NULL | rewards | Preview as locked | NULL or 'tier_1' through 'tier_6' |
@@ -500,6 +530,10 @@ See API_CONTRACTS.md for full API response specification.
 
 **Constraints:**
 ```sql
+CONSTRAINT check_reward_source CHECK (
+  reward_source IN ('vip_tier', 'mission')
+)
+
 CONSTRAINT check_quantity_with_frequency CHECK (
   (redemption_frequency = 'unlimited' AND redemption_quantity IS NULL) OR
   (redemption_frequency != 'unlimited' AND redemption_quantity >= 1 AND redemption_quantity <= 10)
@@ -529,9 +563,10 @@ CONSTRAINT check_discount_value_data CHECK (
 CREATE INDEX idx_rewards_client ON rewards(client_id);
 CREATE INDEX idx_rewards_type ON rewards(type);
 CREATE INDEX idx_rewards_tier ON rewards(tier_eligibility);
+CREATE INDEX idx_rewards_source ON rewards(reward_source);
 
--- Composite index for common multi-filter queries (GET /api/rewards)
-CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility, display_order);
+-- Composite index for common multi-filter queries (GET /api/rewards, GET /api/dashboard)
+CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility, reward_source, display_order);
 ```
 
 ---
@@ -797,6 +832,8 @@ WHERE pgr.shipped_at IS NULL
 | size_category | VARCHAR(50) | | physical_gift_redemptions | Type of size | Options: 'clothing', 'shoes', NULL |
 | size_value | VARCHAR(20) | | physical_gift_redemptions | User's selected size | e.g., 'S', 'M', 'L', 'XL', '8', '9.5' |
 | size_submitted_at | TIMESTAMP | | physical_gift_redemptions | When user selected size | |
+| shipping_recipient_first_name | VARCHAR(100) | NOT NULL | physical_gift_redemptions | Recipient first name | Required for carrier delivery |
+| shipping_recipient_last_name | VARCHAR(100) | NOT NULL | physical_gift_redemptions | Recipient last name | Required for carrier delivery |
 | shipping_address_line1 | VARCHAR(255) | NOT NULL | physical_gift_redemptions | Street address | Required for all physical gifts |
 | shipping_address_line2 | VARCHAR(255) | | physical_gift_redemptions | Apt, suite, unit | |
 | shipping_city | VARCHAR(100) | NOT NULL | physical_gift_redemptions | City | |

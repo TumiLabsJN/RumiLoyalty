@@ -36,6 +36,7 @@ export interface MissionHistoryItem {
   rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
   rewardName: string              // Backend-formatted "$50 Gift Card"
   rewardSubtitle: string          // Backend-formatted "From: Sales Sprint mission"
+  rewardSource: 'vip_tier' | 'mission' // From rewards.reward_source (always 'mission' for missions)
 
   // Completion timeline
   completedAt: string             // ISO 8601
