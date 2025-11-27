@@ -6273,3 +6273,6 @@ Returns 200 with fallback values if database query fails (to prevent breaking au
 - ✅ Header validation prevents client access
 - ✅ No sensitive data exposed in response
 - ✅ Graceful fallback on error (doesn't break auth)
+
+
+# Admin Endpoints

@@ -2336,12 +2336,6 @@ SELECT logo_url, name, primary_color FROM clients WHERE id = $CLIENT_ID
   - Admin → `/admin` (admin panel)
   - Creator → `/dashboard` (creator experience)
 
-**Creator Authentication:**
-- User login/registration
-- Email verification (Supabase default)
-- Password reset flow (Supabase magic link)
-- Profile management (update email, password)
-
 **Admin Authentication Strategy:**
 - **Route Protection:** Next.js middleware protects all `/admin/*` pages
   - Checks `is_admin` flag from session
@@ -2351,7 +2345,7 @@ SELECT logo_url, name, primary_color FROM clients WHERE id = $CLIENT_ID
   - Returns 403 if logged in but not admin
 - **Admin Account Setup:** Manual SQL update (one-time)
   - `UPDATE users SET is_admin = true WHERE email = 'admin@example.com'`
-- **Session Duration:** 30 days (same as creators)
+- **Session Duration:** 60 days (same as creators)
 - **Testing Account:** Maintain separate creator account for testing creator UX
 
 **Security Layers (Defense in Depth):**
@@ -2390,40 +2384,7 @@ The admin panel provides comprehensive configuration capabilities across 8 key a
 
 ---
 
-### Section 2: Reward Names
-
-**Commercial Names (Hardcoded):**
-
-All reward types have hardcoded commercial names for brand consistency:
-
-| Reward Type | Commercial Name | Full Display Format |
-|--------------|----------------|---------------------|
-| `gift_card` | Gift Card | "Gift Card: $50" |
-| `commission_boost` | Pay Boost | "Pay Boost: 5%" |
-| `spark_ads` | Reach Boost | "Reach Boost: $100" |
-| `discount` | Deal Boost | "Deal Boost: 10%" |
-| `physical_gift` | Gift Drop | "Gift Drop: Headphones" |
-| `experience` | Mystery Trip | "Mystery Trip: VIP Event" |
-
-**Auto-Generated Naming:**
-- **Category 1 rewards** (gift_card, commission_boost, spark_ads, discount): Auto-generate from commercial name + value
-  - Example: `commission_boost` + `{percent: 5}` → "Pay Boost: 5%"
-  - Example: `gift_card` + `{amount: 50}` → "Gift Card: $50"
-  - Example: `spark_ads` + `{amount: 100}` → "Reach Boost: $100"
-  - Example: `discount` + `{percent: 10}` → "Deal Boost: 10%"
-
-- **Category 2 rewards** (physical_gift, experience): Auto-generate from commercial name + description (max 15 chars)
-  - Example: `physical_gift` + "Headphones" → "Gift Drop: Headphones"
-  - Example: `experience` + "VIP Event" → "Mystery Trip: VIP Event"
-
-
-**Reward:** Enforces consistency, prevents naming errors, reduces admin burden
-
-**Time estimate:** 6-7 hours implementation
-
----
-
-### Section 3: Reward Amounts
+### Section 2: Reward Amounts
 
 **Smart Hybrid Storage:**
 - **Structured data** (Category 1): Use JSONB `value_data` field
@@ -2442,7 +2403,7 @@ All reward types have hardcoded commercial names for brand consistency:
 
 ---
 
-### Section 4: Earning Modes
+### Section 3: Earning Modes
 
 **Mode 1: VIP Active (Tier-Based Rewards)**
 - Automatic availability based on creator's current tier
@@ -2544,7 +2505,7 @@ All reward types have hardcoded commercial names for brand consistency:
 
 ---
 
-### Section 5: Conditional Display (Locked Rewards Visibility)
+### Section 4: Conditional Display (Locked Rewards Visibility)
 
 **Purpose:** Allow creators to see rewards/missions for higher tiers as locked (🔒) for motivation.
 
@@ -2632,7 +2593,7 @@ Result:
 
 ---
 
-### Section 6: Redemption Limits (Numeric Quantities)
+### Section 5: Redemption Limits (Numeric Quantities)
 
 **Purpose:** Allow creators to claim same reward multiple times within a period (e.g., "Claim Spark Ads Boost 2 times per month").
 
@@ -2799,7 +2760,7 @@ Preview: "Claimable 2 times per month"
 
 ---
 
-### Section 7: Mission Types
+### Section 6: Mission Types
 
 **6 Mission Types (All Supported):**
 1. **sales_dollars** - Track checkpoint sales progress (dollar amount)
@@ -2813,11 +2774,11 @@ Preview: "Claimable 2 times per month"
 
 **Note:** Sales missions have two variants (sales_dollars and sales_units) to support different tracking preferences per client.
 
-**Status:** ✅ Covered in Section 4 (Mode 3)
+**Status:** ✅ Covered in Section 3 (Mode 3)
 
 ---
 
-### Section 8: Reward/Mission Applicability
+### Section 7: Reward/Mission Applicability
 
 **Tier Targeting:**
 - **Rewards:** `tier_eligibility` field ('tier_1' through 'tier_6')
@@ -2847,7 +2808,7 @@ Preview: "Claimable 2 times per month"
   - If new tier lacks mission type → no replacement appears
 - Universal items (`tier_eligibility='all'`): Persist across changes for both rewards and missions
 
-**Status:** ✅ Covered in Sections 1 & 4
+**Status:** ✅ Covered in Sections 1 & 3
 
 ---
 
@@ -2856,13 +2817,12 @@ Preview: "Claimable 2 times per month"
 | Section | Time Estimate | Complexity |
 |---------|---------------|------------|
 | Section 1: General Config | 4-5 days | HIGH |
-| Section 2: Reward Names | 6-7 hours | LOW |
-| Section 3: Reward Amounts | 13-15 hours | MEDIUM |
-| Section 4: Modes (Missions + Raffles) | 23-31 hours | MEDIUM |
-| Section 5: Conditional Display | 9-11 hours | MEDIUM |
-| Section 6: Redemption Limits | 6-8 hours | MEDIUM |
-| Sections 7-8 | 0 hours (covered) | - |
-| **TOTAL** | **~10-12 days** | MEDIUM-HIGH |
+| Section 2: Reward Amounts | 13-15 hours | MEDIUM |
+| Section 3: Modes (Missions + Raffles) | 23-31 hours | MEDIUM |
+| Section 4: Conditional Display | 9-11 hours | MEDIUM |
+| Section 5: Redemption Limits | 6-8 hours | MEDIUM |
+| Sections 6-7 | 0 hours (covered) | - |
+| **TOTAL** | **~9-11 days** | MEDIUM-HIGH |
 
 ---
 

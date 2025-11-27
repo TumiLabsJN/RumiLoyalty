@@ -115,7 +115,7 @@ clients (root)
 - `primary_color` - VARCHAR(7) DEFAULT '#6366f1' - Global header color (hex format)
 - `tier_calculation_mode` - VARCHAR(50) DEFAULT 'fixed_checkpoint' - Options: 'fixed_checkpoint' (default, checkpoint-based tier maintenance), 'lifetime' (tiers never downgrade)
 - `checkpoint_months` - INTEGER DEFAULT 4 - Checkpoint period duration (same for all non-Bronze tiers)
-- `vip_metric` - VARCHAR(20) NOT NULL DEFAULT 'sales' - VIP tier progression metric: 'sales' (revenue $$$) or 'units' (volume #). Immutable after client launch.
+- `vip_metric` - VARCHAR(10) NOT NULL DEFAULT 'units' - VIP tier progression metric: 'units' (volume #) or 'sales' (revenue $$$). Immutable after client launch.
 - `created_at`, `updated_at` - TIMESTAMP - Audit trail
 
 ---
@@ -527,6 +527,22 @@ When serving `GET /api/rewards`, backend generates `name` and `displayText` fiel
 | experience | `description` | `value_data.display_text \|\| description` |
 
 See API_CONTRACTS.md for full API response specification.
+
+**Design Rationale - Hybrid Storage Approach:**
+
+All reward types use JSONB `value_data` for structured configuration, but with different patterns based on whether the reward has numeric values or descriptive text:
+
+| Category | Reward Types | Storage Pattern | Why This Approach |
+|----------|--------------|-----------------|-------------------|
+| **Numeric** | gift_card, spark_ads, commission_boost, discount | Numeric fields in JSONB (`amount`, `percent`, `duration_days`) | Type-safe storage, queryable for reports (SUM, aggregates), validated via CHECK constraints |
+| **Descriptive** | physical_gift, experience | `display_text` string in JSONB | Flexible text descriptions, no calculations needed, admin-provided content |
+
+**Benefits:**
+1. **Type safety**: Numeric amounts stored as proper numbers, not strings - prevents calculation errors
+2. **Queryable**: Can aggregate numeric fields for reports (e.g., SUM of gift card amounts, commission payouts)
+3. **Validated**: CHECK constraints enforce numeric ranges (e.g., percent 1-100, duration limits)
+4. **Flexible**: Descriptive rewards accept any text without schema changes
+5. **Consistent**: All types use same JSONB column, simplifying API and queries
 
 **Constraints:**
 ```sql

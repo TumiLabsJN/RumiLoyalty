@@ -773,19 +773,37 @@ Click raffle row → DRAWER (with raffle-specific actions):
 │                                        │
 │ ─────────────────────────────────────  │
 │                                        │
-│ SELECT WINNER (after end date)         │
-│ Winner Handle: [@____________]         │
+│ PARTICIPANTS (after end date)          │
+│ ┌────────────────────────────────────┐ │
+│ │ @creator1      │ Jan 15, 2025     │ │
+│ │ @creator2      │ Jan 16, 2025     │ │
+│ │ @creator3      │ Jan 17, 2025     │ │
+│ │ (scrollable list of all entries)  │ │
+│ └────────────────────────────────────┘ │
 │                                        │
-│ Current Winner: (none selected)        │
+│ [🎲 Pick Random Winner]                │
+│                                        │
+│ Selected Winner: @creator2             │
+│ (or "none selected" if not picked)     │
 │                                        │
 ├────────────────────────────────────────┤
-│    [Cancel]  [Save]  [Select Winner]   │
+│    [Cancel]  [Confirm Winner Selection]│
 └────────────────────────────────────────┘
+
+DRAWER DATA SOURCES:
+- Participant list: raffle_participations JOIN users
+  - users.tiktok_handle (via raffle_participations.user_id)
+  - raffle_participations.participated_at
+- Entry count: COUNT(raffle_participations WHERE mission_id)
 
 DRAWER ACTIONS:
 - If not activated: [Activate Raffle] button
-- If past end date + no winner: [Select Winner] button
-- Winner input: raffle_participations.is_winner = true
+- If past end date + no winner: Show participant list + [Pick Random Winner]
+- On [Confirm Winner Selection]:
+  - Winner: raffle_participations.is_winner = TRUE
+  - Others: raffle_participations.is_winner = FALSE
+  - raffle_participations.winner_selected_at = NOW()
+  - raffle_participations.selected_by = admin user id
 ```
 
 ## TailwindPlus Components
@@ -835,15 +853,28 @@ A list of the Raffles that are dormant (have Activated='false'):
 **Action (Manual):**
 Modify the Activated field to TRUE.
 
-#### Flow 1: Selecting winner
+#### Flow 1: Selecting Winner
 
-**Trigger:** missions.raffle_end_date = current date
+**Trigger:** missions.raffle_end_date has passed (current date >= raffle_end_date)
 
-**Information to view from Admin UI**
-A field where I can write the handle of the winner
+**Information to view from Admin UI:**
+1. Participant list (scrollable):
+   - users.tiktok_handle (via raffle_participations.user_id JOIN users)
+   - raffle_participations.participated_at
+2. Total entry count: COUNT(raffle_participations WHERE mission_id)
+3. Selected winner display (after picking)
 
 **Action (Manual):**
-Write the handle of the winner
+1. Click [🎲 Pick Random Winner] to randomly select from participant list
+   OR manually review list and select a handle
+2. Review selected winner
+3. Click [Confirm Winner Selection]
+
+**Database Updates on Confirm:**
+1. Winner row: raffle_participations.is_winner = TRUE
+2. All other rows: raffle_participations.is_winner = FALSE
+3. All rows: raffle_participations.winner_selected_at = NOW()
+4. All rows: raffle_participations.selected_by = current admin user id
 
 ---
 
@@ -1492,10 +1523,111 @@ List of concluded redemptions (last 10):
 # Screen 8: Reports
 
 ## Wireframe
-TODO
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  SIDEBAR          │  REPORTS                                                │
+│                   │                                                         │
+│  ○ Dashboard      │  ┌─────────────────────────────────────────────────────┐│
+│  ○ Redemptions    │  │  Reports                          [Export to Excel] ││
+│  ○ Missions       │  └─────────────────────────────────────────────────────┘│
+│  ○ VIP Rewards    │                                                         │
+│  ○ Sales Adj.     │  ┌─ FILTERS ──────────────────────────────────────────┐ │
+│  ○ Creator Lookup │  │                                                    │ │
+│  ○ Data Sync      │  │ Date Range: [This Month ▼]                         │ │
+│  ● Reports        │  │   - This Month                                     │ │
+│                   │  │   - Last Month                                     │ │
+│                   │  │   - This Quarter                                   │ │
+│                   │  │   - Last Quarter                                   │ │
+│                   │  │   - Custom Range                                   │ │
+│                   │  │                                                    │ │
+│                   │  │ (If Custom Range selected)                         │ │
+│                   │  │ From: [__/__/____]  To: [__/__/____]               │ │
+│                   │  │                                                    │ │
+│                   │  └────────────────────────────────────────────────────┘ │
+│                   │                                                         │
+│                   │  ┌─ REPORT 1: REWARDS SUMMARY ────────────────────────┐ │
+│                   │  │                                                    │ │
+│                   │  │ Period: November 2025                              │ │
+│                   │  │                                                    │ │
+│                   │  │ Reward Type       │Count │Total Spent             │ │
+│                   │  │───────────────────┼──────┼───────────────────────┤ │
+│                   │  │ Gift Cards        │  45  │ $2,250.00             │ │
+│                   │  │ Spark Ads         │  12  │ $1,200.00             │ │
+│                   │  │ Commission Boosts │   8  │   $847.50             │ │
+│                   │  │ Discounts         │  23  │         -             │ │
+│                   │  │ Physical Gifts    │   5  │         -             │ │
+│                   │  │ Experiences       │   2  │         -             │ │
+│                   │  │───────────────────┼──────┼───────────────────────┤ │
+│                   │  │ TOTAL             │  95  │ $4,297.50             │ │
+│                   │  │                                                    │ │
+│                   │  └────────────────────────────────────────────────────┘ │
+│                   │                                                         │
+│                   │  ════════════════════════════════════════════════════  │
+│                   │                                                         │
+│                   │  ┌─ REPORT 2: CREATOR ACTIVITY SUMMARY ───────────────┐ │
+│                   │  │                                                    │ │
+│                   │  │ Period: November 2025                              │ │
+│                   │  │                                                    │ │
+│                   │  │ Total Unique Creators: 67                          │ │
+│                   │  │ Total Redemptions: 95                              │ │
+│                   │  │                                                    │ │
+│                   │  │ Breakdown by Reward Type:                          │ │
+│                   │  │                                                    │ │
+│                   │  │ Reward Type       │Redemptions │Unique Creators   │ │
+│                   │  │───────────────────┼────────────┼──────────────────┤ │
+│                   │  │ Gift Cards        │     45     │       38         │ │
+│                   │  │ Spark Ads         │     12     │       10         │ │
+│                   │  │ Commission Boosts │      8     │        7         │ │
+│                   │  │ Discounts         │     23     │       21         │ │
+│                   │  │ Physical Gifts    │      5     │        5         │ │
+│                   │  │ Experiences       │      2     │        2         │ │
+│                   │  │                                                    │ │
+│                   │  └────────────────────────────────────────────────────┘ │
+│                   │                                                         │
+└───────────────────┴─────────────────────────────────────────────────────────┘
+```
+
+### Field Mappings
+
+**Date Range Filter:**
+- Date Range: Dropdown with options (This Month, Last Month, This Quarter, Last Quarter, Custom Range)
+- Custom Range: Two date pickers (From, To)
+
+**Report 1: Rewards Summary**
+- Period: Display selected date range
+- Table Columns:
+  - Reward Type: rewards.type ('gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience')
+  - Count: COUNT(redemptions.id) WHERE status='concluded' AND redemptions.created_at IN date_range
+  - Total Spent:
+    - Gift Cards: SUM((rewards.value_data->>'amount')::numeric) - Join redemptions → rewards, extract from JSONB
+    - Spark Ads: SUM((rewards.value_data->>'amount')::numeric) - Join redemptions → rewards, extract from JSONB
+    - Commission Boosts: SUM(commission_boost_redemptions.final_payout_amount) - Join redemptions → commission_boost_redemptions
+    - Discounts: "-" (no dollar amount tracked in schema)
+    - Physical Gifts: "-" (no cost field in schema, only count available)
+    - Experiences: "-" (no cost field in schema, only count available)
+
+**Report 2: Creator Activity Summary**
+- Period: Display selected date range
+- Total Unique Creators: COUNT(DISTINCT redemptions.user_id) WHERE status='concluded' AND redemptions.created_at IN date_range
+- Total Redemptions: COUNT(redemptions.id) WHERE status='concluded' AND redemptions.created_at IN date_range
+- Breakdown Table Columns:
+  - Reward Type: rewards.type
+  - Redemptions: COUNT(redemptions.id) per type
+  - Unique Creators: COUNT(DISTINCT redemptions.user_id) per type
 
 ## TailwindPlus Components
-TODO
+
+| Element | Component | Notes |
+|---------|-----------|-------|
+| Shell | Sidebar Layout | Same as other screens |
+| Page header | Headings > With actions | Title + [Export] button |
+| Date filter | Select Menus > Simple native | Date range dropdown |
+| Date pickers | Input Groups > With label | For custom range (if selected) |
+| Report sections | Cards or Borders | Wrap each report |
+| Report tables | Tables > Simple | Data display |
+| Summary stats | Text display | "Total Unique Creators: 67" |
+| Divider | Dividers > With title | Between reports |
 
 ## Reports
 
@@ -1529,3 +1661,75 @@ TODO
 4. Breakdown by reward type
 
 ---
+
+# Admin API Contracts Checklist
+
+**Document:** ADMIN_API_CONTRACTS.md
+**Status:** In Progress
+
+## Screen 1: Dashboard
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 1.1 | `/api/admin/dashboard/tasks` | GET | ⬜ Pending |
+
+## Screen 2: Redemptions
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 2.1 | `/api/admin/redemptions` | GET | ⬜ Pending |
+| 2.2 | `/api/admin/redemptions/:id` | GET | ⬜ Pending |
+| 2.3 | `/api/admin/redemptions/:id` | PATCH | ⬜ Pending |
+
+## Screen 3: Missions
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 3.1 | `/api/admin/missions` | GET | ⬜ Pending |
+| 3.2 | `/api/admin/missions` | POST | ⬜ Pending |
+| 3.3 | `/api/admin/missions/:id` | PATCH | ⬜ Pending |
+| 3.4 | `/api/admin/missions/:id` | DELETE | ⬜ Pending |
+| 3.5 | `/api/admin/missions/:id/participants` | GET | ⬜ Pending |
+| 3.6 | `/api/admin/missions/:id/draw-winner` | POST | ⬜ Pending |
+
+## Screen 4: VIP Rewards
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 4.1 | `/api/admin/rewards` | GET | ⬜ Pending |
+| 4.2 | `/api/admin/rewards` | POST | ⬜ Pending |
+| 4.3 | `/api/admin/rewards/:id` | PATCH | ⬜ Pending |
+| 4.4 | `/api/admin/rewards/:id` | DELETE | ⬜ Pending |
+
+## Screen 5: Sales Adjustments
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 5.1 | `/api/admin/users/search` | GET | ⬜ Pending |
+| 5.2 | `/api/admin/users/:id/adjustments` | GET | ⬜ Pending |
+| 5.3 | `/api/admin/users/:id/adjustments` | POST | ⬜ Pending |
+
+## Screen 6: Creator Lookup
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 6.1 | `/api/admin/users/:id` | GET | ⬜ Pending |
+| 6.2 | `/api/admin/users/:id/redemptions` | GET | ⬜ Pending |
+| 6.3 | `/api/admin/users/:id/missions` | GET | ⬜ Pending |
+
+*Note: User search (5.1) is shared with Screen 5*
+
+## Screen 7: Data Sync
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 7.1 | `/api/admin/sync/status` | GET | ⬜ Pending |
+| 7.2 | `/api/admin/sync/history` | GET | ⬜ Pending |
+| 7.3 | `/api/admin/sync/manual` | POST | ⬜ Pending |
+
+## Screen 8: Reports
+| # | Endpoint | Method | Status |
+|---|----------|--------|--------|
+| 8.1 | `/api/admin/reports/rewards-summary` | GET | ⬜ Pending |
+| 8.2 | `/api/admin/reports/creator-activity` | GET | ⬜ Pending |
+
+---
+
+**Total Endpoints: 23**
+- GET: 15
+- POST: 5
+- PATCH: 3
+- DELETE: 2

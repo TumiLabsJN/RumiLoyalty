@@ -1,0 +1,38 @@
+Category,What Information We Need,SQL Field Name,Sample Input,Options/Constraints,Critical Notes,
+CLIENT CONFIGURATION,Brand/Company Display Name,name,Acme Fashion,"VARCHAR(255), any text",Shows on creator login screen and throughout app,
+CLIENT CONFIGURATION,Subdomain (URL routing),subdomain,acmefashion,"VARCHAR(100), lowercase letters/numbers only, must be unique",Used for multi-tenant routing (future: acmefashion.loyaltyapp.com),
+CLIENT CONFIGURATION,Logo URL,logo_url,https://supabase.storage.com/logos/acme-logo.png,"TEXT, must be valid URL",⚠️ REQUIRED for go-live! Upload to Supabase Storage first,
+CLIENT CONFIGURATION,Primary Brand Color,primary_color,#FF6B35,"VARCHAR(7), hex format with # symbol",Used for header and UI theming throughout app,
+CLIENT CONFIGURATION,Tier Downgrade Setting,tier_calculation_mode,fixed_checkpoint,'fixed_checkpoint' OR 'lifetime',"⚠️ CRITICAL DECISION: fixed_checkpoint = tiers can go down at checkpoints, lifetime = tiers never downgrade (like airline status)",
+CLIENT CONFIGURATION,Checkpoint Period,checkpoint_months,4,"INTEGER, typically 3-6 months",How often tier eligibility is re-evaluated (applies to Silver+ only; Bronze exempt),
+CLIENT CONFIGURATION,VIP Tier Metric,vip_metric,sales,'sales' (revenue in $$$) OR 'units' (volume count #),⚠️ IMMUTABLE after launch! Determines how creators progress through tiers. Cannot be changed once client goes live.,
+TIER 1 CONFIGURATION,Tier Level Number,tier_level,1,Always 1 for Bronze tier,System value - do not change,
+TIER 1 CONFIGURATION,Tier Display Name,tier_name,Bronze,"VARCHAR(50), any text, can be custom like 'Rookie'",What creators see in the app,
+TIER 1 CONFIGURATION,Tier Color,tier_color,#CD7F32,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 1 CONFIGURATION,Sales Threshold,sales_threshold,0,Always 0 for Tier 1,Entry tier has no minimum requirement,
+TIER 1 CONFIGURATION,Commission Rate,commission_rate,10,"INTEGER, percentage 0-100",Commission percentage for this tier (e.g., 10 = 10%)
+TIER 2 CONFIGURATION,Tier Level Number,tier_level,2,Always 2 for Silver tier,System value - do not change,
+TIER 2 CONFIGURATION,Tier Display Name,tier_name,Silver,"VARCHAR(50), any text, can be custom like 'Pro'",What creators see in the app,
+TIER 2 CONFIGURATION,Tier Color,tier_color,#C0C0C0,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 2 CONFIGURATION,Sales Threshold,sales_threshold,1000,"INTEGER or DECIMAL, must be > Tier 1",Minimum sales ($ or units) needed to achieve this tier. Must match vip_metric type.,
+TIER 2 CONFIGURATION,Commission Rate,commission_rate,12,"INTEGER, percentage 0-100, should be > Tier 1 rate",Commission percentage for this tier (e.g., 12 = 12%)
+TIER 3 CONFIGURATION,Tier Level Number,tier_level,3,Always 3 for Gold tier,System value - do not change,
+TIER 3 CONFIGURATION,Tier Display Name,tier_name,Gold,"VARCHAR(50), any text, can be custom like 'Elite'",What creators see in the app,
+TIER 3 CONFIGURATION,Tier Color,tier_color,#FFD700,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 3 CONFIGURATION,Sales Threshold,sales_threshold,3000,"INTEGER or DECIMAL, must be > Tier 2",Minimum sales ($ or units) needed to achieve this tier. Must match vip_metric type.,
+TIER 3 CONFIGURATION,Commission Rate,commission_rate,15,"INTEGER, percentage 0-100, should be > Tier 2 rate",Commission percentage for this tier (e.g., 15 = 15%)
+TIER 4 CONFIGURATION,Tier Level Number,tier_level,4,Always 4 for Platinum tier,System value - do not change,
+TIER 4 CONFIGURATION,Tier Display Name,tier_name,Platinum,"VARCHAR(50), any text, can be custom like 'Champion'",What creators see in the app,
+TIER 4 CONFIGURATION,Tier Color,tier_color,#E5E4E2,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 4 CONFIGURATION,Sales Threshold,sales_threshold,5000,"INTEGER or DECIMAL, must be > Tier 3",Minimum sales ($ or units) needed to achieve this tier. Must match vip_metric type.,
+TIER 4 CONFIGURATION,Commission Rate,commission_rate,20,"INTEGER, percentage 0-100, should be > Tier 3 rate",Commission percentage for this tier (e.g., 20 = 20%)
+TIER 5 CONFIGURATION,Tier Level Number,tier_level,5,Always 5 for Diamond tier (if used),System value - only if client wants 5+ tiers,
+TIER 5 CONFIGURATION,Tier Display Name,tier_name,Diamond,"VARCHAR(50), any text",What creators see in the app,
+TIER 5 CONFIGURATION,Tier Color,tier_color,#B9F2FF,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 5 CONFIGURATION,Sales Threshold,sales_threshold,10000,"INTEGER or DECIMAL, must be > Tier 4",Minimum sales ($ or units) needed to achieve this tier. Must match vip_metric type.,
+TIER 5 CONFIGURATION,Commission Rate,commission_rate,25,"INTEGER, percentage 0-100, should be > Tier 4 rate",Commission percentage for this tier (e.g., 25 = 25%)
+TIER 6 CONFIGURATION,Tier Level Number,tier_level,6,Always 6 for top tier (if used),System value - only if client wants 6 tiers,
+TIER 6 CONFIGURATION,Tier Display Name,tier_name,Legend,"VARCHAR(50), any text",What creators see in the app,
+TIER 6 CONFIGURATION,Tier Color,tier_color,#FF1493,"VARCHAR(7), hex format with # symbol",Visual indicator for this tier,
+TIER 6 CONFIGURATION,Sales Threshold,sales_threshold,25000,"INTEGER or DECIMAL, must be > Tier 5",Minimum sales ($ or units) needed to achieve this tier. Must match vip_metric type.,
+TIER 6 CONFIGURATION,Commission Rate,commission_rate,30,"INTEGER, percentage 0-100, should be > Tier 5 rate",Commission percentage for this tier (e.g., 30 = 30%)
