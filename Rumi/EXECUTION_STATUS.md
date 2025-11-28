@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 15:15 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 15:45 [Update this timestamp when you modify this document]
 
 ---
 
@@ -37,22 +37,24 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 1.1.2
-**Description:** Add ENUM types to migration
+**Task ID:** Task 1.1.3
+**Description:** Add clients table
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read SchemaFinalv2.md lines 1-50 for enum definitions
-- [ ] Add CREATE TYPE statements for mission_type, mission_status, reward_type, etc.
-- [ ] Verify all enums added to migration file
+- [ ] Read SchemaFinalv2.md lines 106-120 for clients table definition
+- [ ] Add CREATE TABLE for clients with all columns per schema
+- [ ] Include CHECK constraints for vip_metric and tier_calculation_mode
+- [ ] Verify acceptance criteria met
 
 ### Next Action
-Read SchemaFinalv2.md lines 1-50, then add ENUM types to `supabase/migrations/20251128173733_initial_schema.sql`
+Read SchemaFinalv2.md lines 106-120, then add clients table to migration
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
+- [x] **Task 1.1.2** - SKIPPED: SchemaFinalv2.md uses VARCHAR not ENUMs (2025-11-28 15:40)
 - [x] **Task 1.1.1** - Create initial migration file (Completed: 2025-11-28 15:10)
 - [x] **Task 0.2.7** - Configure Supabase Auth session duration to 604800s/7 days (Completed: 2025-11-28 14:55)
 - [x] **Task 0.2.6** - Link Supabase project (Completed: 2025-11-28 14:40)

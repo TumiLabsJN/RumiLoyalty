@@ -23,6 +23,14 @@
 - REQUIRED: Read documentation section before implementation
 - REQUIRED: Verify against API contracts before marking complete
 
+### Decision Authority (CRITICAL)
+- FORBIDDEN: Making architectural decisions not explicitly in source docs
+- FORBIDDEN: Converting data types (e.g., VARCHAR to ENUM) without explicit instruction
+- FORBIDDEN: Adding patterns/abstractions not specified in documentation
+- FORBIDDEN: "Improving" or "optimizing" beyond what's written
+- **IF AMBIGUOUS: STOP and ask user before proceeding**
+- **IF DOCS CONFLICT WITH TASK: STOP and ask user which to follow**
+
 ### Operational Procedures
 **All session management, CR workflows, and sequential enforcement rules live in EXECUTION_STATUS.md.**
 
@@ -150,10 +158,11 @@
     - **Acceptance Criteria:** New empty migration file in `/supabase/migrations/`
     - **Output:** `supabase/migrations/20251128173733_initial_schema.sql`
 
-- [ ] **Task 1.1.2:** Add ENUM types to migration
-    - **Action:** Add all CREATE TYPE statements for mission_type, mission_status, reward_type, etc.
+- [x] **Task 1.1.2:** ~~Add ENUM types to migration~~ SKIPPED
+    - **Action:** ~~Add all CREATE TYPE statements for mission_type, mission_status, reward_type, etc.~~
     - **References:** SchemaFinalv2.md lines 1-50 (enum definitions)
-    - **Acceptance Criteria:** Migration contains all enum types
+    - **Acceptance Criteria:** ~~Migration contains all enum types~~
+    - **Decision:** SchemaFinalv2.md uses VARCHAR(50) with CHECK constraints, not ENUMs. Task skipped per user direction to follow source doc.
 
 - [ ] **Task 1.1.3:** Add `clients` table
     - **Action:** Add CREATE TABLE for clients with uuid primary key
