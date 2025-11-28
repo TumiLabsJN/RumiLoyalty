@@ -42,6 +42,12 @@
   3. **Against the Source Documentation Rule** - Next session must read source docs directly
 - If you need specific values, READ THE SOURCE FILE in that session
 
+### Task Completion Rule
+- **ALWAYS mark completed tasks `[x]` in EXECUTION_PLAN.md** (not just this status doc)
+- Both files must stay in sync:
+  1. EXECUTION_PLAN.md: `- [x] **Task X.Y.Z:**` (authoritative task list)
+  2. EXECUTION_STATUS.md: "Recently Completed" section (session tracking)
+
 ---
 
 ## 📋 HOW TO USE THIS DOCUMENT (For LLMs)
