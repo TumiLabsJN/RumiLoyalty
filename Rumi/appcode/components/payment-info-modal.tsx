@@ -233,7 +233,7 @@ export function PaymentInfoModal({
               <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
                 <p className="text-sm font-medium text-slate-900">PayPal</p>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  We'll send your earnings to your PayPal account
+                  We&apos;ll send your earnings to your PayPal account
                 </p>
               </div>
             </div>

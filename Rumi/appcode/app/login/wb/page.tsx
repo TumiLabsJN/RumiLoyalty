@@ -141,7 +141,7 @@
               Welcome back, {handle}!
             </h1>
             <p className="text-sm text-slate-600">
-              Let's unlock your rewards
+              Let&apos;s unlock your rewards
             </p>
           </div>
 

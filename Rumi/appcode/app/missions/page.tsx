@@ -1078,7 +1078,7 @@ export default function MissionsPage() {
                       {/* CARD STATE: Clearing - Backside with sales clearing message */}
                       {isClearing && (
                         <p className="text-center text-slate-700 font-medium text-base px-4">
-                          Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
+                          Sales clear after 20 days to allow for returns. We&apos;ll notify you as soon as your reward is ready.
                         </p>
                       )}
                       {/* CARD STATE: Sending - Backside with shipping message */}

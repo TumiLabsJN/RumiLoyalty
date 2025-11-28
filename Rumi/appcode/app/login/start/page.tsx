@@ -94,7 +94,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center space-y-2 mb-8">
           {/* Static: Main heading */}
-          <h1 className="text-lg font-semibold text-slate-900">Let's Get Started!</h1>
+          <h1 className="text-lg font-semibold text-slate-900">Let&apos;s Get Started!</h1>
 
           {/* Static: Instructions */}
           <p className="text-sm text-slate-600">Enter your TikTok Handle</p>

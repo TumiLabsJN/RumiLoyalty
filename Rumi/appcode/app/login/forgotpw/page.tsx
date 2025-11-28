@@ -129,7 +129,7 @@ export default function ForgotPasswordPage() {
         {/* Resend Link */}
         <div className="text-center mb-6">
           <p className="text-sm text-slate-600 mb-2">
-            Didn't receive it?
+            Didn&apos;t receive it?
           </p>
           <button
             onClick={handleResend}

@@ -823,7 +823,7 @@ export default function RewardsPage() {
                         <FlipBackSide onClick={flipBack}>
                           <div className="flex items-center justify-center p-4 rounded-lg border bg-slate-50 border-slate-200 min-h-[88px]">
                             <p className="text-xs text-slate-600 leading-snug text-center max-w-full">
-                              Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.
+                              Sales clear after 20 days to allow for returns. We&apos;ll notify you as soon as your reward is ready.
                             </p>
                           </div>
                         </FlipBackSide>
