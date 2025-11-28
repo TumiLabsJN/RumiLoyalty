@@ -14,7 +14,7 @@
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
 5. Enums file: `appcode/lib/types/enums.ts` - **CREATED (18 types, 18 arrays, 18 type guards)**
 6. API types file: `appcode/lib/types/api.ts` - **CREATED (all 22 endpoints)**
-7. Server client: `appcode/lib/supabase/server.ts` - **CREATED (uses SUPABASE_* env vars)**
+7. Server client: `appcode/lib/supabase/server-client.ts` - **CREATED (uses SUPABASE_* env vars)**
 8. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
 9. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
 10. **Phase 1 COMPLETE.** Phase 2 in progress.
@@ -93,7 +93,7 @@ Read EXECUTION_PLAN.md Task 2.2.2 and create admin.ts
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
 - [x] **Task 2.2.1** - Create server client (Completed: 2025-11-28 21:45)
-  - Created appcode/lib/supabase/server.ts
+  - Created appcode/lib/supabase/server-client.ts
   - Uses SUPABASE_URL and SUPABASE_ANON_KEY (server-only env vars)
   - Includes Database types for type safety
   - Consolidated env vars in appcode/.env.local (SUPABASE_* + NEXT_PUBLIC_*)
