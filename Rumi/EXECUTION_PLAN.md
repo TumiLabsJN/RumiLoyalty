@@ -101,17 +101,18 @@
     - **Verification:** Run `npm list --depth=0` to confirm all installed
     - **Note:** Created Next.js project in `/home/jorge/Loyalty/Rumi/app/`
 
-- [ ] **Task 0.2.2c:** Verify Node.js version requirement
+- [x] **Task 0.2.2c:** Verify Node.js version requirement
     - **Command:** `node --version`
     - **References:** Loyalty.md line 44 (Node.js 20+ LTS requirement)
     - **Acceptance Criteria:** Output shows v20.x.x or higher
+    - **Result:** v22.16.0 ✅
 
-- [ ] **Task 0.2.3:** Configure environment variables
+- [x] **Task 0.2.3:** Configure environment variables
     - **Action:** Create `.env.local` with: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, ENCRYPTION_KEY
     - **References:** Loyalty.md line 2172 (ENCRYPTION_KEY requirement), Supabase documentation for connection vars
     - **Acceptance Criteria:** All required env vars set, `.env.local` in `.gitignore`
 
-- [ ] **Task 0.2.3a:** Add CRUVA credentials to environment variables
+- [x] **Task 0.2.3a:** Add CRUVA credentials to environment variables
     - **Action:** Add to `.env.local`: CRUVA_USERNAME, CRUVA_PASSWORD, CRUVA_LOGIN_URL (platform URL for Puppeteer authentication)
     - **References:** Loyalty.md lines 73-83 (CRUVA TikTok Analytics Platform), lines 425-427 (Flow 1: Puppeteer logs into CRUVA)
     - **Acceptance Criteria:** CRUVA credentials stored securely in `.env.local`, not committed to git, ready for Puppeteer automation
