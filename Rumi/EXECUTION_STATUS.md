@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 22:15 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 22:25 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 2.3.2 - Create encryption utility**
+1. Current task: **Task 2.3.3 - Create data transformation utility**
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
@@ -77,22 +77,28 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 2.3.2
-**Description:** Create encryption utility
+**Task ID:** Task 2.3.3
+**Description:** Create data transformation utility
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read EXECUTION_PLAN.md Task 2.3.2 for requirements
-- [ ] Create `appcode/lib/utils/encryption.ts` with encrypt/decrypt functions
-- [ ] Use AES-256-GCM with ENCRYPTION_KEY from env
+- [ ] Read EXECUTION_PLAN.md Task 2.3.3 for requirements
+- [ ] Create `appcode/lib/utils/transformers.ts` with snake_case → camelCase conversion
+- [ ] Handle special cases: duration_minutes → durationDays, nested JSON, encrypted fields
 
 ### Next Action
-Read EXECUTION_PLAN.md Task 2.3.2 and Loyalty.md Pattern 9
+Read EXECUTION_PLAN.md Task 2.3.3 and ARCHITECTURE.md Section 7
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
+- [x] **Task 2.3.2** - Create encryption utility (Completed: 2025-11-28 22:25)
+  - Created appcode/lib/utils/encryption.ts
+  - AES-256-GCM encryption/decryption
+  - Format: "iv:authTag:ciphertext" (base64)
+  - Uses ENCRYPTION_KEY from env (64 hex chars)
+  - Helper functions: isEncrypted, safeDecrypt
 - [x] **Task 2.3.1** - Create auth utility (Completed: 2025-11-28 22:15)
   - Created appcode/lib/utils/auth.ts
   - getUserFromRequest: Extracts user from JWT, fetches client_id
@@ -198,8 +204,8 @@ See full workflow in previous version of this document.
 - [x] Task 2.2.1: Create server client
 - [x] Task 2.2.2: Create admin client
 - [x] Task 2.3.1: Create auth utility
-- [ ] Task 2.3.2: Create encryption utility ← **CURRENT**
-- [ ] Task 2.3.3: Create data transformation utility
+- [x] Task 2.3.2: Create encryption utility
+- [ ] Task 2.3.3: Create data transformation utility ← **CURRENT**
 - [ ] Task 2.3.4: Add transformation tests
 - [ ] Task 2.3.5: Create validation utility
 - [ ] Task 2.3.6: Create error handling utility
