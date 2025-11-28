@@ -37,27 +37,28 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 0.2.1
-**Description:** Initialize Supabase project
+**Task ID:** Task 0.2.2a
+**Description:** Extract Tech Stack dependencies from documentation
 **Status:** [ ] Not Started
 **Started:** [Pending]
 
 ### What's Left
-- [ ] Run `supabase init`
-- [ ] Verify `/supabase` directory exists
+- [ ] Read Loyalty.md lines 17-49 (Tech Stack section)
+- [ ] Extract all npm packages
+- [ ] Create comprehensive list of packages to install
 
 ### Next Action
-Initialize Supabase project with `supabase init`
+Read Loyalty.md Tech Stack section to extract dependencies
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
 
-- [x] **Task 0.1.5** - Read API_CONTRACTS.md, create 23 endpoints checklist (Completed: 2025-11-28 10:15, commit: pending)
+- [x] **Task 0.2.1** - Initialize Supabase project (Completed: 2025-11-28 10:25, commit: pending)
+- [x] **Task 0.1.5** - Read API_CONTRACTS.md, create 23 endpoints checklist (Completed: 2025-11-28 10:15, commit: d023b35)
 - [x] **Task 0.1.4** - Read ARCHITECTURE.md, confirm 3-layer pattern understanding (Completed: 2025-11-28 10:00, commit: 2cbd6a6)
 - [x] **Task 0.1.3** - Read MissionsRewardsFlows.md, document state transitions (Completed: 2025-11-28 09:45, commit: d3d53a5)
 - [x] **Task 0.1.2** - Read SchemaFinalv2.md, create FK dependency graph (Completed: 2025-11-28 09:30, commit: e8e68ac)
-- [x] **Task 0.1.1** - Read Loyalty.md, create summary of 9 patterns and 10 flows (Completed: 2025-11-28 09:15, commit: 0dfd8be)
 
 ---
 

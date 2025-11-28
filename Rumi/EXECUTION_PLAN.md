@@ -82,7 +82,7 @@
     - **Output:** `/home/jorge/Loyalty/Rumi/API_ENDPOINTS_CHECKLIST.md`
 
 ## Step 0.2: Environment Setup
-- [ ] **Task 0.2.1:** Initialize Supabase project
+- [x] **Task 0.2.1:** Initialize Supabase project
     - **Command:** `supabase init`
     - **References:** Loyalty.md lines 38-40 (Supabase PostgreSQL, Auth, Storage)
     - **Acceptance Criteria:** `/supabase` directory exists
