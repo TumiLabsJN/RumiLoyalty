@@ -63,10 +63,11 @@
     - **Acceptance Criteria:** Create table dependency graph showing FK relationships
     - **Output:** `/home/jorge/Loyalty/Rumi/SCHEMA_DEPENDENCY_GRAPH.md`
 
-- [ ] **Task 0.1.3:** Read MissionsRewardsFlows.md (527 lines)
+- [x] **Task 0.1.3:** Read MissionsRewardsFlows.md (527 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/MissionsRewardsFlows.md`
     - **Focus:** 6 mission types, 6 reward types, state machines
     - **Acceptance Criteria:** Document all valid state transitions
+    - **Output:** `/home/jorge/Loyalty/Rumi/STATE_TRANSITIONS.md`
 
 - [ ] **Task 0.1.4:** Read ARCHITECTURE.md (1,433 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/ARCHITECTURE.md`
