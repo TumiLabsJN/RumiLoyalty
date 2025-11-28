@@ -378,41 +378,41 @@
 **Objective:** Build foundational code shared across all features.
 
 ## Step 2.1: TypeScript Types
-- [ ] **Task 2.1.1:** Generate Supabase types
+- [x] **Task 2.1.1:** Generate Supabase types
     - **Command:** `supabase gen types typescript --local > lib/types/database.ts`
     - **References:** Loyalty.md lines 38-40 (Supabase PostgreSQL), Supabase CLI documentation for type generation
     - **Acceptance Criteria:** File contains all table types
 
-- [ ] **Task 2.1.2:** Create enums file
+- [x] **Task 2.1.2:** Create enums file
     - **Action:** Create `/lib/types/enums.ts` with all enum types
     - **References:** SchemaFinalv2.md (enum definitions)
     - **Acceptance Criteria:** MissionType, MissionStatus, RewardType, RedemptionStatus exported
 
-- [ ] **Task 2.1.3:** Create API types file
+- [x] **Task 2.1.3:** Create API types file
     - **Action:** Create `/lib/types/api.ts` with request/response types
     - **References:** API_CONTRACTS.md (all endpoints)
     - **Acceptance Criteria:** Type for each API endpoint's request body and response
 
 ## Step 2.2: Supabase Clients
-- [ ] **Task 2.2.1:** Create server client
+- [x] **Task 2.2.1:** Create server client
     - **Action:** Create `/lib/supabase/server-client.ts` using `@supabase/ssr` package with cookies for Next.js App Router
     - **References:** Supabase documentation for Next.js App Router server client setup
     - **Implementation Guide:** Use `createServerClient` from `@supabase/ssr`, pass `cookies()` from `next/headers`, use SUPABASE_URL and SUPABASE_ANON_KEY
     - **Acceptance Criteria:** Client uses anon key, respects RLS, works in server components and API routes
 
-- [ ] **Task 2.2.2:** Create admin client
+- [x] **Task 2.2.2:** Create admin client
     - **Action:** Create `/lib/supabase/admin-client.ts` using `createClient` from `@supabase/supabase-js` with service role key
     - **References:** Supabase documentation for admin/service role client
     - **Implementation Guide:** Use SUPABASE_SERVICE_ROLE_KEY instead of anon key, bypasses RLS
     - **Acceptance Criteria:** Client bypasses RLS, MUST only be used in cron jobs and admin operations, never in user-facing routes
 
 ## Step 2.3: Utility Functions
-- [ ] **Task 2.3.1:** Create auth utility
+- [x] **Task 2.3.1:** Create auth utility
     - **Action:** Create `/lib/utils/auth.ts` with getUserFromRequest, validateClientId
     - **References:** ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137), Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Acceptance Criteria:** Functions extract user from JWT, validate client_id presence, follow security patterns from Section 10
 
-- [ ] **Task 2.3.2:** Create encryption utility
+- [x] **Task 2.3.2:** Create encryption utility
     - **Action:** Create `/lib/utils/encryption.ts` with encrypt/decrypt functions using AES-256-GCM
     - **References:** Loyalty.md Pattern 9 (Sensitive Data Encryption)
     - **Acceptance Criteria:** Encrypt/decrypt functions work, use ENCRYPTION_KEY from env
