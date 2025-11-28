@@ -13,6 +13,12 @@
 3. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
 4. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
 
+### Source Documentation Rule
+- **ALWAYS read source docs directly** before implementing each task
+- Each task has **References:** with specific file + line numbers - READ THOSE LINES
+- **DO NOT trust summary files** (LOYALTY_SUMMARY.md, SCHEMA_DEPENDENCY_GRAPH.md, etc.) - they are secondary artifacts, not authoritative
+- **Source of truth:** SchemaFinalv2.md, API_CONTRACTS.md, ARCHITECTURE.md, Loyalty.md
+
 ---
 
 ## 📋 HOW TO USE THIS DOCUMENT (For LLMs)
