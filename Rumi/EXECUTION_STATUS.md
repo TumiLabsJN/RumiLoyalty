@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 17:45 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 19:30 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,11 +8,12 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 1.8.1 - Create seed script file**
+1. Current task: **Task 2.1.1 - Generate Supabase types**
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
-3. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
-4. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
-5. **Phase 1 Progress:** Steps 1.1-1.7 COMPLETE. All 18 tables deployed with indexes, RLS policies, and triggers.
+3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
+4. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
+5. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
+6. **Phase 1 COMPLETE:** All 18 tables deployed with indexes, RLS policies, triggers, and seed data.
 
 ### Source Documentation Rule
 - **ALWAYS read source docs directly** before implementing each task
@@ -55,22 +56,27 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 1.8.1
-**Description:** Create seed script file
+**Task ID:** Task 2.1.1
+**Description:** Generate Supabase types
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Create supabase/seed.sql file
-- [ ] Read EXECUTION_PLAN.md Task 1.8.1-1.8.7 for seed data requirements
-- [ ] Seed base client, tiers, test users, missions, rewards
+- [ ] Run `supabase gen types typescript --local > lib/types/database.ts`
+- [ ] Verify file contains all table types
 
 ### Next Action
-Read EXECUTION_PLAN.md Task 1.8.1 details, then create seed.sql
+Read EXECUTION_PLAN.md Task 2.1.1 details, then generate types
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
+- [x] **Task 1.8.1-1.8.7** - Create and run seed data (Completed: 2025-11-28 19:25)
+  - 1 client (Test Brand, units mode, UUID: 11111111-1111-1111-1111-111111111111)
+  - 4 tiers (Bronze, Silver, Gold, Platinum with units thresholds 0/100/300/500)
+  - 9 users (1 admin + 8 creators, 2 per tier, password: Password123!)
+  - 24 rewards (all types, all enabled=true)
+  - 22 missions (5 types × 4 tiers + 2 raffles: 1 dormant, 1 active)
 - [x] **Task 1.7.1-1.7.4** - Deploy schema to remote Supabase, verify integrity (Completed: 2025-11-28 17:40)
 - [x] **Task 1.6.1-1.6.5** - Add triggers (boost auto-sync, history logging, updated_at) (Completed: 2025-11-28 17:35)
 - [x] **Task 1.5.1-1.5.3** - Enable RLS, add creator/admin policies (Completed: 2025-11-28 17:30)

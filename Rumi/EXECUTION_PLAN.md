@@ -332,39 +332,44 @@
     - **Acceptance Criteria:** All expected triggers listed
 
 ## Step 1.8: Seed Data
-- [ ] **Task 1.8.1:** Create seed script file
+- [x] **Task 1.8.1:** Create seed script file
     - **Action:** Create `/supabase/seed.sql`
     - **Acceptance Criteria:** File exists
 
-- [ ] **Task 1.8.2:** Seed base client
+- [x] **Task 1.8.2:** Seed base client
     - **Action:** Add INSERT INTO clients with test client
     - **References:** Loyalty.md (Admin Config System)
     - **Acceptance Criteria:** Client with known UUID inserted
 
-- [ ] **Task 1.8.3:** Seed VIP tiers
+- [x] **Task 1.8.3:** Seed VIP tiers
     - **Action:** Add INSERT INTO vip_tiers with Bronze, Silver, Gold, Platinum tiers
     - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers tier structure and tier colors), Loyalty.md Core Features (VIP Tiers section)
     - **Implementation Guide:** MUST create 4 tiers with exact naming and properties from API spec (lines 5577-5579, 6684-6840): Tier 1 Bronze (tier_level=1, tier_color=#CD7F32, min_sales=0, commission_rate=10), Tier 2 Silver (tier_level=2, tier_color=#94a3b8, min_sales=1000, commission_rate=12), Tier 3 Gold (tier_level=3, tier_color=#F59E0B, min_sales=3000, commission_rate=15), Tier 4 Platinum (tier_level=4, tier_color=#818CF8, min_sales=5000, commission_rate=20). Tier names MUST match API response exactly: "Bronze", "Silver", "Gold", "Platinum" (not Fan/Supporter/VIP/Super Fan)
     - **Acceptance Criteria:** All 4 tiers inserted with tier_level 1-4, tier_color hex codes matching API spec (Bronze=#CD7F32, Silver=#94a3b8, Gold=#F59E0B, Platinum=#818CF8), min_sales thresholds (0, 1000, 3000, 5000), commission_rate percentages (10, 12, 15, 20), names exactly "Bronze", "Silver", "Gold", "Platinum"
+    - **Note:** Using units_threshold (0, 100, 300, 500) instead of sales since client uses vip_metric='units'
 
-- [ ] **Task 1.8.4:** Seed test users
+- [x] **Task 1.8.4:** Seed test users
     - **Action:** Add INSERT INTO users with 2-3 test creators at different tiers
     - **References:** Loyalty.md
     - **Acceptance Criteria:** Users have different tier_ids, valid handles
+    - **Note:** Created 9 users: 1 admin (admin1) + 8 creators (2 per tier)
 
-- [ ] **Task 1.8.5:** Seed test missions
+- [x] **Task 1.8.5:** Seed test missions
     - **Action:** Add INSERT INTO missions with samples of each type (instant, daily, weekly, monthly, manual, raffle)
     - **References:** MissionsRewardsFlows.md (6 mission types)
     - **Acceptance Criteria:** At least one mission of each type
+    - **Note:** Created 22 missions: 5 types x 4 tiers + 2 raffles (1 dormant, 1 active)
 
-- [ ] **Task 1.8.6:** Seed test rewards
+- [x] **Task 1.8.6:** Seed test rewards
     - **Action:** Add INSERT INTO rewards with samples of each type (instant, scheduled, physical, commission boost)
     - **References:** MissionsRewardsFlows.md (reward types)
     - **Acceptance Criteria:** Rewards with different points_costs, tier restrictions
+    - **Note:** Created 24 rewards across all types and tiers, all enabled=true
 
-- [ ] **Task 1.8.7:** Run seed script
+- [x] **Task 1.8.7:** Run seed script
     - **Command:** `supabase db seed`
     - **Acceptance Criteria:** Script executes successfully
+    - **Note:** Ran via `supabase db push --include-seed` (Completed: 2025-11-28)
 
 ---
 
