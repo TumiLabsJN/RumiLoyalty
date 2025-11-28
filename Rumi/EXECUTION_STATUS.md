@@ -1,6 +1,17 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 15:45 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 15:50 [Update this timestamp when you modify this document]
+
+---
+
+## ⚠️ FOR NEW/COMPACTED LLM SESSIONS
+
+**READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
+
+1. Current task: **Task 1.1.3 - Add clients table**
+2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql`
+3. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
+4. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
 
 ---
 
