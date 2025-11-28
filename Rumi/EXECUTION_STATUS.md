@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 14:45 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 15:00 [Update this timestamp when you modify this document]
 
 ---
 
@@ -37,27 +37,28 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 0.2.7
-**Description:** Configure Supabase Auth session duration
+**Task ID:** Task 1.1.1
+**Description:** Create clients migration
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read Loyalty.md line 2348 (Session Duration)
-- [ ] Set JWT expiry to 5184000 seconds (60 days) in Supabase Dashboard
-- [ ] Go to: Authentication → Settings → JWT Expiry
+- [ ] Read SchemaFinalv2.md for clients table definition
+- [ ] Create migration: `npx supabase migration new create_clients`
+- [ ] Implement clients table SQL
+- [ ] Verify migration file created
 
 ### Next Action
-Open Supabase Dashboard → Authentication → Settings → Set JWT Expiry to 5184000
+Read SchemaFinalv2.md clients table, then run: `npx supabase migration new create_clients`
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
+- [x] **Task 0.2.7** - Configure Supabase Auth session duration to 604800s/7 days (Completed: 2025-11-28 14:55)
 - [x] **Task 0.2.6** - Link Supabase project (Completed: 2025-11-28 14:40)
 - [x] **Task 0.2.5** - Configure Supabase Storage for logo uploads (Completed: 2025-11-28 14:25, commit: a2ab2b2)
 - [x] **Task 0.2.4** - Configure ESLint and Prettier (Completed: 2025-11-28 14:00, commit: fb54c78)
 - [x] **Task 0.2.3a** - Add CRUVA credentials to .env.local (Completed: 2025-11-28 13:30)
-- [x] **Task 0.2.3** - Configure environment variables in .env.local (Completed: 2025-11-28 13:25)
 
 ---
 

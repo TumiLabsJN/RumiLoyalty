@@ -2345,7 +2345,7 @@ SELECT logo_url, name, primary_color FROM clients WHERE id = $CLIENT_ID
   - Returns 403 if logged in but not admin
 - **Admin Account Setup:** Manual SQL update (one-time)
   - `UPDATE users SET is_admin = true WHERE email = 'admin@example.com'`
-- **Session Duration:** 60 days (same as creators)
+- **Session Duration:** 7 days (Supabase maximum - 604800 seconds)
 - **Testing Account:** Maintain separate creator account for testing creator UX
 
 **Security Layers (Defense in Depth):**

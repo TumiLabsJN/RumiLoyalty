@@ -132,10 +132,10 @@
     - **Command:** `supabase link --project-ref vyvkvlhzzglfklrwzcby`
     - **Acceptance Criteria:** Command succeeds with exit code 0
 
-- [ ] **Task 0.2.7:** Configure Supabase Auth session duration
-    - **Action:** Set JWT expiry to 60 days (5184000 seconds) in Supabase Dashboard → Authentication → Settings → JWT Expiry
+- [x] **Task 0.2.7:** Configure Supabase Auth session duration
+    - **Action:** Set JWT expiry to 7 days (604800 seconds) in Supabase Dashboard → Project Settings → Auth
     - **References:** Loyalty.md lines 2348 (Session Duration)
-    - **Acceptance Criteria:** Supabase Auth JWT expiry MUST be set to 5184000 seconds (60 days), same duration for both creators and admins
+    - **Acceptance Criteria:** Supabase Auth JWT expiry set to 604800 seconds (7 days - Supabase maximum)
 
 ---
 
