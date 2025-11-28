@@ -29,6 +29,15 @@
 - **DO NOT trust summary files** (LOYALTY_SUMMARY.md, SCHEMA_DEPENDENCY_GRAPH.md, etc.) - they are secondary artifacts, not authoritative
 - **Source of truth:** SchemaFinalv2.md, API_CONTRACTS.md, ARCHITECTURE.md, Loyalty.md
 
+### Anti-Hallucination Rule
+- **NEVER include extracted data** (enum values, field lists, etc.) in this status document
+- This document should only contain **task IDs, status, and pointers** to source docs
+- Including extracted data is:
+  1. **Redundant** - The source of truth already has it
+  2. **Risk of drift** - Extraction errors propagate to future sessions
+  3. **Against the Source Documentation Rule** - Next session must read source docs directly
+- If you need specific values, READ THE SOURCE FILE in that session
+
 ---
 
 ## 📋 HOW TO USE THIS DOCUMENT (For LLMs)
@@ -71,35 +80,11 @@
 
 ### What's Left
 - [ ] Create `/lib/types/enums.ts` with all enum/status types
+- [ ] Read SchemaFinalv2.md to extract all CHECK constraint values
 - [ ] Export: MissionType, MissionStatus, RewardType, RedemptionStatus, etc.
-- [ ] Reference: SchemaFinalv2.md for all CHECK constraint values
-
-### Enum Values Found in Schema (for reference)
-```
-- vip_metric: 'units', 'sales'
-- tier_calculation_mode: 'fixed_checkpoint', 'lifetime'
-- payment_method: 'paypal', 'venmo'
-- adjustment_type: 'manual_sale', 'refund', 'bonus', 'correction'
-- tier_checkpoint_status: 'maintained', 'promoted', 'demoted'
-- sync_status: 'running', 'success', 'failed'
-- sync_source: 'auto', 'manual'
-- reward_type: 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
-- reward_source: 'vip_tier', 'mission'
-- tier_eligibility: 'all', 'tier_1' - 'tier_6'
-- redemption_frequency: 'one-time', 'monthly', 'weekly', 'unlimited'
-- redemption_type: 'instant', 'scheduled'
-- mission_type: 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
-- target_unit: 'dollars', 'units', 'count'
-- mission_status: 'active', 'dormant', 'completed'
-- redemption_status: 'claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'
-- boost_status: 'scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'
-- transition_type: 'manual', 'cron', 'api'
-- size_category: 'clothing', 'shoes'
-- carrier: 'FedEx', 'UPS', 'USPS', 'DHL'
-```
 
 ### Next Action
-Create lib/types/enums.ts with TypeScript const enums or string literal unions
+Read SchemaFinalv2.md and migration file for CHECK constraints, then create enums.ts
 
 ---
 
