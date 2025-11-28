@@ -117,7 +117,7 @@
     - **References:** Loyalty.md lines 73-83 (CRUVA TikTok Analytics Platform), lines 425-427 (Flow 1: Puppeteer logs into CRUVA)
     - **Acceptance Criteria:** CRUVA credentials stored securely in `.env.local`, not committed to git, ready for Puppeteer automation
 
-- [ ] **Task 0.2.4:** Configure ESLint and Prettier
+- [x] **Task 0.2.4:** Configure ESLint and Prettier
     - **Action:** Create `.eslintrc.json` and `.prettierrc` configuration files
     - **References:** Loyalty.md line 47 (Development Tools)
     - **Acceptance Criteria:** ESLint and Prettier configured, can run `npm run lint` successfully
