@@ -51,10 +51,11 @@
 **Objective:** Establish foundation and confirm complete understanding of requirements before writing any code.
 
 ## Step 0.1: Documentation Audit
-- [ ] **Task 0.1.1:** Read Loyalty.md (3,071 lines)
+- [x] **Task 0.1.1:** Read Loyalty.md (3,071 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/Loyalty.md`
     - **Focus:** Lines 2019-2182 (9 Critical Patterns), Lines 374-2017 (10 Data Flows)
     - **Acceptance Criteria:** Create summary document listing all 9 patterns and 10 flows
+    - **Output:** `/home/jorge/Loyalty/Rumi/LOYALTY_SUMMARY.md`
 
 - [ ] **Task 0.1.2:** Read SchemaFinalv2.md (996 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/SchemaFinalv2.md`
@@ -2732,6 +2733,32 @@
     - **References:** ADMIN_API_CONTRACTS.md lines 2954-3039 (GET /api/admin/reports/export), AdminTesting.md SHOULD #10
     - **Implementation Guide:** MUST test 3 cases: (1) returns binary Excel file with correct Content-Type, (2) filename matches preset pattern, (3) Excel has 2 sheets (Rewards Summary, Creator Activity)
     - **Acceptance Criteria:** All 3 cases MUST pass, Content-Type MUST be 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+## Step 12.27: Admin Cross-Cutting Tests
+
+- [ ] **Task 12.27.1:** Test multi-tenant isolation across all admin endpoints
+    - **Action:** Create `/tests/integration/admin/auth/multi-tenant-isolation.test.ts`
+    - **References:** AdminTesting.md Bug #1, ARCHITECTURE.md Section 9 (Multitenancy Enforcement)
+    - **Implementation Guide:** MUST test ALL 30 admin endpoints with 2 clients (A and B): for each endpoint, admin from Client A MUST NOT see/modify Client B data. Test pattern: (1) create data for both clients, (2) request as Admin A, (3) verify response contains ONLY Client A data or returns 404 for Client B IDs
+    - **Acceptance Criteria:** All 30 endpoints MUST pass multi-tenant isolation, prevents data-leakage-lawsuit bug (AdminTesting.md Bug #1)
+
+- [ ] **Task 12.27.2:** Test admin role enforcement across all admin endpoints
+    - **Action:** Create `/tests/integration/admin/auth/admin-role-enforcement.test.ts`
+    - **References:** AdminTesting.md Bug #2, Task 3.5.8 (requireAdmin utility)
+    - **Implementation Guide:** MUST test ALL 30 admin endpoints with creator token (non-admin): each endpoint MUST return 403 FORBIDDEN. Test pattern: (1) create creator user (is_admin=false), (2) request each endpoint with creator token, (3) verify 403 response
+    - **Acceptance Criteria:** All 30 endpoints MUST return 403 for non-admin users, prevents unauthorized-access bug (AdminTesting.md Bug #2)
+
+- [ ] **Task 12.27.3:** Test audit trail integrity across all mutations
+    - **Action:** Create `/tests/integration/admin/auth/audit-trail.test.ts`
+    - **References:** AdminTesting.md Bug #11, SchemaFinalv2.md (audit fields: fulfilled_by, adjusted_by, selected_by, payout_sent_by)
+    - **Implementation Guide:** MUST test all mutation endpoints set audit fields correctly: (1) PATCH ship/deliver sets fulfilled_by, (2) PATCH pay sets payout_sent_by, (3) POST adjustment sets adjusted_by, (4) POST select-winner sets selected_by, (5) all timestamps (*_at) set correctly
+    - **Acceptance Criteria:** All audit fields MUST be set to admin's user_id, all timestamps MUST be set, prevents broken-audit-trail bug (AdminTesting.md Bug #11)
+
+- [ ] **Task 12.27.4:** Test soft delete respected across all list endpoints
+    - **Action:** Create `/tests/integration/admin/auth/soft-delete.test.ts`
+    - **References:** AdminTesting.md Bug #10, SchemaFinalv2.md (deleted_at fields)
+    - **Implementation Guide:** MUST test all list endpoints exclude soft-deleted records: (1) create record, (2) soft-delete (set deleted_at), (3) GET list, (4) verify deleted record NOT in response. Endpoints: /redemptions, /missions, /vip-rewards
+    - **Acceptance Criteria:** All list endpoints MUST exclude records where deleted_at IS NOT NULL, prevents deleted-items-appearing bug (AdminTesting.md Bug #10)
 
 ---
 
