@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 22:00 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 22:15 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 2.3.1 - Create auth utility**
+1. Current task: **Task 2.3.2 - Create encryption utility**
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
@@ -77,22 +77,28 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 2.3.1
-**Description:** Create auth utility
+**Task ID:** Task 2.3.2
+**Description:** Create encryption utility
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read EXECUTION_PLAN.md Task 2.3.1 for requirements
-- [ ] Create `appcode/lib/utils/auth.ts` with getUserFromRequest, validateClientId
-- [ ] Follow security patterns from ARCHITECTURE.md Section 10
+- [ ] Read EXECUTION_PLAN.md Task 2.3.2 for requirements
+- [ ] Create `appcode/lib/utils/encryption.ts` with encrypt/decrypt functions
+- [ ] Use AES-256-GCM with ENCRYPTION_KEY from env
 
 ### Next Action
-Read EXECUTION_PLAN.md Task 2.3.1 and ARCHITECTURE.md Section 9-10
+Read EXECUTION_PLAN.md Task 2.3.2 and Loyalty.md Pattern 9
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
+- [x] **Task 2.3.1** - Create auth utility (Completed: 2025-11-28 22:15)
+  - Created appcode/lib/utils/auth.ts
+  - getUserFromRequest: Extracts user from JWT, fetches client_id
+  - validateClientId: Enforces multitenancy
+  - requireAdmin, validateTierEligibility helpers
+  - Custom error classes: UnauthorizedError, ForbiddenError
 - [x] **Task 2.2.2** - Create admin client (Completed: 2025-11-28 22:00)
   - Created appcode/lib/supabase/admin-client.ts
   - Uses SUPABASE_SERVICE_ROLE_KEY (bypasses RLS)
@@ -191,8 +197,8 @@ See full workflow in previous version of this document.
 - [x] Task 2.1.3: Create API types file
 - [x] Task 2.2.1: Create server client
 - [x] Task 2.2.2: Create admin client
-- [ ] Task 2.3.1: Create auth utility ← **CURRENT**
-- [ ] Task 2.3.2: Create encryption utility
+- [x] Task 2.3.1: Create auth utility
+- [ ] Task 2.3.2: Create encryption utility ← **CURRENT**
 - [ ] Task 2.3.3: Create data transformation utility
 - [ ] Task 2.3.4: Add transformation tests
 - [ ] Task 2.3.5: Create validation utility
