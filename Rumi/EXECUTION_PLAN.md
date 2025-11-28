@@ -69,10 +69,11 @@
     - **Acceptance Criteria:** Document all valid state transitions
     - **Output:** `/home/jorge/Loyalty/Rumi/STATE_TRANSITIONS.md`
 
-- [ ] **Task 0.1.4:** Read ARCHITECTURE.md (1,433 lines)
+- [x] **Task 0.1.4:** Read ARCHITECTURE.md (1,433 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/ARCHITECTURE.md`
     - **Focus:** 3-layer pattern, Section 9 (security), folder structure
     - **Acceptance Criteria:** Confirm understanding of repository → service → route pattern
+    - **Output:** Confirmation added to `/home/jorge/Loyalty/Rumi/LOYALTY_SUMMARY.md`
 
 - [ ] **Task 0.1.5:** Read API_CONTRACTS.md (4,906 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/API_CONTRACTS.md`

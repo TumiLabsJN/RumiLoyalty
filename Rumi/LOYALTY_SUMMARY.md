@@ -1,7 +1,11 @@
-# Loyalty.md Summary Document
+# Phase 0 Documentation Audit Outputs
 
-**Task 0.1.1 Output - Documentation Audit**
+**Tasks 0.1.1 - 0.1.4 Combined Summary**
 **Created:** 2025-11-28
+
+---
+
+# Task 0.1.1: Loyalty.md Summary
 
 ---
 
@@ -222,6 +226,87 @@
 4. **Email Service:** Resend.com (free tier, 100 emails/day)
 5. **Automation Recovery:** Manual CSV upload fallback at `/admin/manual-upload`
 6. **VIP Metric Modes:** Clients can use 'sales' (GMV) OR 'units' (quantity sold)
+
+---
+
+# Task 0.1.4: ARCHITECTURE.md - Pattern Confirmation
+
+## Confirmed: Repository → Service → Route Pattern
+
+I have read and confirmed understanding of the 3-layer architecture pattern.
+
+### Layer Structure
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    PRESENTATION LAYER                    │
+│                  (Next.js App Router)                    │
+│                                                          │
+│  /app/api/missions/route.ts                             │
+│  - Handles HTTP requests/responses                       │
+│  - Validates input                                       │
+│  - Returns JSON                                          │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                    SERVICE LAYER                         │
+│                   (Business Logic)                       │
+│                                                          │
+│  /lib/services/missionService.ts                        │
+│  - Orchestrates repositories                            │
+│  - Implements business rules                            │
+│  - Pure functions (no direct DB access)                 │
+│  - Returns domain objects                               │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                  REPOSITORY LAYER                        │
+│                  (Data Access)                          │
+│                                                          │
+│  /lib/repositories/missionRepository.ts                 │
+│  - CRUD operations                                      │
+│  - Database queries                                     │
+│  - Tenant isolation enforcement                         │
+│  - External API calls                                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key Folder Structure
+
+```
+/app/api/         → API Routes (Presentation Layer)
+/lib/services/    → Service Layer (Business Logic)
+/lib/repositories/→ Repository Layer (Data Access)
+/lib/types/       → TypeScript Interfaces
+/lib/utils/       → Shared Utilities
+/lib/middleware/  → Middleware Functions
+/tests/           → Test Files
+/cron/            → Background Jobs
+```
+
+### Layer Responsibilities
+
+| Layer | Responsibilities | NOT Responsible For |
+|-------|-----------------|---------------------|
+| **Route** | HTTP handling, input validation, authentication, calling services | Database queries, business logic |
+| **Service** | Orchestrating repositories, business rules, data transformations | Direct DB access, HTTP handling |
+| **Repository** | CRUD operations, DB queries, tenant isolation, encryption | Business logic, orchestration |
+
+### Security Patterns (Section 9)
+
+1. **Multitenancy Enforcement** - EVERY query MUST filter by `client_id`
+2. **Server-Side Validation** - Never trust client input for authorization
+3. **Defense in Depth** - Validate at all layers
+4. **Encryption** - Encrypt sensitive fields before storage, decrypt after retrieval
+
+### Data Freshness Strategy
+
+- **Precomputed Fields** - 16 fields updated daily during cron sync (dashboard/leaderboard)
+- **Compute on Request** - User actions (claims, participation, profile updates)
+
+**Confirmed ready to implement following this pattern.**
 
 ---
 
