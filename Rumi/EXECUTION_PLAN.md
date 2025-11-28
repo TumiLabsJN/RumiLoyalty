@@ -87,12 +87,13 @@
     - **References:** Loyalty.md lines 38-40 (Supabase PostgreSQL, Auth, Storage)
     - **Acceptance Criteria:** `/supabase` directory exists
 
-- [ ] **Task 0.2.2a:** Extract Tech Stack dependencies from documentation
+- [x] **Task 0.2.2a:** Extract Tech Stack dependencies from documentation
     - **Action:** Read Loyalty.md lines 17-49 (Tech Stack section)
     - **Action:** Extract ALL npm packages from Frontend subsection (lines 19-26) and Backend subsection (lines 28-36)
     - **Action:** Create comprehensive list of packages to install
     - **References:** `/home/jorge/Loyalty/Rumi/Loyalty.md` lines 17-49
     - **Acceptance Criteria:** List includes ~15+ packages: Frontend (react-hook-form, lucide-react, date-fns, tailwindcss, shadcn/ui), Backend (@supabase/supabase-js, puppeteer, csv-parse, resend, googleapis, luxon), Development (zod, vitest, playwright, @upstash/ratelimit), Dev Tools (eslint, prettier)
+    - **Output:** `/home/jorge/Loyalty/Rumi/TECH_STACK_DEPENDENCIES.md`
 
 - [ ] **Task 0.2.2b:** Install all dependencies
     - **Command:** `npm install [all-packages-from-task-0.2.2a]`
