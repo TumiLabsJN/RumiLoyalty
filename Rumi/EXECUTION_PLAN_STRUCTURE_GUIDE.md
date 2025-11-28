@@ -1,6 +1,59 @@
 # EXECUTION_PLAN.md Structure & Layout Guide
 # Purpose: Document the standard structure and formatting for all additions to EXECUTION_PLAN.md
 # Date: 2025-01-21
+# Updated: 2025-01-28 (Added 2-document system: EXECUTION_PLAN.md + EXECUTION_STATUS.md)
+
+---
+
+## THE 2-DOCUMENT METHODOLOGY
+
+### Overview
+
+The execution methodology uses **TWO documents** working together:
+
+1. **EXECUTION_PLAN.md** - The Blueprint (Stable)
+   - What SHOULD be built
+   - Task definitions with references and acceptance criteria
+   - Rarely changes once created
+   - 2000+ lines is normal
+
+2. **EXECUTION_STATUS.md** - The Operational Tracker (Dynamic)
+   - Where am I NOW?
+   - Current task, what's left in current task
+   - CR Decision Tree and CR Workflow
+   - Sequential execution enforcement rules
+   - Updates constantly during execution
+
+### Why Two Documents?
+
+**Problem with single-document approach:**
+- Mixing task definitions with operational procedures pollutes the blueprint
+- Line numbers shift when status sections updated
+- Hard to resume quickly (must read entire plan to find current task)
+
+**Solution:**
+- **EXECUTION_PLAN.md** = Stable blueprint of tasks (read once per task)
+- **EXECUTION_STATUS.md** = Fast-resume tracker (read at start of every session)
+
+### Document Responsibilities
+
+| Responsibility | Lives In | Why |
+|----------------|----------|-----|
+| Task definitions | EXECUTION_PLAN.md | Stable, shouldn't change |
+| Current task pointer | EXECUTION_STATUS.md | Changes every task |
+| CR Decision Tree | EXECUTION_STATUS.md | Operational procedure |
+| CR Workflow (git commits) | EXECUTION_STATUS.md | Operational procedure |
+| Sequential enforcement | EXECUTION_STATUS.md | Operational procedure |
+| Recently completed tasks | EXECUTION_STATUS.md | Dynamic tracking |
+| Active blockers | EXECUTION_STATUS.md | Session state |
+
+### When Creating a New EXECUTION_PLAN.md
+
+**Always create BOTH documents:**
+
+1. Create `EXECUTION_PLAN.md` using this structure guide
+2. Create `EXECUTION_STATUS.md` using EXECUTION_STATUS.md template
+3. Reference EXECUTION_STATUS.md in EXECUTION_PLAN.md preamble (Rule #1)
 
 ---
 
@@ -28,27 +81,32 @@
 ## RULES OF ENGAGEMENT (For Executing LLM)
 
 ### Core Protocol
-1. Execute this plan SEQUENTIALLY - do not skip tasks
-2. Before EVERY task, READ the specified documentation references
-...
+1. **READ EXECUTION_STATUS.md FIRST** before starting any work (contains current task, CR workflow, sequential enforcement)
+2. Execute this plan SEQUENTIALLY - do not skip tasks
+3. Before EVERY task, READ the specified documentation references
+4. Do NOT implement based on general knowledge - ONLY from referenced docs
+5. Mark checkbox `[x]` ONLY after Acceptance Criteria verified
+6. If task fails, STOP and report: Task ID + Failure reason
+7. Commit after completing each task: "Complete: [Task ID] - [Description]"
 
 ### Anti-Hallucination Rules
-- FORBIDDEN: ...
-- REQUIRED: ...
+- FORBIDDEN: Implementing features not in API_CONTRACTS.md
+- FORBIDDEN: Assuming schema structure without reading SchemaFinalv2.md
+- FORBIDDEN: Skipping RLS policies
+- FORBIDDEN: Omitting client_id in queries
+- REQUIRED: Read documentation section before implementation
+- REQUIRED: Verify against API contracts before marking complete
 
-### Session Management
-**Session Start:**
-1. ...
-
-**Session End:**
-1. ...
+### Operational Procedures
+**All session management, CR workflows, and sequential enforcement rules live in EXECUTION_STATUS.md.**
 ```
 
 **Format:**
 - Section title: `##` (H2)
 - Subsections: `###` (H3)
 - Lists: Numbered `1.` or bulleted `-`
-- Bold for emphasis: `**Session Start:**`
+- **Rule #1 MUST reference EXECUTION_STATUS.md** - this is critical for the 2-document system
+- **Operational Procedures** section replaces Session Management - references EXECUTION_STATUS.md
 
 ---
 
@@ -451,6 +509,14 @@ These gates MUST pass before proceeding to next phase:
 
 ❌ **Don't:**
 - Use vague references like "ARCHITECTURE.md (Tech Stack)" - be specific with sections/lines
+- Reference EXECUTION_PLAN.md by line number internally - use Task IDs instead
+  - ❌ Bad: "Complete task at line 229 first" or "See EXECUTION_PLAN.md line 450"
+  - ✅ Good: "Complete Task 1.2.2 first" or "Depends on Task 3.1.1"
+  - Reason: Line numbers shift when tasks inserted (e.g., Task 1.2.2b), Task IDs remain stable
+- Add CR workflows or session management procedures to EXECUTION_PLAN.md
+  - ❌ Bad: Including "How to file a change request" steps in EXECUTION_PLAN.md
+  - ✅ Good: All operational procedures live in EXECUTION_STATUS.md
+  - Reason: EXECUTION_PLAN.md is the blueprint (stable), EXECUTION_STATUS.md is operational (dynamic)
 - Mix tabs and spaces - use 4 spaces for indentation
 - Skip acceptance criteria - EVERY task needs it
 - Use markdown code blocks in task descriptions
