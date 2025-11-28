@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 10:50 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 11:15 [Update this timestamp when you modify this document]
 
 ---
 
@@ -37,23 +37,23 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 0.2.2c
-**Description:** Verify Node.js version requirement
-**Status:** [ ] Not Started
-**Started:** [Pending]
+**Task ID:** Task 0.2.2b
+**Description:** Install all dependencies in /appcode
+**Status:** [~] In Progress
+**Started:** 2025-11-28 10:40
 
 ### What's Left
-- [ ] Run `node --version`
-- [ ] Verify output shows v20.x.x or higher
+- [x] Renamed App Code/V1 → appcode (commit: 880367d)
+- [ ] Install missing backend dependencies: `cd appcode && npm install puppeteer csv-parse resend googleapis luxon bcrypt`
+- [ ] Install type definitions: `npm install -D @types/bcrypt`
+- [ ] Verify with `npm list --depth=0`
 
 ### Next Action
-Verify Node.js version is 20+ LTS
+Run: `cd /home/jorge/Loyalty/Rumi/appcode && npm install puppeteer csv-parse resend googleapis luxon bcrypt && npm install -D @types/bcrypt`
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
-
-- [x] **Task 0.2.2b** - Create Next.js project and install dependencies (Completed: 2025-11-28 10:50, commit: pending)
 - [x] **Task 0.2.2a** - Extract Tech Stack dependencies from documentation (Completed: 2025-11-28 10:35, commit: 6edd6a3)
 - [x] **Task 0.2.1** - Initialize Supabase project (Completed: 2025-11-28 10:25, commit: 6cfd470)
 - [x] **Task 0.1.5** - Read API_CONTRACTS.md, create 23 endpoints checklist (Completed: 2025-11-28 10:15, commit: d023b35)
