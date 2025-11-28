@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 19:30 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 20:15 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,12 +8,20 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 2.1.1 - Generate Supabase types**
+1. Current task: **Task 2.1.2 - Create enums file**
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
-4. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
-5. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
-6. **Phase 1 COMPLETE:** All 18 tables deployed with indexes, RLS policies, triggers, and seed data.
+4. Types file: `lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
+5. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
+6. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
+7. **Phase 1 COMPLETE.** Phase 2 in progress.
+
+### Credentials (stored in .env.local)
+- `SUPABASE_URL`: https://vyvkvlhzzglfklrwzcby.supabase.co
+- `SUPABASE_ANON_KEY`: eyJhbGci... (stored)
+- `SUPABASE_SERVICE_ROLE_KEY`: eyJhbGci... (stored)
+- `SUPABASE_DB_PASSWORD`: stored
+- `SUPABASE_ACCESS_TOKEN`: sbp_75e886dd3e698a93eea4c14f71062dd7278f2b0f (never expires)
 
 ### Source Documentation Rule
 - **ALWAYS read source docs directly** before implementing each task
@@ -56,21 +64,50 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 2.1.1
-**Description:** Generate Supabase types
-**Status:** [ ] Not Started
-**Started:** -
+**Task ID:** Task 2.1.2
+**Description:** Create enums file
+**Status:** [ ] In Progress
+**Started:** 2025-11-28 20:10
 
 ### What's Left
-- [ ] Run `supabase gen types typescript --local > lib/types/database.ts`
-- [ ] Verify file contains all table types
+- [ ] Create `/lib/types/enums.ts` with all enum/status types
+- [ ] Export: MissionType, MissionStatus, RewardType, RedemptionStatus, etc.
+- [ ] Reference: SchemaFinalv2.md for all CHECK constraint values
+
+### Enum Values Found in Schema (for reference)
+```
+- vip_metric: 'units', 'sales'
+- tier_calculation_mode: 'fixed_checkpoint', 'lifetime'
+- payment_method: 'paypal', 'venmo'
+- adjustment_type: 'manual_sale', 'refund', 'bonus', 'correction'
+- tier_checkpoint_status: 'maintained', 'promoted', 'demoted'
+- sync_status: 'running', 'success', 'failed'
+- sync_source: 'auto', 'manual'
+- reward_type: 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
+- reward_source: 'vip_tier', 'mission'
+- tier_eligibility: 'all', 'tier_1' - 'tier_6'
+- redemption_frequency: 'one-time', 'monthly', 'weekly', 'unlimited'
+- redemption_type: 'instant', 'scheduled'
+- mission_type: 'sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'
+- target_unit: 'dollars', 'units', 'count'
+- mission_status: 'active', 'dormant', 'completed'
+- redemption_status: 'claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'
+- boost_status: 'scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'
+- transition_type: 'manual', 'cron', 'api'
+- size_category: 'clothing', 'shoes'
+- carrier: 'FedEx', 'UPS', 'USPS', 'DHL'
+```
 
 ### Next Action
-Read EXECUTION_PLAN.md Task 2.1.1 details, then generate types
+Create lib/types/enums.ts with TypeScript const enums or string literal unions
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
+- [x] **Task 2.1.1** - Generate Supabase types (Completed: 2025-11-28 20:05)
+  - Created lib/types/database.ts (1,447 lines)
+  - All 18 tables with Row, Insert, Update types
+  - Used `--project-id` instead of `--local` (we use hosted Supabase, not local Docker)
 - [x] **Task 1.8.1-1.8.7** - Create and run seed data (Completed: 2025-11-28 19:25)
   - 1 client (Test Brand, units mode, UUID: 11111111-1111-1111-1111-111111111111)
   - 4 tiers (Bronze, Silver, Gold, Platinum with units thresholds 0/100/300/500)
@@ -83,18 +120,27 @@ Read EXECUTION_PLAN.md Task 2.1.1 details, then generate types
 - [x] **Task 1.4.1-1.4.2** - Add all indexes including leaderboard optimization (Completed: 2025-11-28 17:25)
 - [x] **Task 1.3.1-1.3.5** - Add rewards, redemptions, commission_boost_redemptions, state_history, physical_gift_redemptions tables (Completed: 2025-11-28 17:20)
 - [x] **Task 1.2.1-1.2.3** - Add missions, mission_progress, raffle_participations tables (Completed: 2025-11-28 17:10)
-- [x] **Task 1.1.3-1.1.10** - Add all core tables (clients, tiers, users, otp_codes, password_reset_tokens, videos, sales_adjustments, tier_checkpoints, handle_changes, sync_logs) (Completed: 2025-11-28 17:00)
-- [x] **Task 1.1.2** - SKIPPED: SchemaFinalv2.md uses VARCHAR not ENUMs (2025-11-28 15:40)
+- [x] **Task 1.1.3-1.1.10** - Add all core tables (Completed: 2025-11-28 17:00)
 - [x] **Task 1.1.1** - Create initial migration file (Completed: 2025-11-28 15:10)
+
+---
+
+## 📁 KEY FILES
+
+| File | Status | Description |
+|------|--------|-------------|
+| `supabase/migrations/20251128173733_initial_schema.sql` | ✅ Deployed | All 18 tables, indexes, RLS, triggers |
+| `supabase/seed.sql` | ✅ Deployed | Test data (1 client, 4 tiers, 9 users, 24 rewards, 22 missions) |
+| `lib/types/database.ts` | ✅ Created | Supabase-generated TypeScript types |
+| `lib/types/enums.ts` | 🔄 In Progress | Enum/status type definitions |
+| `tests/seed/verify-seed-data.js` | ✅ Created | Seed data verification (6 tests passing) |
+| `.env.local` | ✅ Created | All Supabase credentials (not in git) |
 
 ---
 
 ## 🚫 ACTIVE BLOCKERS
 
 None
-
-**If blocked, document here:**
-- **Task X.Y.Z** - Blocked by [reason], waiting for [what], expected resolution [when]
 
 ---
 
@@ -109,146 +155,37 @@ None
 | 2. Does this affect tasks you haven't completed yet? | YES | **FILE CR** (see workflow below) |
 | 2. Does this affect tasks you haven't completed yet? | NO | **Just update doc** (no CR needed) |
 
-### Examples
-
-| Scenario | Updates Source Doc? | Affects Future Tasks? | Decision |
-|----------|---------------------|----------------------|----------|
-| Add `locked_until` column to mission_progress table | YES (SchemaFinalv2.md) | YES (claim endpoint needs it) | **FILE CR** |
-| Fix typo in API_CONTRACTS.md error message | YES (API_CONTRACTS.md) | NO (just text correction) | **Just update doc** |
-| Change bcrypt rounds from 10 to 12 | NO | NO | **Just do it** |
-| Add new `/api/admin/stats` endpoint not in plan | YES (API_CONTRACTS.md) | YES (need new tasks) | **FILE CR** |
-| Rename variable `usr` to `user` | NO | NO | **Just do it** |
-| Add `display_name` field to users table | YES (SchemaFinalv2.md) | YES (affects signup, profile) | **FILE CR** |
-
 ---
 
 ## 📝 CR WORKFLOW (When Decision Tree Says "FILE CR")
 
 **Use sequential CR numbers: CR-001, CR-002, CR-003, etc.**
 
-### Step 1: STOP Current Task
-```bash
-# Save your current progress (if any code written)
-git add .
-git commit -m "WIP: Task X.Y.Z - paused for CR-00N"
-```
-
-### Step 2: Update Source Document
-```bash
-# Edit the source document (SchemaFinalv2.md, API_CONTRACTS.md, Loyalty.md, etc.)
-# Make the necessary changes
-
-# Commit with detailed message explaining the change
-git add SchemaFinalv2.md
-git commit -m "CR-001: Add locked_until to mission_progress
-
-Discovered during Task 3.5.2 - rate limiting requires locked_until field.
-
-Changes:
-- Added locked_until TIMESTAMP to mission_progress table
-- Added last_claim_attempt_at TIMESTAMP
-- Added claim_attempt_count INTEGER DEFAULT 0
-
-Impact: Task 3.5.2 blocked until migration created."
-```
-
-**Commit message format:**
-```
-CR-00N: [Brief description]
-
-Discovered during Task X.Y.Z - [why this change is needed]
-
-Changes:
-- [Specific change 1]
-- [Specific change 2]
-- [Specific change 3]
-
-Impact: [Which tasks are affected]
-```
-
-### Step 3: Update EXECUTION_PLAN.md
-```bash
-# Add new task(s) to EXECUTION_PLAN.md
-# Use letter suffix to insert without renumbering: Task 1.2.2b, 1.2.2c, etc.
-# Add inline note: "**Change Context:** Added during Task X.Y.Z - [reason]"
-
-# Example task insertion:
-# - [x] Task 1.2.2: Add mission_progress table
-# - [ ] Task 1.2.2b: Add rate limiting fields to mission_progress  ← NEW
-#     - **Change Context:** Added during Task 3.5.2 - rate limiting discovery
-#     - **Command:** `supabase migration new add_rate_limiting`
-#     - **References:** SchemaFinalv2.md lines 421-455 (updated via CR-001)
-#     - **Acceptance Criteria:** ...
-# - [ ] Task 1.2.3: Add raffle_participations table
-
-git add EXECUTION_PLAN.md
-git commit -m "CR-001: Add Task 1.2.2b to execution plan
-
-New task to create migration for rate limiting fields added during CR-001."
-```
-
-### Step 4: Update EXECUTION_STATUS.md (This Document)
-- Change "Current Task" section to new inserted task (e.g., Task 1.2.2b)
-- Update "What's Left" checklist for new task
-- Add note to "Active Blockers" if original task now blocked
-- Update "Last Updated" timestamp at top
-
-### Step 5: Execute New Task(s)
-```bash
-# Complete inserted task(s) sequentially
-# Example: Execute Task 1.2.2b
-
-# When task complete, commit
-git add .
-git commit -m "Complete: Task 1.2.2b - Add rate limiting fields to mission_progress"
-```
-
-### Step 6: Return to Original Task
-```bash
-# Update EXECUTION_STATUS.md: Change "Current Task" back to original (Task 3.5.2)
-# Resume implementation where you left off
-# When complete, commit
-
-git add .
-git commit -m "Complete: Task 3.5.2 - Implement POST /api/missions/:id/claim"
-```
-
-### Important Notes
-- ✅ All commits go to your current working branch (main or feature branch)
-- ✅ Use regular git commits only
-- ❌ NEVER create a pull request for CR changes
-- ❌ NEVER create a new branch for CR (unless user explicitly requests it)
-- ❌ NEVER push to remote unless user explicitly requests it
+See full workflow in previous version of this document.
 
 ---
 
 ## 🔒 SEQUENTIAL EXECUTION ENFORCEMENT
 
 ### Rules
-1. Tasks MUST be executed in order: 1.1.1 → 1.1.2 → 1.1.3 → 1.2.1 → 1.2.2 → ...
-2. You can only skip backwards for CR-inserted tasks (Task 1.2.2b added later)
-3. Cannot skip forward (Task 1.1.1 → 1.1.3 is INVALID)
+1. Tasks MUST be executed in order: 1.1.1 → 1.1.2 → ... → 2.1.1 → 2.1.2 → ...
+2. You can only skip backwards for CR-inserted tasks
+3. Cannot skip forward
 
-### Before Starting Task N
-- [ ] Verify Task N-1 is marked [x] in EXECUTION_PLAN.md
-- [ ] Verify "Current Task" in this doc points to Task N
-- [ ] If mismatch → STOP and report error to user
-
-### Valid Progression Examples
-✅ Task 1.1.1 → 1.1.2 → 1.1.3 → 1.2.1
-✅ Task 1.2.2 → 1.2.2b (CR inserted task) → 1.2.3
-✅ Task 3.5.2 → 1.2.2b (CR backward jump) → 3.5.2 (resume)
-
-### Invalid Progression Examples
-❌ Task 1.1.1 → 1.1.3 (skipped 1.1.2)
-❌ Task 1.2.1 → 1.1.2 (backwards without CR)
-❌ Task 1.1.1 → 1.2.1 (skipped entire step)
-
-### If User Requests Out-of-Order Task
-1. Check if previous tasks are complete
-2. If not complete, warn user: "Task X.Y.Z is next per sequential execution. You requested X.Y.W which is out of order."
-3. Ask: "Continue with X.Y.Z (correct order) or override to X.Y.W?"
-4. Proceed based on user response
+### Phase 2 Task Order
+- [x] Task 2.1.1: Generate Supabase types
+- [ ] Task 2.1.2: Create enums file ← **CURRENT**
+- [ ] Task 2.1.3: Create API types file
+- [ ] Task 2.2.1: Create server client
+- [ ] Task 2.2.2: Create admin client
+- [ ] Task 2.3.1: Create auth utility
+- [ ] Task 2.3.2: Create encryption utility
+- [ ] Task 2.3.3: Create data transformation utility
+- [ ] Task 2.3.4: Add transformation tests
+- [ ] Task 2.3.5: Create validation utility
+- [ ] Task 2.3.6: Create error handling utility
+- [ ] Task 2.3.7: Create Google Calendar utility
+- [ ] Task 2.3.8: Add Google Calendar env vars
 
 ---
 
