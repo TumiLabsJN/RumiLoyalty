@@ -164,170 +164,170 @@
     - **Acceptance Criteria:** ~~Migration contains all enum types~~
     - **Decision:** SchemaFinalv2.md uses VARCHAR(50) with CHECK constraints, not ENUMs. Task skipped per user direction to follow source doc.
 
-- [ ] **Task 1.1.3:** Add `clients` table
+- [x] **Task 1.1.3:** Add `clients` table
     - **Action:** Add CREATE TABLE for clients with uuid primary key
     - **References:** SchemaFinalv2.md lines 106-120 (clients table)
     - **Acceptance Criteria:** MUST have vip_metric VARCHAR(10) NOT NULL DEFAULT 'units' with options ('units', 'sales'), MUST have tier_calculation_mode VARCHAR(50) DEFAULT 'fixed_checkpoint' with options ('fixed_checkpoint', 'lifetime'), MUST have checkpoint_months INTEGER DEFAULT 4, MUST have logo_url TEXT, MUST have primary_color VARCHAR(7) DEFAULT '#6366f1', MUST have subdomain VARCHAR(100) UNIQUE
 
-- [ ] **Task 1.1.4:** Add `tiers` table
+- [x] **Task 1.1.4:** Add `tiers` table
     - **Action:** Add CREATE TABLE with FK to clients
     - **References:** SchemaFinalv2.md lines 250-268 (tiers table)
     - **Acceptance Criteria:** MUST have client_id UUID REFERENCES clients(id), MUST have tier_order INTEGER NOT NULL (1-6), MUST have tier_id VARCHAR(50) NOT NULL ('tier_1' through 'tier_6'), MUST have tier_name VARCHAR(100) NOT NULL, MUST have tier_color VARCHAR(7) NOT NULL, MUST have sales_threshold DECIMAL(10,2) and units_threshold INTEGER (mutually exclusive), MUST have commission_rate DECIMAL(5,2) NOT NULL, MUST have checkpoint_exempt BOOLEAN DEFAULT false, MUST have UNIQUE(client_id, tier_order) and UNIQUE(client_id, tier_id)
 
-- [ ] **Task 1.1.5:** Add `users` table
+- [x] **Task 1.1.5:** Add `users` table
     - **Action:** Add CREATE TABLE with FK to clients
     - **References:** SchemaFinalv2.md lines 123-155 (users table)
     - **Acceptance Criteria:** MUST have client_id UUID REFERENCES clients(id), MUST have tiktok_handle VARCHAR(100) NOT NULL, MUST have email VARCHAR(255) NULLABLE, MUST have password_hash VARCHAR(255) NOT NULL, MUST have is_admin BOOLEAN DEFAULT false, MUST have current_tier VARCHAR(50) DEFAULT 'tier_1', MUST have tier_achieved_at and next_checkpoint_at TIMESTAMP fields, MUST have 3 payment info fields (default_payment_method, default_payment_account, payment_info_updated_at)
 
-- [ ] **Task 1.1.5a:** Add 16 precomputed fields to `users` table
+- [x] **Task 1.1.5a:** Add 16 precomputed fields to `users` table
     - **Action:** Add columns for dashboard/leaderboard performance optimization: leaderboard_rank (integer), total_sales (numeric), total_units (integer), manual_adjustments_total (numeric), manual_adjustments_units (integer), checkpoint_sales_current (numeric), checkpoint_units_current (integer), projected_tier_at_checkpoint (uuid), checkpoint_videos_posted (integer), checkpoint_total_views (bigint), checkpoint_total_likes (bigint), checkpoint_total_comments (bigint), next_tier_name (varchar), next_tier_threshold (numeric), next_tier_threshold_units (integer), checkpoint_progress_updated_at (timestamp)
     - **References:** ARCHITECTURE.md Section 3.1 (Precomputed Fields, lines 120-152), SchemaFinalv2.md (users table)
     - **Acceptance Criteria:** All 16 precomputed fields added with appropriate data types and NULL defaults, enables 5-6x faster dashboard queries per ARCHITECTURE.md performance targets
 
-- [ ] **Task 1.1.5b:** Add `otp_codes` table
+- [x] **Task 1.1.5b:** Add `otp_codes` table
     - **Action:** Add CREATE TABLE with FK to users
     - **References:** SchemaFinalv2.md lines 158-184 (otp_codes table), API_CONTRACTS.md lines 320-437 (signup OTP flow), lines 709-722 (verify-otp fields)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id) ON DELETE CASCADE, MUST have session_id VARCHAR(100) NOT NULL UNIQUE, MUST have code_hash VARCHAR(255) NOT NULL, MUST have expires_at TIMESTAMP NOT NULL, MUST have attempts INTEGER DEFAULT 0, MUST have used BOOLEAN DEFAULT false, MUST have indexes on session_id and expires_at per lines 172-176
 
-- [ ] **Task 1.1.5c:** Add `password_reset_tokens` table
+- [x] **Task 1.1.5c:** Add `password_reset_tokens` table
     - **Action:** Add CREATE TABLE with FK to users
     - **References:** SchemaFinalv2.md lines 187-220 (password_reset_tokens table), API_CONTRACTS.md lines 1587-1614 (forgot-password fields), lines 1745-1756 (reset-password fields)
     - **Acceptance Criteria:** MUST have user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, MUST have token_hash VARCHAR(255) NOT NULL, MUST have expires_at TIMESTAMP NOT NULL (15 minutes from creation), MUST have used_at TIMESTAMP NULLABLE, MUST have ip_address VARCHAR(45) NULLABLE, MUST have indexes on token_hash, user_id, and expires_at per lines 200-203
 
-- [ ] **Task 1.1.6:** Add `videos` table
+- [x] **Task 1.1.6:** Add `videos` table
     - **Action:** Add CREATE TABLE with FKs to clients and users
     - **References:** SchemaFinalv2.md lines 223-248 (videos table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have video_url TEXT UNIQUE NOT NULL, MUST have post_date DATE NOT NULL, MUST have views/likes/comments INTEGER DEFAULT 0, MUST have gmv DECIMAL(10,2) DEFAULT 0, MUST have units_sold INTEGER DEFAULT 0, MUST have sync_date TIMESTAMP NOT NULL
 
-- [ ] **Task 1.1.7:** Add `sales_adjustments` table
+- [x] **Task 1.1.7:** Add `sales_adjustments` table
     - **Action:** Add CREATE TABLE with FKs to clients and users
     - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have amount DECIMAL(10,2) and amount_units INTEGER (mutually exclusive), MUST have reason TEXT NOT NULL, MUST have adjustment_type VARCHAR(50) NOT NULL with options ('manual_sale', 'refund', 'bonus', 'correction'), MUST have adjusted_by UUID REFERENCES users(id), MUST have applied_at TIMESTAMP NULLABLE
 
-- [ ] **Task 1.1.8:** Add `tier_checkpoints` table
+- [x] **Task 1.1.8:** Add `tier_checkpoints` table
     - **Action:** Add CREATE TABLE with FKs to clients and users
     - **References:** SchemaFinalv2.md lines 289-308 (tier_checkpoints table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have checkpoint_date/period_start_date/period_end_date TIMESTAMP NOT NULL, MUST have sales_in_period/sales_required DECIMAL(10,2) and units_in_period/units_required INTEGER (mode-dependent), MUST have tier_before/tier_after VARCHAR(50) NOT NULL, MUST have status VARCHAR(50) NOT NULL with options ('maintained', 'promoted', 'demoted')
 
-- [ ] **Task 1.1.9:** Add `handle_changes` table
+- [x] **Task 1.1.9:** Add `handle_changes` table
     - **Action:** Add CREATE TABLE with FK to users
     - **References:** SchemaFinalv2.md lines 311-324 (handle_changes table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id), MUST have old_handle/new_handle VARCHAR(100) NOT NULL, MUST have detected_at TIMESTAMP DEFAULT NOW(), MUST have resolved_by UUID REFERENCES users(id) NULLABLE, MUST have resolved_at TIMESTAMP NULLABLE
 
-- [ ] **Task 1.1.10:** Add `sync_logs` table
+- [x] **Task 1.1.10:** Add `sync_logs` table
     - **Action:** Add CREATE TABLE with FK to clients and triggered_by FK to users
     - **References:** SchemaFinalv2.md lines 328-352 (sync_logs table)
     - **Acceptance Criteria:** MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have status VARCHAR(50) NOT NULL DEFAULT 'running' with options ('running', 'success', 'failed'), MUST have source VARCHAR(50) NOT NULL DEFAULT 'auto' with options ('auto', 'manual'), MUST have started_at TIMESTAMP NOT NULL DEFAULT NOW(), MUST have completed_at TIMESTAMP NULLABLE, MUST have records_processed INTEGER DEFAULT 0, MUST have error_message TEXT NULLABLE, MUST have file_name VARCHAR(255) NULLABLE, MUST have triggered_by UUID REFERENCES users(id) NULLABLE, MUST have indexes per lines 346-350 (idx_sync_logs_client, idx_sync_logs_status, idx_sync_logs_recent)
 
 ## Step 1.2: Schema Migration - Missions Tables
-- [ ] **Task 1.2.1:** Add `missions` table
+- [x] **Task 1.2.1:** Add `missions` table
     - **Action:** Add CREATE TABLE with FK to clients, reward FK
     - **References:** SchemaFinalv2.md lines 358-417 (missions table)
     - **Acceptance Criteria:** MUST have client_id UUID REFERENCES clients(id) ON DELETE CASCADE, MUST have mission_type VARCHAR(50) NOT NULL with options ('sales_dollars', 'sales_units', 'videos', 'views', 'likes', 'raffle'), MUST have target_value INTEGER NOT NULL, MUST have target_unit VARCHAR(20) NOT NULL DEFAULT 'dollars' with options ('dollars', 'units', 'count'), MUST have reward_id UUID NOT NULL REFERENCES rewards(id), MUST have tier_eligibility VARCHAR(50) NOT NULL with options ('all', 'tier_1'-'tier_6'), MUST have preview_from_tier VARCHAR(50) NULL, MUST have display_order INTEGER NOT NULL, MUST have raffle_end_date TIMESTAMP NULL (required for raffle type), MUST have CHECK constraints per lines 383-407, MUST have UNIQUE(client_id, tier_eligibility, mission_type, display_order), MUST have indexes per lines 410-417
 
-- [ ] **Task 1.2.2:** Add `mission_progress` table
+- [x] **Task 1.2.2:** Add `mission_progress` table
     - **Action:** Add CREATE TABLE with FKs to clients, users, missions
     - **References:** SchemaFinalv2.md lines 421-455 (mission_progress table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id) ON DELETE CASCADE, MUST have mission_id UUID REFERENCES missions(id) ON DELETE CASCADE, MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have current_value INTEGER DEFAULT 0, MUST have status VARCHAR(50) DEFAULT 'active' with options ('active', 'dormant', 'completed'), MUST have completed_at TIMESTAMP NULLABLE, MUST have checkpoint_start TIMESTAMP (never updated after creation), MUST have checkpoint_end TIMESTAMP (mission deadline), MUST have UNIQUE(user_id, mission_id, checkpoint_start) constraint per line 446, MUST have indexes per lines 449-454
 
-- [ ] **Task 1.2.3:** Add `raffle_participations` table
+- [x] **Task 1.2.3:** Add `raffle_participations` table
     - **Action:** Add CREATE TABLE with FKs to clients, users, missions, mission_progress, redemptions
     - **References:** SchemaFinalv2.md lines 888-953 (raffle_participations table)
     - **Acceptance Criteria:** MUST have mission_id UUID NOT NULL REFERENCES missions(id) ON DELETE CASCADE, MUST have user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, MUST have mission_progress_id UUID NOT NULL REFERENCES mission_progress(id) ON DELETE CASCADE, MUST have redemption_id UUID NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE, MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have composite FK (redemption_id, client_id) REFERENCES redemptions(id, client_id) per line 944, MUST have participated_at TIMESTAMP NOT NULL DEFAULT NOW(), MUST have is_winner BOOLEAN (NULL = not picked, TRUE = won, FALSE = lost) per line 923, MUST have winner_selected_at TIMESTAMP and selected_by UUID REFERENCES users(id) for audit trail, MUST have UNIQUE(mission_id, user_id) constraint per line 936, MUST have CHECK constraint ensuring is_winner and winner_selected_at are both NULL or both NOT NULL per lines 938-941, MUST have indexes per lines 949-953
 
 ## Step 1.3: Schema Migration - Rewards Tables
-- [ ] **Task 1.3.1:** Add `rewards` table
+- [x] **Task 1.3.1:** Add `rewards` table (created before missions for FK dependency)
     - **Action:** Add CREATE TABLE with FK to clients, tier restrictions
     - **References:** SchemaFinalv2.md lines 458-586 (rewards table)
     - **Acceptance Criteria:** MUST have client_id UUID REFERENCES clients(id) ON DELETE CASCADE, MUST have type VARCHAR(100) NOT NULL with options ('gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'), MUST have value_data JSONB (structure per lines 482-514), MUST have reward_source VARCHAR(50) NOT NULL DEFAULT 'mission' with options ('vip_tier', 'mission'), MUST have tier_eligibility VARCHAR(50) NOT NULL with options ('tier_1'-'tier_6'), MUST have preview_from_tier VARCHAR(50) DEFAULT NULL, MUST have redemption_frequency VARCHAR(50) DEFAULT 'unlimited' with options ('one-time', 'monthly', 'weekly', 'unlimited'), MUST have redemption_quantity INTEGER DEFAULT 1 (1-10 or NULL for unlimited), MUST have redemption_type VARCHAR(50) NOT NULL DEFAULT 'instant' with options ('instant', 'scheduled'), MUST have enabled BOOLEAN DEFAULT false, MUST have display_order INTEGER, MUST have CHECK constraint check_reward_source per lines 549-551, MUST have CHECK constraint check_quantity_with_frequency per lines 553-556, MUST have CHECK constraint check_preview_tier per lines 558-561, MUST have CHECK constraint check_discount_value_data per lines 563-574 (percent 1-100, duration_minutes 10-525600, coupon_code 2-8 chars uppercase alphanumeric, max_uses > 0 or NULL), MUST have indexes per lines 577-586
 
-- [ ] **Task 1.3.2:** Add `redemptions` table
+- [x] **Task 1.3.2:** Add `redemptions` table
     - **Action:** Add CREATE TABLE with FKs to clients, users, rewards, mission_progress
     - **References:** SchemaFinalv2.md lines 590-661 (redemptions table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id) ON DELETE CASCADE, MUST have reward_id UUID REFERENCES rewards(id) ON DELETE CASCADE, MUST have mission_progress_id UUID REFERENCES mission_progress(id) ON DELETE CASCADE (NULL for VIP tier rewards, NOT NULL for mission rewards), MUST have client_id UUID REFERENCES clients(id) ON DELETE CASCADE, MUST have status VARCHAR(50) DEFAULT 'claimable' with options ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'), MUST have tier_at_claim VARCHAR(50) NOT NULL, MUST have redemption_type VARCHAR(50) NOT NULL with options ('instant', 'scheduled'), MUST have claimed_at TIMESTAMP, MUST have scheduled_activation_date DATE and scheduled_activation_time TIME, MUST have activation_date TIMESTAMP and expiration_date TIMESTAMP, MUST have google_calendar_event_id VARCHAR(255), MUST have fulfilled_at TIMESTAMP and fulfilled_by UUID REFERENCES users(id) and fulfillment_notes TEXT, MUST have concluded_at TIMESTAMP, MUST have rejection_reason TEXT and rejected_at TIMESTAMP, MUST have external_transaction_id VARCHAR(255), MUST have deleted_at TIMESTAMP and deleted_reason VARCHAR(100) for soft delete, MUST have CHECK constraint redemption_type IN ('instant', 'scheduled') per line 632, MUST have UNIQUE constraints per lines 635-643, MUST have UNIQUE(id, client_id) for composite FK support, MUST have indexes per lines 647-658
 
-- [ ] **Task 1.3.3:** Add `commission_boost_redemptions` table
+- [x] **Task 1.3.3:** Add `commission_boost_redemptions` table
     - **Action:** Add CREATE TABLE with composite FK to redemptions(id, client_id)
     - **References:** SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
     - **Acceptance Criteria:** MUST have redemption_id UUID UNIQUE NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE (ONE-TO-ONE), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have composite FK (redemption_id, client_id) REFERENCES redemptions(id, client_id) per line 733, MUST have boost_status VARCHAR(50) NOT NULL DEFAULT 'scheduled' with options ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'), MUST have scheduled_activation_date DATE NOT NULL, MUST have activated_at TIMESTAMP and expires_at TIMESTAMP, MUST have duration_days INTEGER NOT NULL DEFAULT 30, MUST have boost_rate DECIMAL(5,2) NOT NULL and tier_commission_rate DECIMAL(5,2), MUST have sales_at_activation/sales_at_expiration DECIMAL(10,2), MUST have sales_delta DECIMAL(10,2) GENERATED ALWAYS AS (GREATEST(0, sales_at_expiration - sales_at_activation)) STORED, MUST have calculated_commission/admin_adjusted_commission/final_payout_amount DECIMAL(10,2), MUST have payment_method VARCHAR(20) with options ('venmo', 'paypal'), MUST have payment_account/payment_account_confirm VARCHAR(255), MUST have payment_info_collected_at TIMESTAMP and payment_info_confirmed BOOLEAN DEFAULT false, MUST have payout_sent_at TIMESTAMP and payout_sent_by UUID REFERENCES users(id) and payout_notes TEXT, MUST have CHECK constraint per lines 728-730, MUST have indexes per lines 738-741
 
-- [ ] **Task 1.3.4:** Add `commission_boost_state_history` table
+- [x] **Task 1.3.4:** Add `commission_boost_state_history` table
     - **Action:** Add CREATE TABLE for audit trail with trigger for auto-logging
     - **References:** SchemaFinalv2.md lines 746-816 (commission_boost_state_history table)
     - **Acceptance Criteria:** MUST have boost_redemption_id UUID NOT NULL REFERENCES commission_boost_redemptions(id) ON DELETE CASCADE, MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have from_status VARCHAR(50) NULLABLE (NULL for initial creation), MUST have to_status VARCHAR(50), MUST have transitioned_at TIMESTAMP DEFAULT NOW(), MUST have transitioned_by UUID REFERENCES users(id) NULLABLE (NULL if automated/cron), MUST have transition_type VARCHAR(50) with options ('manual', 'cron', 'api'), MUST have notes TEXT and metadata JSONB, MUST have indexes per lines 773-778, MUST have trigger log_boost_transition() per lines 784-815
 
-- [ ] **Task 1.3.5:** Add `physical_gift_redemptions` table
+- [x] **Task 1.3.5:** Add `physical_gift_redemptions` table
     - **Action:** Add CREATE TABLE with composite FK to redemptions(id, client_id)
     - **References:** SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table)
     - **Acceptance Criteria:** MUST have redemption_id UUID UNIQUE NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE (ONE-TO-ONE), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have composite FK (redemption_id, client_id) REFERENCES redemptions(id, client_id) per line 876, MUST have requires_size BOOLEAN DEFAULT false, MUST have size_category VARCHAR(50) with options ('clothing', 'shoes', NULL), MUST have size_value VARCHAR(20) and size_submitted_at TIMESTAMP, MUST have shipping_recipient_first_name/last_name VARCHAR(100) NOT NULL, MUST have shipping_address_line1 VARCHAR(255) NOT NULL and shipping_address_line2 VARCHAR(255), MUST have shipping_city VARCHAR(100) NOT NULL and shipping_state VARCHAR(100) NOT NULL and shipping_postal_code VARCHAR(20) NOT NULL, MUST have shipping_country VARCHAR(100) DEFAULT 'USA', MUST have shipping_phone VARCHAR(50) and shipping_info_submitted_at TIMESTAMP NOT NULL, MUST have tracking_number VARCHAR(100) and carrier VARCHAR(50) with options ('FedEx', 'UPS', 'USPS', 'DHL'), MUST have shipped_at TIMESTAMP and delivered_at TIMESTAMP, MUST have CHECK constraint check_size_required per lines 870-873, MUST have indexes per lines 881-883
 
 ## Step 1.4: Indexes
-- [ ] **Task 1.4.1:** Add all indexes to migration file
+- [x] **Task 1.4.1:** Add all indexes to migration file
     - **Action:** Add CREATE INDEX statements for all tables
     - **References:** SchemaFinalv2.md lines 333-450 (indexes section)
     - **Acceptance Criteria:** Index on client_id for every multi-tenant table, performance indexes added
 
-- [ ] **Task 1.4.2:** Add indexes for precomputed fields
+- [x] **Task 1.4.2:** Add indexes for precomputed fields
     - **Action:** Add CREATE INDEX statements for leaderboard_rank, total_sales, total_units on users table
     - **References:** ARCHITECTURE.md Section 3.3 (line 277 - Performance optimization indexes)
     - **Acceptance Criteria:** Indexes created: idx_users_leaderboard_rank, idx_users_total_sales, idx_users_total_units for optimized dashboard/leaderboard queries
 
 ## Step 1.5: RLS Policies
-- [ ] **Task 1.5.1:** Enable RLS on all tables
+- [x] **Task 1.5.1:** Enable RLS on all tables
     - **Action:** Add `ALTER TABLE [table] ENABLE ROW LEVEL SECURITY;` for all tables
     - **References:** SchemaFinalv2.md lines 711-790 (RLS section)
     - **Acceptance Criteria:** RLS enabled on all tables
 
-- [ ] **Task 1.5.2:** Add creator policies
+- [x] **Task 1.5.2:** Add creator policies
     - **Action:** Add CREATE POLICY for SELECT/INSERT/UPDATE with client_id check
     - **References:** SchemaFinalv2.md RLS policies, Loyalty.md Pattern 8 (Multi-Tenant Isolation)
     - **Acceptance Criteria:** All policies include `client_id = auth.jwt() ->> 'client_id'` check
 
-- [ ] **Task 1.5.3:** Add admin policies
+- [x] **Task 1.5.3:** Add admin policies
     - **Action:** Add CREATE POLICY for admin role with full access
     - **References:** SchemaFinalv2.md RLS policies
     - **Acceptance Criteria:** Admin policies allow bypass with role check
 
 ## Step 1.6: Database Triggers
-- [ ] **Task 1.6.1:** Create trigger function for commission boost auto-sync
+- [x] **Task 1.6.1:** Create trigger function for commission boost auto-sync
     - **Action:** Add CREATE FUNCTION to auto-sync users.current_commission_boost from commission_boost_states
     - **References:** Loyalty.md Pattern 4 (Auto-Sync Triggers), SchemaFinalv2.md triggers section
     - **Acceptance Criteria:** Function updates users.current_commission_boost when boost activated/deactivated
 
-- [ ] **Task 1.6.2:** Create trigger on commission_boost_states
+- [x] **Task 1.6.2:** Create trigger on commission_boost_states
     - **Action:** Add CREATE TRIGGER AFTER INSERT/UPDATE on commission_boost_states
     - **References:** SchemaFinalv2.md triggers
     - **Acceptance Criteria:** Trigger calls auto-sync function
 
-- [ ] **Task 1.6.3:** Create trigger function for commission boost history
+- [x] **Task 1.6.3:** Create trigger function for commission boost history
     - **Action:** Add CREATE FUNCTION to log activation/deactivation to commission_boost_history
     - **References:** Loyalty.md Pattern 7 (Commission Boost History)
     - **Acceptance Criteria:** Function inserts record with action enum
 
-- [ ] **Task 1.6.4:** Create trigger for boost history logging
+- [x] **Task 1.6.4:** Create trigger for boost history logging
     - **Action:** Add CREATE TRIGGER AFTER INSERT/UPDATE on commission_boost_states
     - **References:** SchemaFinalv2.md triggers
     - **Acceptance Criteria:** History logged when is_active changes
 
-- [ ] **Task 1.6.5:** Create state validation triggers
+- [x] **Task 1.6.5:** Create state validation triggers
     - **Action:** Add CREATE FUNCTION to validate mission/reward state transitions
     - **References:** MissionsRewardsFlows.md lines 30, 34, 166, 176 (state machines), Loyalty.md lines 2066-2078 (Pattern 3: State Transition Validation)
     - **Acceptance Criteria:** MUST validate mission_progress.status transitions (dormant → active → completed per line 30), MUST validate redemptions.status transitions (claimable → claimed → fulfilled → concluded + rejected per line 34), trigger raises EXCEPTION on invalid transitions, follows Pattern 3 from Loyalty.md
 
 ## Step 1.7: Deploy and Verify Schema
-- [ ] **Task 1.7.1:** Apply migration to local database
+- [x] **Task 1.7.1:** Apply migration to remote database
     - **Command:** `supabase db push`
     - **Acceptance Criteria:** Command exits with code 0, no errors
 
-- [ ] **Task 1.7.2:** Verify schema integrity
+- [x] **Task 1.7.2:** Verify schema integrity
     - **Command:** `supabase db diff --schema-only`
     - **Acceptance Criteria:** Command output is empty (no drift)
 
-- [ ] **Task 1.7.3:** Verify RLS enabled
+- [x] **Task 1.7.3:** Verify RLS enabled
     - **Command:** `psql -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND rowsecurity = false;"`
     - **Acceptance Criteria:** Query returns 0 rows (all tables have RLS)
 
-- [ ] **Task 1.7.4:** Verify triggers exist
+- [x] **Task 1.7.4:** Verify triggers exist
     - **Command:** `psql -c "SELECT tgname FROM pg_trigger WHERE tgname LIKE '%commission_boost%' OR tgname LIKE '%state_validation%';"`
     - **Acceptance Criteria:** All expected triggers listed
 
