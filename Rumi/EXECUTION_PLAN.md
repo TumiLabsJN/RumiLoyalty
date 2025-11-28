@@ -122,10 +122,11 @@
     - **References:** Loyalty.md line 47 (Development Tools)
     - **Acceptance Criteria:** ESLint and Prettier configured, can run `npm run lint` successfully
 
-- [ ] **Task 0.2.5:** Configure Supabase Storage for logo uploads
+- [x] **Task 0.2.5:** Configure Supabase Storage for logo uploads
     - **Action:** Create storage bucket for client logos (public read, admin write, 2MB max)
     - **References:** Loyalty.md lines 40, 103-109 (Supabase Storage section)
     - **Acceptance Criteria:** Bucket created named 'logos', RLS policy allows public read
+    - **Note:** Configured in supabase/config.toml, bucket created on supabase start or db push
 
 - [ ] **Task 0.2.6:** Link Supabase project
     - **Command:** `supabase link --project-ref [your-project-ref]`

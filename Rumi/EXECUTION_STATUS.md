@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 14:00 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 14:30 [Update this timestamp when you modify this document]
 
 ---
 
@@ -37,27 +37,27 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 0.2.5
-**Description:** Configure Supabase Storage for logo uploads
+**Task ID:** Task 0.2.6
+**Description:** Link Supabase project
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read Loyalty.md lines 40, 103-109 (Supabase Storage section)
-- [ ] Create storage bucket named 'logos' (public read, admin write, 2MB max)
-- [ ] Configure RLS policy for public read access
+- [ ] Get project-ref from Supabase Dashboard (vyvkvlhzzglfklrwzcby)
+- [ ] Run `supabase link --project-ref vyvkvlhzzglfklrwzcby`
+- [ ] Verify command succeeds with exit code 0
 
 ### Next Action
-Read Loyalty.md lines 103-109, then create storage bucket in Supabase
+Run: `cd /home/jorge/Loyalty/Rumi && supabase link --project-ref vyvkvlhzzglfklrwzcby`
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
-- [x] **Task 0.2.4** - Configure ESLint and Prettier (Completed: 2025-11-28 14:00, commit: 080c454)
+- [x] **Task 0.2.5** - Configure Supabase Storage for logo uploads (Completed: 2025-11-28 14:25, commit: a2ab2b2)
+- [x] **Task 0.2.4** - Configure ESLint and Prettier (Completed: 2025-11-28 14:00, commit: fb54c78)
 - [x] **Task 0.2.3a** - Add CRUVA credentials to .env.local (Completed: 2025-11-28 13:30)
 - [x] **Task 0.2.3** - Configure environment variables in .env.local (Completed: 2025-11-28 13:25)
 - [x] **Task 0.2.2c** - Verify Node.js version (v22.16.0) (Completed: 2025-11-28 11:50)
-- [x] **Task 0.2.2b** - Install all dependencies in appcode (Completed: 2025-11-28 11:45, commit: 39a1525)
 
 ---
 
