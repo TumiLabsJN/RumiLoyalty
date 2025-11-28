@@ -144,10 +144,11 @@
 **Objective:** Create complete, verified database schema with RLS, triggers, and seed data.
 
 ## Step 1.1: Schema Migration - Core Tables
-- [ ] **Task 1.1.1:** Create initial migration file
+- [x] **Task 1.1.1:** Create initial migration file
     - **Command:** `supabase migration new initial_schema`
     - **References:** SchemaFinalv2.md
     - **Acceptance Criteria:** New empty migration file in `/supabase/migrations/`
+    - **Output:** `supabase/migrations/20251128173733_initial_schema.sql`
 
 - [ ] **Task 1.1.2:** Add ENUM types to migration
     - **Action:** Add all CREATE TYPE statements for mission_type, mission_status, reward_type, etc.
