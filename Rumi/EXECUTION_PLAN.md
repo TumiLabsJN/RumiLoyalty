@@ -57,10 +57,11 @@
     - **Acceptance Criteria:** Create summary document listing all 9 patterns and 10 flows
     - **Output:** `/home/jorge/Loyalty/Rumi/LOYALTY_SUMMARY.md`
 
-- [ ] **Task 0.1.2:** Read SchemaFinalv2.md (996 lines)
+- [x] **Task 0.1.2:** Read SchemaFinalv2.md (996 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/SchemaFinalv2.md`
     - **Focus:** All table definitions, RLS policies (lines 711-790), triggers
     - **Acceptance Criteria:** Create table dependency graph showing FK relationships
+    - **Output:** `/home/jorge/Loyalty/Rumi/SCHEMA_DEPENDENCY_GRAPH.md`
 
 - [ ] **Task 0.1.3:** Read MissionsRewardsFlows.md (527 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/MissionsRewardsFlows.md`
