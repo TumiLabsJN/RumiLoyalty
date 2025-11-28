@@ -75,10 +75,11 @@
     - **Acceptance Criteria:** Confirm understanding of repository → service → route pattern
     - **Output:** Confirmation added to `/home/jorge/Loyalty/Rumi/LOYALTY_SUMMARY.md`
 
-- [ ] **Task 0.1.5:** Read API_CONTRACTS.md (4,906 lines)
+- [x] **Task 0.1.5:** Read API_CONTRACTS.md (4,906 lines)
     - **Path:** `/home/jorge/Loyalty/Rumi/API_CONTRACTS.md`
     - **Focus:** All 23 endpoints with request/response schemas
     - **Acceptance Criteria:** Create checklist of all 23 endpoints
+    - **Output:** `/home/jorge/Loyalty/Rumi/API_ENDPOINTS_CHECKLIST.md`
 
 ## Step 0.2: Environment Setup
 - [ ] **Task 0.2.1:** Initialize Supabase project
