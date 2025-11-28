@@ -128,8 +128,8 @@
     - **Acceptance Criteria:** Bucket created named 'logos', RLS policy allows public read
     - **Note:** Configured in supabase/config.toml, bucket created on supabase start or db push
 
-- [ ] **Task 0.2.6:** Link Supabase project
-    - **Command:** `supabase link --project-ref [your-project-ref]`
+- [x] **Task 0.2.6:** Link Supabase project
+    - **Command:** `supabase link --project-ref vyvkvlhzzglfklrwzcby`
     - **Acceptance Criteria:** Command succeeds with exit code 0
 
 - [ ] **Task 0.2.7:** Configure Supabase Auth session duration

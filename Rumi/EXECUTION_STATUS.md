@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 14:30 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-28 14:45 [Update this timestamp when you modify this document]
 
 ---
 
@@ -37,27 +37,27 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 0.2.6
-**Description:** Link Supabase project
+**Task ID:** Task 0.2.7
+**Description:** Configure Supabase Auth session duration
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Get project-ref from Supabase Dashboard (vyvkvlhzzglfklrwzcby)
-- [ ] Run `supabase link --project-ref vyvkvlhzzglfklrwzcby`
-- [ ] Verify command succeeds with exit code 0
+- [ ] Read Loyalty.md line 2348 (Session Duration)
+- [ ] Set JWT expiry to 5184000 seconds (60 days) in Supabase Dashboard
+- [ ] Go to: Authentication → Settings → JWT Expiry
 
 ### Next Action
-Run: `cd /home/jorge/Loyalty/Rumi && supabase link --project-ref vyvkvlhzzglfklrwzcby`
+Open Supabase Dashboard → Authentication → Settings → Set JWT Expiry to 5184000
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 5 Tasks)
+- [x] **Task 0.2.6** - Link Supabase project (Completed: 2025-11-28 14:40)
 - [x] **Task 0.2.5** - Configure Supabase Storage for logo uploads (Completed: 2025-11-28 14:25, commit: a2ab2b2)
 - [x] **Task 0.2.4** - Configure ESLint and Prettier (Completed: 2025-11-28 14:00, commit: fb54c78)
 - [x] **Task 0.2.3a** - Add CRUVA credentials to .env.local (Completed: 2025-11-28 13:30)
 - [x] **Task 0.2.3** - Configure environment variables in .env.local (Completed: 2025-11-28 13:25)
-- [x] **Task 0.2.2c** - Verify Node.js version (v22.16.0) (Completed: 2025-11-28 11:50)
 
 ---
 
