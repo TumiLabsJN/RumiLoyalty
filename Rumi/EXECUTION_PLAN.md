@@ -95,10 +95,11 @@
     - **Acceptance Criteria:** List includes ~15+ packages: Frontend (react-hook-form, lucide-react, date-fns, tailwindcss, shadcn/ui), Backend (@supabase/supabase-js, puppeteer, csv-parse, resend, googleapis, luxon), Development (zod, vitest, playwright, @upstash/ratelimit), Dev Tools (eslint, prettier)
     - **Output:** `/home/jorge/Loyalty/Rumi/TECH_STACK_DEPENDENCIES.md`
 
-- [ ] **Task 0.2.2b:** Install all dependencies
+- [x] **Task 0.2.2b:** Install all dependencies
     - **Command:** `npm install [all-packages-from-task-0.2.2a]`
     - **Acceptance Criteria:** All packages from Tech Stack documented in `package.json`
     - **Verification:** Run `npm list --depth=0` to confirm all installed
+    - **Note:** Created Next.js project in `/home/jorge/Loyalty/Rumi/app/`
 
 - [ ] **Task 0.2.2c:** Verify Node.js version requirement
     - **Command:** `node --version`
