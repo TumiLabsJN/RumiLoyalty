@@ -7,12 +7,13 @@
 ## RULES OF ENGAGEMENT (For Executing LLM)
 
 ### Core Protocol
-1. Execute this plan SEQUENTIALLY - do not skip tasks
-2. Before EVERY task, READ the specified documentation references
-3. Do NOT implement based on general knowledge - ONLY from referenced docs
-4. Mark checkbox `[x]` ONLY after Acceptance Criteria verified
-5. If task fails, STOP and report: Task ID + Failure reason
-6. Commit after each completed Step with message: "Complete: [Step ID] - [Description]"
+1. **READ EXECUTION_STATUS.md FIRST** before starting any work (contains current task, CR workflow, sequential enforcement)
+2. Execute this plan SEQUENTIALLY - do not skip tasks
+3. Before EVERY task, READ the specified documentation references
+4. Do NOT implement based on general knowledge - ONLY from referenced docs
+5. Mark checkbox `[x]` ONLY after Acceptance Criteria verified
+6. If task fails, STOP and report: Task ID + Failure reason
+7. Commit after completing each task: "Complete: [Task ID] - [Description]"
 
 ### Anti-Hallucination Rules
 - FORBIDDEN: Implementing features not in API_CONTRACTS.md
@@ -22,19 +23,8 @@
 - REQUIRED: Read documentation section before implementation
 - REQUIRED: Verify against API contracts before marking complete
 
-### Session Management
-**Session Start:**
-1. Run `/context` to check token usage
-2. Find next unchecked `[ ]` task
-3. Read documentation for that task
-4. Execute task
-5. Verify Acceptance Criteria
-6. Mark `[x]` and commit
-
-**Session End:**
-1. Mark current progress
-2. Commit all changes
-3. Note any blockers
+### Operational Procedures
+**All session management, CR workflows, and sequential enforcement rules live in EXECUTION_STATUS.md.**
 
 ---
 
@@ -52,6 +42,7 @@
 - [ ] Phase 9: Frontend Integration (MSW → Real APIs)
 - [ ] Phase 10: Testing & CI/CD
 - [ ] Phase 11: Final Audit & Verification
+- [ ] Phase 12: Admin System (Dashboard, Redemptions, Missions, VIP Rewards, Sales Adjustments, Creator Lookup, Data Sync, Reports)
 
 ---
 
@@ -233,12 +224,12 @@
 
 - [ ] **Task 1.3.2:** Add `redemptions` table
     - **Action:** Add CREATE TABLE with FKs to clients, users, rewards, mission_progress
-    - **References:** SchemaFinalv2.md lines 590-658 (redemptions table)
+    - **References:** SchemaFinalv2.md lines 590-661 (redemptions table)
     - **Acceptance Criteria:** MUST have user_id UUID REFERENCES users(id) ON DELETE CASCADE, MUST have reward_id UUID REFERENCES rewards(id) ON DELETE CASCADE, MUST have mission_progress_id UUID REFERENCES mission_progress(id) ON DELETE CASCADE (NULL for VIP tier rewards, NOT NULL for mission rewards), MUST have client_id UUID REFERENCES clients(id) ON DELETE CASCADE, MUST have status VARCHAR(50) DEFAULT 'claimable' with options ('claimable', 'claimed', 'fulfilled', 'concluded', 'rejected'), MUST have tier_at_claim VARCHAR(50) NOT NULL, MUST have redemption_type VARCHAR(50) NOT NULL with options ('instant', 'scheduled'), MUST have claimed_at TIMESTAMP, MUST have scheduled_activation_date DATE and scheduled_activation_time TIME, MUST have activation_date TIMESTAMP and expiration_date TIMESTAMP, MUST have google_calendar_event_id VARCHAR(255), MUST have fulfilled_at TIMESTAMP and fulfilled_by UUID REFERENCES users(id) and fulfillment_notes TEXT, MUST have concluded_at TIMESTAMP, MUST have rejection_reason TEXT and rejected_at TIMESTAMP, MUST have external_transaction_id VARCHAR(255), MUST have deleted_at TIMESTAMP and deleted_reason VARCHAR(100) for soft delete, MUST have CHECK constraint redemption_type IN ('instant', 'scheduled') per line 632, MUST have UNIQUE constraints per lines 635-643, MUST have UNIQUE(id, client_id) for composite FK support, MUST have indexes per lines 647-658
 
 - [ ] **Task 1.3.3:** Add `commission_boost_redemptions` table
     - **Action:** Add CREATE TABLE with composite FK to redemptions(id, client_id)
-    - **References:** SchemaFinalv2.md lines 662-742 (commission_boost_redemptions table)
+    - **References:** SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
     - **Acceptance Criteria:** MUST have redemption_id UUID UNIQUE NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE (ONE-TO-ONE), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have composite FK (redemption_id, client_id) REFERENCES redemptions(id, client_id) per line 733, MUST have boost_status VARCHAR(50) NOT NULL DEFAULT 'scheduled' with options ('scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid'), MUST have scheduled_activation_date DATE NOT NULL, MUST have activated_at TIMESTAMP and expires_at TIMESTAMP, MUST have duration_days INTEGER NOT NULL DEFAULT 30, MUST have boost_rate DECIMAL(5,2) NOT NULL and tier_commission_rate DECIMAL(5,2), MUST have sales_at_activation/sales_at_expiration DECIMAL(10,2), MUST have sales_delta DECIMAL(10,2) GENERATED ALWAYS AS (GREATEST(0, sales_at_expiration - sales_at_activation)) STORED, MUST have calculated_commission/admin_adjusted_commission/final_payout_amount DECIMAL(10,2), MUST have payment_method VARCHAR(20) with options ('venmo', 'paypal'), MUST have payment_account/payment_account_confirm VARCHAR(255), MUST have payment_info_collected_at TIMESTAMP and payment_info_confirmed BOOLEAN DEFAULT false, MUST have payout_sent_at TIMESTAMP and payout_sent_by UUID REFERENCES users(id) and payout_notes TEXT, MUST have CHECK constraint per lines 728-730, MUST have indexes per lines 738-741
 
 - [ ] **Task 1.3.4:** Add `commission_boost_state_history` table
@@ -248,7 +239,7 @@
 
 - [ ] **Task 1.3.5:** Add `physical_gift_redemptions` table
     - **Action:** Add CREATE TABLE with composite FK to redemptions(id, client_id)
-    - **References:** SchemaFinalv2.md lines 820-884 (physical_gift_redemptions table)
+    - **References:** SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table)
     - **Acceptance Criteria:** MUST have redemption_id UUID UNIQUE NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE (ONE-TO-ONE), MUST have client_id UUID NOT NULL REFERENCES clients(id), MUST have composite FK (redemption_id, client_id) REFERENCES redemptions(id, client_id) per line 876, MUST have requires_size BOOLEAN DEFAULT false, MUST have size_category VARCHAR(50) with options ('clothing', 'shoes', NULL), MUST have size_value VARCHAR(20) and size_submitted_at TIMESTAMP, MUST have shipping_recipient_first_name/last_name VARCHAR(100) NOT NULL, MUST have shipping_address_line1 VARCHAR(255) NOT NULL and shipping_address_line2 VARCHAR(255), MUST have shipping_city VARCHAR(100) NOT NULL and shipping_state VARCHAR(100) NOT NULL and shipping_postal_code VARCHAR(20) NOT NULL, MUST have shipping_country VARCHAR(100) DEFAULT 'USA', MUST have shipping_phone VARCHAR(50) and shipping_info_submitted_at TIMESTAMP NOT NULL, MUST have tracking_number VARCHAR(100) and carrier VARCHAR(50) with options ('FedEx', 'UPS', 'USPS', 'DHL'), MUST have shipped_at TIMESTAMP and delivered_at TIMESTAMP, MUST have CHECK constraint check_size_required per lines 870-873, MUST have indexes per lines 881-883
 
 ## Step 1.4: Indexes
@@ -582,26 +573,52 @@
     - **Acceptance Criteria:** MUST return `{ heading: string, message: string, submessage: string, buttonText: string }` per lines 1328-1333, implements all 5 steps of onboarding-info workflow per lines 1356-1379, validates session token from HTTP-only cookie auth-token (line 1315), returns 401 UNAUTHORIZED if invalid/missing (lines 1415-1420), queries users table for client_id (lines 1363-1365, 1449-1450), MVP implementation returns hardcoded default response (lines 1383-1386), response can include emojis in heading (line 1321), dynamic dates in message (line 1322), communication channel info in submessage (line 1323), CTA button text (line 1324), can be cached per client_id (lines 1409-1411, 1435), does NOT expose sensitive data or PII (lines 1434, 1437), returns 200 for success or 401/500 for errors, follows route pattern from Section 5
 
 ## Step 3.4: Auth Testing
-- [ ] **Task 3.4.1:** Create auth service tests
-    - **Action:** Create `/tests/integration/services/authService.test.ts`
-    - **Acceptance Criteria:** File exists with test suite skeleton
+- [ ] **Task 3.4.1:** Create auth test infrastructure
+    - **Action:** Create `/tests/integration/services/authService.test.ts` and `/tests/fixtures/factories.ts`
+    - **References:** SchemaFinalv2.md lines 106-155 (clients and users tables), ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640)
+    - **Implementation Guide:** MUST create test infrastructure: (1) install vitest and supertest if not present, (2) create factories.ts with createTestClient({name, subdomain, vip_metric}) returning client with UUID, (3) createTestUser({client_id, tiktok_handle, email, current_tier}) returning user with UUID and auth token, (4) createTestTier({client_id, tier_level, sales_threshold}), (5) cleanupTestData() that deletes in reverse FK order: redemptions → mission_progress → missions → rewards → users → tiers → clients, (6) setupTestDb() that initializes Supabase test client
+    - **Acceptance Criteria:** File exists with test suite skeleton, factory functions MUST create valid test data with proper FK relationships per SchemaFinalv2.md, cleanup MUST remove all test data without FK violations
 
-- [ ] **Task 3.4.2:** Test signup flow
-    - **Action:** Write integration test for full signup → OTP → verify
-    - **Acceptance Criteria:** Test passes, verifies user created in DB
+- [ ] **Task 3.4.2:** Test complete auth flow
+    - **Action:** Create `/tests/integration/auth/signup-login-flow.test.ts`
+    - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup), lines 438-592 (POST /api/auth/verify-otp), lines 593-750 (POST /api/auth/login), SchemaFinalv2.md lines 123-155 (users table), lines 158-184 (otp_codes table)
+    - **Implementation Guide:** MUST test complete flow: (1) create test client with createTestClient(), (2) POST /api/auth/signup with {email, password, tiktokHandle, agreedToTerms: true} → expect 201, otpSent=true, (3) query otp_codes table directly to get OTP code, (4) POST /api/auth/verify-otp with {email, code} → expect 200, verified=true, (5) POST /api/auth/login with {email, password} → expect 200, valid JWT token, (6) verify users table has email_verified=true, (7) verify auth token allows access to protected endpoint
+    - **Test Cases:** (1) signup creates user in DB with correct client_id, (2) signup returns otpSent=true and sessionId, (3) verify-otp marks email_verified=true, (4) login returns valid JWT token, (5) token grants access to protected routes
+    - **Acceptance Criteria:** All 5 test cases MUST pass, user record MUST exist in users table per SchemaFinalv2.md lines 123-155, otp_codes record MUST be created and consumed per lines 158-184, auth flow prevents users-cant-login catastrophic bug
 
-- [ ] **Task 3.4.3:** Test handle uniqueness
-    - **Action:** Write test ensuring duplicate handles rejected
-    - **Acceptance Criteria:** Test passes, 409 returned for duplicate
+- [ ] **Task 3.4.3:** Test OTP expiration enforced
+    - **Action:** Create `/tests/integration/auth/otp-security.test.ts`
+    - **References:** API_CONTRACTS.md lines 438-592 (POST /api/auth/verify-otp), SchemaFinalv2.md lines 158-184 (otp_codes table with expires_at), Loyalty.md lines 2345-2360 (OTP Security)
+    - **Implementation Guide:** MUST test OTP security: (1) create user via signup, (2) Test valid OTP: query otp_codes, POST /api/auth/verify-otp with correct code → expect 200, (3) Test expired OTP: INSERT otp_codes with expires_at = NOW() - INTERVAL '11 minutes', POST verify-otp → expect 400 OTP_EXPIRED, (4) Test invalid OTP: POST verify-otp with wrong 6-digit code → expect 400 OTP_INVALID, (5) Test max attempts: POST verify-otp with wrong code 5 times, 6th attempt → expect 400 MAX_ATTEMPTS_EXCEEDED even with correct code, (6) verify otp_codes.attempts_count incremented per attempt
+    - **Test Cases:** (1) valid OTP within 10 min succeeds, (2) expired OTP (>10 min) returns OTP_EXPIRED, (3) invalid OTP returns OTP_INVALID, (4) max attempts (5) exceeded returns MAX_ATTEMPTS_EXCEEDED, (5) attempts_count tracks failed attempts
+    - **Acceptance Criteria:** All 5 test cases MUST pass, OTP expiration MUST be enforced at 10 minutes per SchemaFinalv2.md line 172, max attempts MUST be 5 per line 173, prevents account-takeover-via-old-OTP catastrophic bug
 
-- [ ] **Task 3.4.4:** Test multi-tenant isolation
-    - **Action:** Write test verifying client_id boundaries
-    - **References:** Loyalty.md Pattern 8
-    - **Acceptance Criteria:** User from client A cannot access user from client B
+- [ ] **Task 3.4.4:** Test password reset token single-use
+    - **Action:** Create `/tests/integration/auth/password-reset-security.test.ts`
+    - **References:** API_CONTRACTS.md lines 751-945 (POST /api/auth/forgot-password, POST /api/auth/reset-password), SchemaFinalv2.md lines 187-220 (password_reset_tokens table)
+    - **Implementation Guide:** MUST test reset token security: (1) create verified user, (2) POST /api/auth/forgot-password with {email} → expect 200, (3) query password_reset_tokens table to get token, (4) POST /api/auth/reset-password with {token, newPassword} → expect 200, (5) verify password_reset_tokens.used_at is set, (6) POST /api/auth/reset-password with same token again → expect 400 TOKEN_ALREADY_USED, (7) Test expiration: INSERT token with expires_at = NOW() - INTERVAL '2 hours', POST reset-password → expect 400 TOKEN_EXPIRED, (8) verify user can login with new password
+    - **Test Cases:** (1) valid token resets password successfully, (2) same token reused returns TOKEN_ALREADY_USED, (3) expired token (>1 hour) returns TOKEN_EXPIRED, (4) user can login with new password after reset
+    - **Acceptance Criteria:** All 4 test cases MUST pass, token MUST be single-use per SchemaFinalv2.md line 205 (used_at), expiration MUST be 1 hour per line 204, prevents account-takeover-via-reused-token catastrophic bug
 
-- [ ] **Task 3.4.5:** Create E2E auth test
-    - **Action:** Create Playwright test for signup flow
-    - **Acceptance Criteria:** Test automates form fill, OTP verification
+- [ ] **Task 3.4.5:** Test handle uniqueness
+    - **Action:** Add test case to `/tests/integration/auth/signup-login-flow.test.ts`
+    - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup error HANDLE_ALREADY_EXISTS), SchemaFinalv2.md lines 138-139 (users.tiktok_handle UNIQUE per client)
+    - **Implementation Guide:** MUST test handle uniqueness: (1) create test client, (2) POST /api/auth/signup with {tiktokHandle: 'creator1', ...} → expect 201, (3) POST /api/auth/signup with same {tiktokHandle: 'creator1', different email, ...} → expect 400 HANDLE_ALREADY_EXISTS, (4) create second test client, (5) POST /api/auth/signup to client B with {tiktokHandle: 'creator1', ...} → expect 201 (same handle OK in different client)
+    - **Test Cases:** (1) first signup with handle succeeds, (2) second signup with same handle same client returns 400, (3) same handle in different client succeeds (multi-tenant)
+    - **Acceptance Criteria:** All 3 test cases MUST pass, UNIQUE(client_id, tiktok_handle) constraint MUST be enforced per SchemaFinalv2.md line 139
+
+- [ ] **Task 3.4.6:** Test multi-tenant isolation
+    - **Action:** Create `/tests/integration/security/multi-tenant-isolation.test.ts`
+    - **References:** Loyalty.md lines 2091-2130 (Pattern 8: Multi-Tenant Query Isolation), SchemaFinalv2.md lines 106-120 (clients table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1028-1063)
+    - **Implementation Guide:** MUST test tenant isolation: (1) create clientA and clientB with createTestClient(), (2) create userA in clientA, userB in clientB, (3) create rewardA for clientA, rewardB for clientB, (4) create missionA for clientA, missionB for clientB, (5) Test API isolation: GET /api/rewards as userA → MUST NOT contain rewardB, (6) GET /api/missions as userA → MUST NOT contain missionB, (7) POST /api/rewards/:rewardB_id/claim as userA → expect 403 or 404, (8) Test RLS: direct Supabase query as userA context → verify RLS blocks clientB data, (9) verify all queries include client_id filter per Pattern 8
+    - **Test Cases:** (1) User A cannot see Client B rewards via API, (2) User A cannot see Client B missions via API, (3) User A cannot claim Client B reward (403/404), (4) RLS policy blocks direct DB access across tenants
+    - **Acceptance Criteria:** All 4 test cases MUST pass, every query MUST filter by client_id per Loyalty.md Pattern 8, RLS policies MUST enforce isolation per ARCHITECTURE.md Section 9, prevents data-leakage-lawsuit catastrophic bug
+
+- [ ] **Task 3.4.7:** Create E2E auth test
+    - **Action:** Create `/tests/e2e/auth/signup-flow.spec.ts` using Playwright
+    - **References:** API_CONTRACTS.md lines 67-188 (POST /api/auth/check-handle), lines 189-437 (signup), lines 438-592 (verify-otp)
+    - **Implementation Guide:** MUST test browser flow: (1) navigate to /login/start, (2) enter tiktok handle in input, click Continue, (3) if new user: fill email, password, check terms, click Sign Up, (4) intercept OTP from test DB or mock email, (5) enter OTP digits, click Verify, (6) assert redirect to /home, (7) assert dashboard shows user handle
+    - **Acceptance Criteria:** Playwright test MUST automate form fill, OTP entry, verify redirect to authenticated dashboard
 
 ## Step 3.5: Security Infrastructure
 - [ ] **Task 3.5.1:** Install Upstash Rate Limit package
@@ -888,25 +905,58 @@
 ## Step 5.4: Mission Testing
 - [ ] **Task 5.4.1:** Create mission service tests
     - **Action:** Create `/tests/integration/services/missionService.test.ts`
-    - **Acceptance Criteria:** File exists
+    - **References:** SchemaFinalv2.md lines 358-455 (missions and mission_progress tables), ARCHITECTURE.md Section 5 (Service Layer, lines 641-750)
+    - **Implementation Guide:** MUST create test file with: (1) import factories from /tests/fixtures/factories.ts, (2) import missionService, (3) beforeEach: create test client, tiers, user, missions using factories, (4) afterEach: call cleanupTestData(), (5) describe blocks for: 'listAvailableMissions', 'claimMissionReward', 'participateInRaffle', 'getMissionHistory'
+    - **Acceptance Criteria:** File exists with test suite skeleton, imports working, beforeEach/afterEach setup test isolation
 
-- [ ] **Task 5.4.2:** Test idempotent claim
-    - **Action:** Write test attempting duplicate claim
-    - **References:** Loyalty.md Pattern 2
-    - **Acceptance Criteria:** Second claim returns error, points not double-added
+- [ ] **Task 5.4.2:** Test mission completion edge cases
+    - **Action:** Create `/tests/integration/missions/completion-detection.test.ts`
+    - **References:** SchemaFinalv2.md lines 421-455 (mission_progress table), API_CONTRACTS.md lines 2952-3140 (GET /api/missions response with progress), MissionsRewardsFlows.md lines 146-322 (Standard Mission Flow)
+    - **Implementation Guide:** MUST test completion boundaries: (1) create mission with target_value=500, (2) Test at target: UPDATE mission_progress SET current_value=500, call GET /api/dashboard/featured-mission → expect status='completed', (3) Test below target: UPDATE current_value=499 → expect status='active', (4) Test above target: UPDATE current_value=501 → expect status='completed', (5) Test mission_progress.status field is updated correctly by backend trigger or service, (6) verify target_unit matches client.vip_metric ('dollars' or 'units')
+    - **Test Cases:** (1) current_value = target_value → status='completed', (2) current_value = target_value - 1 → status='active', (3) current_value = target_value + 1 → status='completed', (4) completion detected regardless of how much over target
+    - **Acceptance Criteria:** All 4 test cases MUST pass, mission_progress.status MUST transition to 'completed' when current_value >= target_value per SchemaFinalv2.md line 430, prevents mission-stuck-cant-claim catastrophic bug
 
-- [ ] **Task 5.4.3:** Test state validation
-    - **Action:** Write test attempting claim on non-completed mission
-    - **References:** Loyalty.md Pattern 3
-    - **Acceptance Criteria:** Returns 400, status unchanged
+- [ ] **Task 5.4.3:** Test mission claim creates redemption
+    - **Action:** Create `/tests/integration/missions/claim-creates-redemption.test.ts`
+    - **References:** API_CONTRACTS.md lines 3142-3258 (POST /api/missions/:id/claim), SchemaFinalv2.md lines 590-661 (redemptions table), MissionsRewardsFlows.md lines 146-322 (claim flow)
+    - **Implementation Guide:** MUST test claim creates correct records: (1) create user at tier_3, mission with tier_eligibility='tier_3' and reward_id, set mission_progress.status='completed', (2) POST /api/missions/:id/claim → expect 200, (3) query redemptions table → verify record exists with: user_id matches, reward_id matches mission.reward_id, status='claimed', tier_at_claim='tier_3', mission_progress_id set, client_id matches, (4) verify mission_progress.status updated to 'claimed' or appropriate state, (5) verify response includes redemptionId
+    - **Test Cases:** (1) claim creates redemption with status='claimed', (2) redemption.reward_id matches mission.reward_id, (3) redemption.tier_at_claim matches user's current tier, (4) mission_progress linked via mission_progress_id, (5) response includes valid redemptionId UUID
+    - **Acceptance Criteria:** All 5 test cases MUST pass, redemption record MUST be created per SchemaFinalv2.md lines 590-658, all FK relationships MUST be correct, prevents claim-broken-no-reward catastrophic bug
 
-- [ ] **Task 5.4.4:** Test tier filtering
-    - **Action:** Write test verifying lower-tier user cannot see higher-tier missions
-    - **Acceptance Criteria:** Missions correctly filtered by tier restrictions
+- [ ] **Task 5.4.4:** Test idempotent mission claim
+    - **Action:** Add test to `/tests/integration/missions/claim-creates-redemption.test.ts`
+    - **References:** Loyalty.md lines 2031-2050 (Pattern 2: Idempotent Operations), API_CONTRACTS.md lines 3142-3258 (claim endpoint)
+    - **Implementation Guide:** MUST test idempotency: (1) setup completed mission, (2) POST /api/missions/:id/claim first time → expect 200, store redemptionId, (3) POST /api/missions/:id/claim second time → expect 400 ALREADY_CLAIMED or 200 with same redemptionId (idempotent), (4) query redemptions table → COUNT(*) WHERE mission_progress_id = X MUST equal 1, (5) verify user was NOT double-rewarded (no duplicate records)
+    - **Test Cases:** (1) first claim succeeds with 200, (2) second claim returns ALREADY_CLAIMED or same redemption, (3) exactly 1 redemption record exists (not 2)
+    - **Acceptance Criteria:** All 3 test cases MUST pass, duplicate claim MUST NOT create duplicate redemption per Loyalty.md Pattern 2, prevents double-payout catastrophic bug
 
-- [ ] **Task 5.4.5:** Test raffle participation
-    - **Action:** Write test for raffle flow
-    - **Acceptance Criteria:** Participation recorded, duplicate prevented
+- [ ] **Task 5.4.5:** Test state validation on claim
+    - **Action:** Create `/tests/integration/missions/state-validation.test.ts`
+    - **References:** Loyalty.md lines 2051-2090 (Pattern 3: State Transition Validation), SchemaFinalv2.md lines 430-432 (mission_progress.status options)
+    - **Implementation Guide:** MUST test invalid states rejected: (1) create mission_progress with status='active', (2) POST /api/missions/:id/claim → expect 400 MISSION_NOT_COMPLETED, (3) UPDATE status='dormant', POST claim → expect 400, (4) Test invalid DB transition: attempt direct UPDATE mission_progress SET status='active' WHERE status='completed' → expect DB constraint error or service rejection, (5) verify mission_progress.status can only transition forward: active→completed→claimed, never backward
+    - **Test Cases:** (1) claim on status='active' returns 400 MISSION_NOT_COMPLETED, (2) claim on status='dormant' returns 400, (3) invalid backward transition completed→active rejected, (4) only forward transitions allowed
+    - **Acceptance Criteria:** All 4 test cases MUST pass, state transitions MUST follow Loyalty.md Pattern 3, prevents corrupt-data catastrophic bug
+
+- [ ] **Task 5.4.6:** Test tier filtering for missions
+    - **Action:** Create `/tests/integration/missions/tier-filtering.test.ts`
+    - **References:** SchemaFinalv2.md lines 373-374 (missions.tier_eligibility, preview_from_tier), API_CONTRACTS.md lines 2952-3140 (GET /api/missions with tier filtering)
+    - **Implementation Guide:** MUST test tier visibility: (1) create Gold user (tier_3), (2) create mission with tier_eligibility='tier_3' (Gold), (3) create mission with tier_eligibility='tier_4' (Platinum), (4) create mission with tier_eligibility='tier_4' AND preview_from_tier='tier_3', (5) GET /api/missions as Gold user → MUST contain Gold mission, MUST NOT contain Platinum mission (unless preview), (6) if preview mission returned, verify it has isPreview=true or locked state, (7) POST /api/missions/:platinumMissionId/claim as Gold user → expect 403 TIER_MISMATCH
+    - **Test Cases:** (1) Gold user sees tier_3 missions, (2) Gold user does NOT see tier_4 missions (no preview), (3) Gold user sees tier_4 mission with preview_from_tier='tier_3' as preview/locked, (4) Gold user cannot claim tier_4 mission (403)
+    - **Acceptance Criteria:** All 4 test cases MUST pass, tier_eligibility MUST filter missions per SchemaFinalv2.md line 373, preview_from_tier MUST show teaser per line 374, prevents wrong-content-shown bug
+
+- [ ] **Task 5.4.7:** Test mission history shows completed
+    - **Action:** Create `/tests/integration/missions/history-completeness.test.ts`
+    - **References:** API_CONTRACTS.md lines 3827-4047 (GET /api/missions/history), SchemaFinalv2.md lines 421-455 (mission_progress)
+    - **Implementation Guide:** MUST test history completeness: (1) create user with mission, set mission_progress.status='completed', (2) POST /api/missions/:id/claim → creates redemption, (3) GET /api/missions/history → expect mission in response, (4) verify response includes: mission id, displayName, status='concluded', rewardType, rewardName, completedAt, claimedAt timestamps, (5) verify mission does NOT appear in GET /api/missions (active list), (6) create second mission, complete and claim it, verify BOTH appear in history (no data vanishing)
+    - **Test Cases:** (1) completed+claimed mission appears in history, (2) history includes redemption info (rewardName, claimedAt), (3) concluded mission NOT in active missions list, (4) multiple completed missions all appear (no vanishing)
+    - **Acceptance Criteria:** All 4 test cases MUST pass, history MUST show all concluded missions per API_CONTRACTS.md lines 3827-4047, prevents user-thinks-data-vanished catastrophic bug
+
+- [ ] **Task 5.4.8:** Test raffle winner and losers
+    - **Action:** Create `/tests/integration/missions/raffle-winner-selection.test.ts`
+    - **References:** API_CONTRACTS.md lines 3261-3430 (POST /api/missions/:id/raffle/participate), SchemaFinalv2.md lines 888-953 (raffle_participations table), MissionsRewardsFlows.md lines 3-143 (Raffle Mission Flow)
+    - **Implementation Guide:** MUST test complete raffle flow: (1) create raffle mission with mission_type='raffle' and raffle_end_date in past, (2) create 5 test users all at eligible tier, (3) each user calls POST /api/missions/:id/raffle/participate → expect 200 for all 5, (4) verify 5 raffle_participations records with is_winner=NULL, (5) simulate admin winner selection (direct DB or admin endpoint): UPDATE raffle_participations SET is_winner=true, winner_selected_at=NOW() WHERE user_id=:winner_id, UPDATE is_winner=false for other 4, (6) verify winner: redemption.status='claimable', is_winner=true, winner_selected_at set, (7) verify 4 losers: redemption.status='rejected', is_winner=false, (8) GET /api/missions/history as loser → verify raffleData.isWinner=false in response
+    - **Test Cases:** (1) 5 users participate successfully, (2) admin selection sets 1 winner is_winner=true, (3) 4 losers have is_winner=false, (4) winner redemption status='claimable', (5) loser redemptions status='rejected', (6) loser history shows raffleData.isWinner=false ("Better luck next time")
+    - **Acceptance Criteria:** All 6 test cases MUST pass, raffle_participations.is_winner MUST be correctly set per SchemaFinalv2.md line 923, redemption statuses MUST match winner/loser per lines 938-941, prevents everyone-wins-100-iPhones catastrophic bug
 
 ---
 
@@ -1090,33 +1140,86 @@
 ## Step 6.4: Reward Testing
 - [ ] **Task 6.4.1:** Create reward service tests
     - **Action:** Create `/tests/integration/services/rewardService.test.ts`
-    - **Acceptance Criteria:** File exists
+    - **References:** SchemaFinalv2.md lines 458-658 (rewards and redemptions tables), ARCHITECTURE.md Section 5 (Service Layer, lines 641-750)
+    - **Implementation Guide:** MUST create test file with: (1) import factories from /tests/fixtures/factories.ts, (2) add createTestReward({client_id, type, tier_eligibility, value_data, redemption_frequency}) factory, (3) add createTestRedemption({user_id, reward_id, status}) factory, (4) beforeEach: create test client, tiers, user, rewards, (5) afterEach: cleanupTestData(), (6) describe blocks for each reward type: 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
+    - **Acceptance Criteria:** File exists with test suite skeleton, factory functions support all 6 reward types per SchemaFinalv2.md lines 464-465
 
-- [ ] **Task 6.4.2:** Test points deduction
-    - **Action:** Write test verifying points correctly deducted
-    - **Acceptance Criteria:** User points reduced by reward cost
+- [ ] **Task 6.4.2:** Test gift_card reward claim
+    - **Action:** Create `/tests/integration/rewards/gift-card-claim.test.ts`
+    - **References:** SchemaFinalv2.md lines 482-485 (gift_card value_data structure), API_CONTRACTS.md lines 4050-4250 (POST /api/rewards/:id/claim), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
+    - **Implementation Guide:** MUST test gift card accuracy: (1) create reward with type='gift_card', value_data={amount: 100}, (2) POST /api/rewards/:id/claim → expect 200, (3) query redemptions → verify status='claimed', reward_id correct, (4) GET /api/rewards/history → verify response shows "$100 Gift Card" not "$1000" or "$10", (5) verify value_data.amount in response matches exactly 100, (6) test with amounts 50, 100, 250 to verify no decimal/rounding issues
+    - **Test Cases:** (1) claim creates redemption with correct reward_id, (2) value_data.amount=100 displays as "$100 Gift Card" (not $1000), (3) redemption.status='claimed' after successful claim, (4) amount precision maintained (no rounding errors)
+    - **Acceptance Criteria:** All 4 test cases MUST pass, gift card amount MUST match value_data.amount exactly per SchemaFinalv2.md line 483, prevents $100-shows-as-$1000 catastrophic financial bug
 
-- [ ] **Task 6.4.3:** Test insufficient points
-    - **Action:** Write test attempting claim without enough points
-    - **Acceptance Criteria:** Returns 400, redemption not created
+- [ ] **Task 6.4.3:** Test commission_boost full lifecycle
+    - **Action:** Create `/tests/integration/rewards/commission-boost-lifecycle.test.ts`
+    - **References:** SchemaFinalv2.md lines 662-816 (commission_boost_redemptions, commission_boost_state_history tables), Loyalty.md lines 2131-2150 (Pattern 4: Auto-Sync Triggers), MissionsRewardsFlows.md lines 443-510 (Commission Boost Flow)
+    - **Implementation Guide:** MUST test complete lifecycle: (1) create reward type='commission_boost' with value_data={percent: 5, duration_days: 30}, (2) POST /api/rewards/:id/claim with {scheduledActivationDate, scheduledActivationTime} → expect boost_status='scheduled', (3) simulate activation (cron or time travel): UPDATE boost_status='active', activated_at=NOW(), sales_at_activation=current_sales → verify transition logged, (4) simulate 30 days pass, expiration: UPDATE boost_status='expired', expires_at=NOW(), sales_at_expiration=new_sales → verify logged, (5) user submits payment info → boost_status='pending_payout', (6) admin marks paid → boost_status='paid', payout_sent_at set, (7) query commission_boost_state_history → verify 5 transitions logged (scheduled→active→expired→pending_payout→paid) with timestamps
+    - **Test Cases:** (1) claim creates commission_boost_redemptions with boost_status='scheduled', (2) activation sets boost_status='active' and sales_at_activation, (3) expiration sets boost_status='expired' and sales_at_expiration, (4) payment info submission sets boost_status='pending_payout', (5) admin payout sets boost_status='paid', (6) all 5 transitions logged in commission_boost_state_history
+    - **Acceptance Criteria:** All 6 test cases MUST pass, boost_status MUST follow lifecycle per SchemaFinalv2.md lines 678-680, state_history MUST log all transitions per lines 746-816, prevents boost-stuck-never-paid catastrophic bug
 
-- [ ] **Task 6.4.4:** Test usage limit
-    - **Action:** Write test hitting max_uses_per_user
-    - **Acceptance Criteria:** Nth+1 redemption fails with 400
+- [ ] **Task 6.4.4:** Test commission_boost payout calculation
+    - **Action:** Add test to `/tests/integration/rewards/commission-boost-lifecycle.test.ts`
+    - **References:** SchemaFinalv2.md lines 693-699 (sales_at_activation, sales_at_expiration, sales_delta, boost_rate, calculated_commission, final_payout_amount)
+    - **Implementation Guide:** MUST test payout math: (1) setup boost with boost_rate=5.00 (5%), (2) set sales_at_activation=1000.00, (3) set sales_at_expiration=2000.00, (4) verify sales_delta GENERATED column = 1000.00 (2000-1000), (5) verify calculated_commission = sales_delta * (boost_rate/100) = 1000 * 0.05 = 50.00, (6) verify final_payout_amount defaults to calculated_commission, (7) Test admin override: UPDATE admin_adjusted_commission=75.00 → verify final_payout_amount can use override, (8) Test edge case: sales_at_expiration < sales_at_activation → sales_delta should be 0 (GREATEST(0, ...))
+    - **Test Cases:** (1) sales_delta = sales_at_expiration - sales_at_activation calculated correctly, (2) calculated_commission = sales_delta × boost_rate, (3) final_payout_amount = calculated_commission by default, (4) admin_adjusted_commission overrides calculated if set, (5) negative sales_delta capped at 0
+    - **Acceptance Criteria:** All 5 test cases MUST pass, sales_delta MUST use GREATEST(0, ...) per SchemaFinalv2.md line 695, payout calculation MUST be accurate, prevents wrong-payout-amount catastrophic bug
 
-- [ ] **Task 6.4.5:** Test tier isolation
-    - **Action:** Write test verifying lower-tier user cannot claim higher-tier reward
-    - **Acceptance Criteria:** Returns 403, redemption not created
+- [ ] **Task 6.4.5:** Test spark_ads reward claim
+    - **Action:** Create `/tests/integration/rewards/spark-ads-claim.test.ts`
+    - **References:** SchemaFinalv2.md lines 486-487 (spark_ads value_data structure), API_CONTRACTS.md lines 4050-4250 (claim endpoint), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
+    - **Implementation Guide:** MUST test spark ads: (1) create reward type='spark_ads', value_data={amount: 100}, redemption_type='instant', (2) POST /api/rewards/:id/claim → expect 200, (3) verify redemptions.redemption_type='instant', (4) verify redemptions.status='claimed' (instant fulfillment), (5) verify response includes correct amount display "$100 Ads Boost"
+    - **Test Cases:** (1) claim creates redemption successfully, (2) value_data.amount=100 stored correctly, (3) redemption_type='instant' per reward config, (4) status='claimed' immediately (no scheduling needed)
+    - **Acceptance Criteria:** All 4 test cases MUST pass, spark_ads MUST be instant redemption per SchemaFinalv2.md line 618
 
-- [ ] **Task 6.4.6:** Test commission boost lifecycle
-    - **Action:** Write test for boost activation → auto-sync → deactivation
-    - **References:** Loyalty.md Pattern 4, 7
-    - **Acceptance Criteria:** users.current_commission_boost updated, history logged
+- [ ] **Task 6.4.6:** Test discount max_uses enforced
+    - **Action:** Create `/tests/integration/rewards/discount-max-uses.test.ts`
+    - **References:** SchemaFinalv2.md lines 488-491 (discount value_data with max_uses), lines 563-574 (check_discount_value_data constraint)
+    - **Implementation Guide:** MUST test usage limits: (1) create discount reward with value_data={percent: 15, max_uses: 3, coupon_code: 'TEST15'}, (2) create 4 test users, (3) user1 POST /api/rewards/:id/claim → expect 200, (4) user2 claim → expect 200, (5) user3 claim → expect 200, (6) user4 claim → expect 400 USAGE_LIMIT_EXCEEDED, (7) verify redemptions count = 3 (not 4), (8) Test null max_uses: create reward with max_uses=null → should allow unlimited claims
+    - **Test Cases:** (1) discount with max_uses=3 allows exactly 3 claims, (2) 4th claim returns USAGE_LIMIT_EXCEEDED, (3) usage count tracked in redemptions table, (4) null max_uses allows unlimited
+    - **Acceptance Criteria:** All 4 test cases MUST pass, max_uses MUST be enforced per SchemaFinalv2.md lines 563-574, prevents unlimited-coupon-revenue-loss catastrophic bug
 
-- [ ] **Task 6.4.7:** Test address encryption
-    - **Action:** Write test verifying physical_gift_states.encrypted_address is encrypted
-    - **References:** Loyalty.md Pattern 9
-    - **Acceptance Criteria:** Raw address not visible in DB, decrypts correctly
+- [ ] **Task 6.4.7:** Test discount scheduled activation
+    - **Action:** Create `/tests/integration/rewards/discount-scheduled-activation.test.ts`
+    - **References:** SchemaFinalv2.md lines 618-620 (redemption_type, scheduled_activation_date), API_CONTRACTS.md lines 4050-4250 (claim with scheduling)
+    - **Implementation Guide:** MUST test scheduled discount: (1) create discount reward with redemption_type='scheduled', (2) POST /api/rewards/:id/claim with {scheduledActivationDate: '2025-02-15', scheduledActivationTime: '18:00:00'} → expect 200, (3) verify redemptions.scheduled_activation_date and scheduled_activation_time set, (4) verify redemptions.google_calendar_event_id populated (calendar event created), (5) verify redemptions.status='claimed' initially, (6) simulate activation time reached → status transitions to 'fulfilled', (7) verify activation_date timestamp set when status→fulfilled
+    - **Test Cases:** (1) claim with scheduled date creates redemption correctly, (2) Google Calendar event created with correct datetime, (3) initial status='claimed' until activation, (4) status transitions to 'fulfilled' at activation time
+    - **Acceptance Criteria:** All 4 test cases MUST pass, scheduled_activation_date/time MUST be stored per SchemaFinalv2.md lines 619-620, calendar event MUST be created, prevents discount-never-activates catastrophic bug
+
+- [ ] **Task 6.4.8:** Test physical_gift with shipping info
+    - **Action:** Create `/tests/integration/rewards/physical-gift-shipping.test.ts`
+    - **References:** SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table), API_CONTRACTS.md lines 4800-5000 (physical gift claim with shipping)
+    - **Implementation Guide:** MUST test shipping validation: (1) create reward type='physical_gift', value_data={requires_size: true, size_category: 'clothing'}, (2) POST /api/rewards/:id/claim WITHOUT shippingInfo → expect 400 SHIPPING_INFO_REQUIRED, (3) POST with shippingInfo={firstName, lastName, addressLine1, city, state, postalCode, country, phone} → expect 200, (4) query physical_gift_redemptions → verify all fields stored: shipping_recipient_first_name, shipping_recipient_last_name, shipping_address_line1, shipping_city, shipping_state, shipping_postal_code, shipping_country, shipping_phone, (5) if requires_size=true, verify size_value required, (6) verify shipping_info_submitted_at timestamp set
+    - **Test Cases:** (1) claim without shipping info returns 400 SHIPPING_INFO_REQUIRED, (2) claim with complete shipping creates physical_gift_redemptions record, (3) all 8 shipping fields stored correctly, (4) size_value required when requires_size=true
+    - **Acceptance Criteria:** All 4 test cases MUST pass, shipping fields MUST match SchemaFinalv2.md lines 841-853, prevents gift-shipped-to-nowhere catastrophic bug
+
+- [ ] **Task 6.4.9:** Test experience reward claim
+    - **Action:** Create `/tests/integration/rewards/experience-claim.test.ts`
+    - **References:** SchemaFinalv2.md lines 496-497 (experience value_data structure), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
+    - **Implementation Guide:** MUST test experience: (1) create reward type='experience', value_data={display_text: 'VIP Meet & Greet'}, redemption_type='instant', (2) POST /api/rewards/:id/claim → expect 200, (3) verify redemptions created with correct reward_id, (4) verify redemption_type='instant', status='claimed', (5) GET /api/rewards/history → verify display shows "VIP Meet & Greet" from value_data.display_text
+    - **Test Cases:** (1) claim creates redemption successfully, (2) value_data.display_text shown in response, (3) redemption_type='instant', (4) status='claimed' immediately
+    - **Acceptance Criteria:** All 4 test cases MUST pass, experience MUST use display_text from value_data per SchemaFinalv2.md line 497
+
+- [ ] **Task 6.4.10:** Test tier isolation for rewards
+    - **Action:** Create `/tests/integration/rewards/tier-isolation.test.ts`
+    - **References:** SchemaFinalv2.md lines 469-471 (rewards.tier_eligibility, preview_from_tier), Loyalty.md lines 2091-2130 (Pattern 8: Multi-Tenant Query Isolation)
+    - **Implementation Guide:** MUST test tier restrictions: (1) create Gold user (tier_3), (2) create reward with tier_eligibility='tier_3', (3) create reward with tier_eligibility='tier_4' (Platinum), (4) create reward with tier_eligibility='tier_4' AND preview_from_tier='tier_3', (5) GET /api/rewards as Gold user → MUST see tier_3 reward, MUST NOT see tier_4 reward (unless preview), (6) if preview reward returned, verify marked as locked/preview, (7) POST /api/rewards/:tier4RewardId/claim as Gold user → expect 403 TIER_MISMATCH, (8) preview reward claim also returns 403 (preview doesn't grant access)
+    - **Test Cases:** (1) Gold user can see and claim Gold (tier_3) reward, (2) Gold user CANNOT see Platinum (tier_4) reward in list, (3) Gold user sees preview reward but marked as locked, (4) Gold user cannot claim Platinum reward (403 TIER_MISMATCH)
+    - **Acceptance Criteria:** All 4 test cases MUST pass, tier_eligibility MUST filter rewards per SchemaFinalv2.md line 469, prevents wrong-tier-content-shown bug
+
+- [ ] **Task 6.4.11:** Test idempotent reward claim
+    - **Action:** Add test to `/tests/integration/rewards/gift-card-claim.test.ts`
+    - **References:** Loyalty.md lines 2031-2050 (Pattern 2: Idempotent Operations), SchemaFinalv2.md lines 635-643 (redemptions UNIQUE constraints)
+    - **Implementation Guide:** MUST test idempotency for VIP rewards: (1) create VIP reward (reward_source='vip_tier'), (2) POST /api/rewards/:id/claim first time → expect 200, store redemptionId, (3) POST /api/rewards/:id/claim second time → expect 400 ALREADY_CLAIMED or 200 with same redemptionId, (4) query redemptions WHERE user_id=X AND reward_id=Y → COUNT MUST be 1, (5) Test "Once Per Tier": if redemption_frequency='one-time', verify UNIQUE(user_id, reward_id, tier_at_claim) enforced per line 640, (6) Test "Once Forever": verify cannot reclaim same reward even after tier change
+    - **Test Cases:** (1) first VIP reward claim succeeds, (2) second claim returns ALREADY_CLAIMED, (3) exactly 1 redemption record exists, (4) Once Per Tier and Once Forever logic enforced
+    - **Acceptance Criteria:** All 4 test cases MUST pass, UNIQUE constraints MUST prevent duplicates per SchemaFinalv2.md lines 635-643, prevents double-payout catastrophic bug
+
+- [ ] **Task 6.4.12:** Test payment info encryption
+    - **Action:** Create `/tests/integration/rewards/payment-info-encryption.test.ts`
+    - **References:** Loyalty.md lines 2151-2182 (Pattern 9: Sensitive Data Encryption), SchemaFinalv2.md lines 700-703 (payment_account fields)
+    - **Implementation Guide:** MUST test encryption: (1) create commission_boost redemption in 'pending_info' status, (2) POST /api/rewards/:id/payment-info with {paymentMethod: 'venmo', paymentAccount: '@userhandle', paymentAccountConfirm: '@userhandle'}, (3) query commission_boost_redemptions directly → payment_account column MUST contain ciphertext (not '@userhandle'), (4) verify ciphertext format matches encryption pattern (IV:authTag:encrypted or similar), (5) call decryption utility with stored value → MUST return '@userhandle', (6) Test different inputs produce different ciphertext (not deterministic), (7) Test tampered ciphertext fails decryption gracefully
+    - **Test Cases:** (1) payment_account stored as ciphertext (not plaintext), (2) decryption returns original value correctly, (3) different inputs produce different ciphertext, (4) tampered ciphertext fails decryption
+    - **Acceptance Criteria:** All 4 test cases MUST pass, payment info MUST be encrypted per Loyalty.md Pattern 9, prevents PII-breach catastrophic bug
 
 ---
 
@@ -1288,23 +1391,64 @@
 ## Step 8.5: Cron Testing
 - [ ] **Task 8.5.1:** Create cron integration tests
     - **Action:** Create `/tests/integration/cron/daily-sync.test.ts`
-    - **Acceptance Criteria:** File exists
+    - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table), lines 123-155 (users precomputed fields), ARCHITECTURE.md Section 5 (Cron Jobs)
+    - **Implementation Guide:** MUST create test file with: (1) import factories, (2) beforeEach: create test client with vip_metric, create tiers with thresholds, create users with checkpoint values, (3) afterEach: cleanupTestData(), (4) mock or use fixture CSV file for sales data, (5) describe blocks for: 'CSV parsing', 'sales upsert', 'tier calculation', 'boost activation'
+    - **Acceptance Criteria:** File exists with test suite skeleton, can load fixture CSV, can invoke processDailySales function
 
 - [ ] **Task 8.5.2:** Test CSV parsing
-    - **Action:** Write test with fixture CSV
-    - **Acceptance Criteria:** Correctly parses all rows
+    - **Action:** Add CSV parsing tests to `/tests/integration/cron/daily-sync.test.ts`
+    - **References:** Loyalty.md Flow 2 (CRUVA CSV format), lines 1891-1945 (CSV columns: handle, date, video_link, views, likes, sales_dollars, units_sold)
+    - **Implementation Guide:** MUST test CSV parser: (1) create fixture CSV at /tests/fixtures/sample-sales.csv with known data: 3 rows for user1, 2 rows for user2, (2) call CSV parser utility with fixture path, (3) verify returns array of objects with correct types: handle (string), date (Date), video_link (string), views (number), likes (number), sales_dollars (number), units_sold (number), (4) test edge cases: empty rows skipped, special characters in handle (@symbols), decimal values parsed correctly, (5) test invalid CSV returns meaningful error
+    - **Test Cases:** (1) valid CSV parsed correctly with all columns, (2) empty rows skipped, (3) special characters handled, (4) decimal values maintain precision, (5) invalid CSV returns error
+    - **Acceptance Criteria:** All 5 test cases MUST pass, parser MUST handle CRUVA CSV format per Loyalty.md lines 1891-1945
 
-- [ ] **Task 8.5.3:** Test sales upsert
-    - **Action:** Write test verifying duplicates handled
-    - **Acceptance Criteria:** Duplicate video_link + date updates existing record
+- [ ] **Task 8.5.3:** Test daily sync updates user metrics
+    - **Action:** Create `/tests/integration/cron/daily-sync-metrics.test.ts`
+    - **References:** SchemaFinalv2.md lines 130-145 (users precomputed fields: checkpoint_sales_current, checkpoint_units_current, lifetime_sales, etc.), Loyalty.md lines 1946-2010 (Daily Sync Flow)
+    - **Implementation Guide:** MUST test metrics update: (1) create user with checkpoint_sales_current=500, checkpoint_units_current=10, (2) create sales_adjustments records: 3 sales totaling $300 and 5 units, (3) call processDailySales or updatePrecomputedFields, (4) query users → verify checkpoint_sales_current=800 (500+300), checkpoint_units_current=15 (10+5), (5) verify lifetime_sales updated, (6) verify videos_count incremented, (7) test with client.vip_metric='units' → verify units fields used for tier calc
+    - **Test Cases:** (1) sales sync updates checkpoint_sales_current correctly, (2) units sync updates checkpoint_units_current correctly, (3) lifetime_sales aggregates all-time, (4) precomputed fields recalculated after sync, (5) vip_metric determines which field is primary
+    - **Acceptance Criteria:** All 5 test cases MUST pass, precomputed fields MUST match aggregated sales_adjustments per SchemaFinalv2.md lines 130-145, prevents stale-dashboard-data catastrophic bug
 
-- [ ] **Task 8.5.4:** Test tier advancement
-    - **Action:** Write test where user crosses threshold
-    - **Acceptance Criteria:** User tier_id updated, notification sent
+- [ ] **Task 8.5.4:** Test sales upsert handles duplicates
+    - **Action:** Add upsert test to `/tests/integration/cron/daily-sync-metrics.test.ts`
+    - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table with video_url UNIQUE per user+date)
+    - **Implementation Guide:** MUST test duplicate handling: (1) create user, (2) call sync with sales record {video_url: 'video1', date: '2025-01-20', sales: 100}, (3) query sales_adjustments → 1 record exists, (4) call sync again with same {video_url: 'video1', date: '2025-01-20', sales: 150} (updated amount), (5) query sales_adjustments → still 1 record, amount=150 (upserted), (6) verify no duplicate records created
+    - **Test Cases:** (1) first sync creates record, (2) second sync with same video_url+date upserts (updates), (3) no duplicate records created, (4) updated values reflected
+    - **Acceptance Criteria:** All 4 test cases MUST pass, UNIQUE constraint on (user_id, video_url, adjustment_date) MUST be enforced per SchemaFinalv2.md line 280
 
-- [ ] **Task 8.5.5:** Manual dry run
-    - **Action:** Manually trigger cron with test data
-    - **Acceptance Criteria:** Verify in Supabase that sales_adjustments and user tiers updated
+- [ ] **Task 8.5.5:** Test tier calculation correct thresholds
+    - **Action:** Create `/tests/integration/cron/tier-calculation.test.ts`
+    - **References:** SchemaFinalv2.md lines 250-268 (tiers table with sales_threshold), Loyalty.md lines 2234-2290 (Tier Calculation Logic)
+    - **Implementation Guide:** MUST test tier boundaries: (1) create tiers: tier_1 threshold=0, tier_2 threshold=1000, tier_3 threshold=3000, (2) create user at tier_1 with checkpoint_sales_current=999, (3) call tierCalculation → user stays tier_1, (4) update checkpoint_sales_current=1000, call tierCalculation → user promotes to tier_2, (5) update to 1001 → still tier_2, (6) update to 3000 → promotes to tier_3, (7) test with vip_metric='units' → verify units_threshold used instead of sales_threshold
+    - **Test Cases:** (1) user at 999 with threshold 1000 stays current tier, (2) user at exactly 1000 promotes, (3) user at 1001 also promotes (at or above), (4) vip_metric='sales' uses sales_threshold, (5) vip_metric='units' uses units thresholds
+    - **Acceptance Criteria:** All 5 test cases MUST pass, tier calculation MUST use >= threshold per Loyalty.md lines 2234-2290, prevents users-in-wrong-tier catastrophic bug
+
+- [ ] **Task 8.5.6:** Test tier promotion shows new rewards immediately
+    - **Action:** Create `/tests/integration/cron/tier-promotion-rewards.test.ts`
+    - **References:** SchemaFinalv2.md lines 458-480 (rewards.tier_eligibility), Loyalty.md lines 2291-2340 (Tier Change Effects)
+    - **Implementation Guide:** MUST test reward visibility on promotion: (1) create Gold (tier_3) and Platinum (tier_4) tiers, (2) create Gold user, (3) create Platinum-only reward (tier_eligibility='tier_4'), (4) GET /api/rewards as user → Platinum reward NOT visible, (5) UPDATE user to tier_4 (simulate promotion), (6) GET /api/rewards immediately (no cache, same request) → Platinum reward NOW visible, (7) verify no page refresh or delay needed, (8) verify reward is claimable (not just visible)
+    - **Test Cases:** (1) Gold user cannot see Platinum rewards, (2) after promotion to Platinum, rewards immediately visible, (3) no refresh/cache clear needed, (4) promoted user can claim new tier rewards
+    - **Acceptance Criteria:** All 4 test cases MUST pass, tier change MUST immediately affect reward visibility per Loyalty.md lines 2291-2340, prevents user-misses-earned-rewards catastrophic bug
+
+- [ ] **Task 8.5.7:** Test tier demotion soft-deletes VIP rewards
+    - **Action:** Create `/tests/integration/cron/tier-demotion-rewards.test.ts`
+    - **References:** SchemaFinalv2.md lines 626-629 (redemptions.deleted_at, deleted_reason), Loyalty.md lines 2341-2390 (Tier Demotion Handling)
+    - **Implementation Guide:** MUST test demotion cleanup: (1) create Platinum user (tier_4), (2) create Platinum VIP reward (reward_source='vip_tier', tier_eligibility='tier_4'), (3) grant user access to reward (create claimable redemption), (4) demote user to Gold (tier_3), (5) query redemptions → verify deleted_at IS NOT NULL for Platinum VIP rewards, (6) verify deleted_reason contains 'tier_demotion' or similar, (7) GET /api/rewards as demoted user → Platinum rewards NOT visible, (8) Test claimed rewards: create redemption with status='claimed', demote user → verify claimed reward NOT deleted (deleted_at still NULL), (9) verify mission rewards NOT affected by demotion
+    - **Test Cases:** (1) Platinum user demoted to Gold, (2) unclaimed Platinum VIP redemptions get deleted_at set, (3) demoted user no longer sees Platinum rewards in API, (4) already-claimed rewards NOT deleted (preserved), (5) mission rewards unaffected by demotion
+    - **Acceptance Criteria:** All 5 test cases MUST pass, soft delete MUST use deleted_at per SchemaFinalv2.md lines 626-629, claimed rewards MUST be preserved, prevents orphan-data catastrophic bug
+
+- [ ] **Task 8.5.8:** Test scheduled activation at correct time
+    - **Action:** Create `/tests/integration/cron/scheduled-activation.test.ts`
+    - **References:** SchemaFinalv2.md lines 618-623 (redemptions.scheduled_activation_date/time, activation_date), lines 678-680 (commission_boost_redemptions.boost_status)
+    - **Implementation Guide:** MUST test scheduled activation: (1) create commission_boost reward, (2) claim with scheduled_activation_date='2025-02-15', scheduled_activation_time='18:00:00', (3) verify boost_status='scheduled', activated_at IS NULL, (4) mock current time to 2025-02-15 17:59 → call activation cron → boost stays 'scheduled', (5) mock current time to 2025-02-15 18:00 → call activation cron → verify boost_status='active', (6) verify activated_at timestamp set, (7) verify sales_at_activation captured (current checkpoint_sales), (8) test discount activation similarly: status→'fulfilled', activation_date set
+    - **Test Cases:** (1) scheduled reward stays 'scheduled' before activation time, (2) at 6PM EST (18:00), boost_status changes to 'active', (3) activated_at timestamp set correctly, (4) sales_at_activation captures current sales value, (5) discount activation sets status='fulfilled'
+    - **Acceptance Criteria:** All 5 test cases MUST pass, activation MUST occur at scheduled_activation_date + time per SchemaFinalv2.md lines 618-623, prevents never-activates catastrophic bug
+
+- [ ] **Task 8.5.9:** Manual dry run
+    - **Action:** Manually trigger cron endpoint with test data
+    - **References:** Loyalty.md Flow 2 (Daily Sync), API endpoint /api/cron/daily-sync
+    - **Implementation Guide:** MUST perform manual verification: (1) seed test client, tiers, users, rewards in Supabase test/staging, (2) create test CSV with sales for known users, (3) call POST /api/cron/daily-sync with CRON_SECRET header, (4) check sync_logs table for success status, (5) verify sales_adjustments records created, (6) verify user precomputed fields updated, (7) verify tier changes applied if thresholds crossed, (8) verify boost activations triggered if scheduled
+    - **Acceptance Criteria:** Manual verification MUST confirm: sync_logs shows success, sales_adjustments created, user metrics updated, tier changes applied, boost activations work
 
 ---
 
@@ -1570,6 +1714,1024 @@
 - [ ] **Task 11.3.3:** Create final sign-off document
     - **Action:** Create `/IMPLEMENTATION_COMPLETE.md` with summary: endpoints implemented, patterns enforced, tests passing, coverage met
     - **Acceptance Criteria:** Document confirms all phases complete
+
+---
+
+# PHASE 12: ADMIN SYSTEM
+
+**Objective:** Build admin dashboard APIs for fulfillment operations, mission/reward management, creator support, data sync monitoring, and reporting.
+
+## Step 12.1: Admin Authentication & Middleware
+- [ ] **Task 12.1.1:** Create admin route wrapper utility
+    - **Action:** Create `/lib/utils/admin-route.ts` with withAdminAuth wrapper function
+    - **References:** ADMIN_API_CONTRACTS.md lines 38-55 (Authorization Check), ARCHITECTURE.md Section 5 (Presentation Layer), Phase 3 Task 3.5.8 (requireAdmin utility)
+    - **Implementation Guide:** MUST create higher-order function that: (1) wraps route handler, (2) calls requireAdmin from `/lib/utils/requireAdmin.ts` (created in Task 3.5.8), (3) passes admin user to handler, (4) catches errors and returns proper JSON error responses per ADMIN_API_CONTRACTS.md lines 87-107, (5) logs admin actions for audit trail
+    - **Acceptance Criteria:** Wrapper MUST reuse requireAdmin from Task 3.5.8, MUST handle authentication errors gracefully (401/403), MUST pass admin user (with client_id) to wrapped handler, MUST follow same pattern as existing route wrappers in codebase
+
+## Step 12.2: Admin Dashboard Repositories
+- [ ] **Task 12.2.1:** Create admin dashboard repository file
+    - **Action:** Create `/lib/repositories/admin/dashboard.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 372-507 (Business Logic queries), ARCHITECTURE.md Section 5 (Repository Layer), SchemaFinalv2.md lines 590-661 (redemptions table), lines 662-745 (commission_boost_redemptions table)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.2.2:** Implement getTodaysDiscountsToActivate function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 384-395 (Query today's discounts), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type='discount' AND status='claimed' AND scheduled_activation_date=CURRENT_DATE, MUST JOIN users for tiktok_handle, MUST JOIN rewards for value_data (percent, coupon_code), MUST ORDER BY scheduled_activation_time ASC, MUST LIMIT 10, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return DiscountTask fields per ADMIN_API_CONTRACTS.md lines 162-169, MUST filter by client_id (Pattern 8 multi-tenant isolation)
+
+- [ ] **Task 12.2.3:** Implement getCommissionPayoutsPending function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 397-408 (Query commission payouts), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
+    - **Implementation Guide:** MUST query commission_boost_redemptions WHERE boost_status='pending_payout' AND expires_at<=CURRENT_DATE, MUST JOIN redemptions and users for tiktok_handle, MUST return final_payout_amount, payment_method, payment_account, MUST ORDER BY expires_at ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return CommissionPayoutTask fields per ADMIN_API_CONTRACTS.md lines 171-179, MUST filter by client_id
+
+- [ ] **Task 12.2.4:** Implement getInstantRewardsToFulfill function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 410-420 (Query instant rewards), SchemaFinalv2.md lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type IN ('gift_card','spark_ads','experience') AND status='claimed', MUST JOIN users for tiktok_handle and email, MUST JOIN rewards for type and value_data, MUST include claimed_at for SLA calculation, MUST ORDER BY claimed_at ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return InstantRewardTask fields per ADMIN_API_CONTRACTS.md lines 184-194, email MUST be null for spark_ads type, MUST filter by client_id
+
+- [ ] **Task 12.2.5:** Implement getPhysicalGiftsToShip function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 422-435 (Query physical gifts), SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type='physical_gift' AND status='claimed' AND physical_gift_redemptions.shipped_at IS NULL, MUST JOIN physical_gift_redemptions for size_value, shipping_city, shipping_state, MUST JOIN users for tiktok_handle, MUST JOIN rewards for name, MUST ORDER BY claimed_at ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return PhysicalGiftTask fields per ADMIN_API_CONTRACTS.md lines 196-203, cityState MUST be computed as "city, state" format, MUST filter by client_id
+
+- [ ] **Task 12.2.6:** Implement getRafflesToDraw function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 437-449 (Query raffles to draw), SchemaFinalv2.md lines 358-417 (missions table), lines 888-953 (raffle_participations table)
+    - **Implementation Guide:** MUST query missions WHERE mission_type='raffle' AND activated=true AND raffle_end_date<=CURRENT_DATE AND no winner selected yet, MUST use subquery to check NOT EXISTS winner (is_winner=true), MUST JOIN rewards for prize name, MUST include COUNT of raffle_participations, MUST ORDER BY raffle_end_date ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return RaffleDrawTask fields per ADMIN_API_CONTRACTS.md lines 205-213, MUST only return raffles without winners, MUST filter by client_id
+
+- [ ] **Task 12.2.7:** Implement getUpcomingDiscounts function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 451-464 (Query upcoming discounts), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type='discount' AND status='claimed' AND scheduled_activation_date > CURRENT_DATE AND scheduled_activation_date <= CURRENT_DATE + 7 days, MUST JOIN users and rewards, MUST ORDER BY scheduled_activation_date ASC, scheduled_activation_time ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return UpcomingDiscount fields per ADMIN_API_CONTRACTS.md lines 219-228, MUST filter by client_id
+
+- [ ] **Task 12.2.8:** Implement getUpcomingRaffles function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 466-478 (Query upcoming raffles), SchemaFinalv2.md lines 358-417 (missions table), lines 888-953 (raffle_participations table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query missions WHERE mission_type='raffle' AND activated=true AND raffle_end_date > CURRENT_DATE AND raffle_end_date <= CURRENT_DATE + 7 days, MUST JOIN rewards for prize name, MUST include COUNT of raffle_participations, MUST ORDER BY raffle_end_date ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return UpcomingRaffle fields per ADMIN_API_CONTRACTS.md lines 230-239, MUST filter by client_id
+
+- [ ] **Task 12.2.9:** Implement getExpiringBoosts function
+    - **Action:** Add function to dashboard repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 480-491 (Query expiring boosts), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
+    - **Implementation Guide:** MUST query commission_boost_redemptions WHERE boost_status='active' AND expires_at > CURRENT_DATE AND expires_at <= CURRENT_DATE + 7 days, MUST JOIN redemptions and users for tiktok_handle, MUST return boost_rate, expires_at, sales_delta for estimated payout calculation, MUST ORDER BY expires_at ASC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return ExpiringBoost fields per ADMIN_API_CONTRACTS.md lines 241-250, estimatedPayout MUST be calculated as sales_delta × boost_rate, MUST filter by client_id
+
+## Step 12.3: Admin Dashboard Services
+- [ ] **Task 12.3.1:** Create admin dashboard service file
+    - **Action:** Create `/lib/services/admin/dashboard.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 372-506 (Business Logic), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.3.2:** Implement getDashboardTasks function
+    - **Action:** Add main orchestration function to dashboard service
+    - **References:** ADMIN_API_CONTRACTS.md lines 131-250 (Response Schema), lines 372-506 (Business Logic)
+    - **Implementation Guide:** MUST call all 8 repository functions (discounts, payouts, instant, physical, raffles, upcoming discounts, upcoming raffles, expiring boosts), MUST run queries in parallel for performance (Promise.all), MUST compute counts for each TaskGroup, MUST return DashboardResponse structure with todaysTasks and thisWeeksTasks
+    - **Acceptance Criteria:** Service MUST return complete DashboardResponse per ADMIN_API_CONTRACTS.md lines 131-135, MUST handle empty results gracefully (return count:0, items:[])
+
+- [ ] **Task 12.3.3:** Implement computeSlaStatus helper function
+    - **Action:** Add SLA computation helper to dashboard service
+    - **References:** ADMIN_API_CONTRACTS.md lines 493-501 (SLA status computation)
+    - **Implementation Guide:** MUST compute hours since claimed_at, MUST return 'breach' if >= 24 hours, MUST return 'warning' if >= 20 hours, MUST return 'ok' otherwise
+    - **Acceptance Criteria:** Function MUST return SlaStatus type ('ok' | 'warning' | 'breach') per ADMIN_API_CONTRACTS.md line 182, MUST match thresholds exactly (20h warning, 24h breach)
+
+- [ ] **Task 12.3.4:** Implement formatting helper functions
+    - **Action:** Add date/time/currency formatting helpers to dashboard service
+    - **References:** ADMIN_API_CONTRACTS.md lines 66-73 (Backend-Formatted Fields), lines 167-168 (scheduledTimeFormatted), lines 176 (payoutAmountFormatted), lines 223-225 (dateFormatted, timeFormatted)
+    - **Implementation Guide:** MUST format time as "2:00 PM EST" per line 167, MUST format currency as "$47.50" per line 176, MUST format date as "Wed 27th" per line 223, MUST format hours ago as "22h" per line 192, MUST add @ prefix to tiktok_handle per line 562
+    - **Acceptance Criteria:** All *Formatted fields MUST match exact formats shown in ADMIN_API_CONTRACTS.md example response lines 253-369
+
+## Step 12.4: Admin Dashboard Routes
+- [ ] **Task 12.4.1:** Create GET /api/admin/dashboard/tasks route
+    - **Action:** Create `/app/api/admin/dashboard/tasks/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 112-581 (GET /api/admin/dashboard/tasks complete specification), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper from Task 12.1.1, MUST call dashboardService.getDashboardTasks(clientId), MUST return 200 with DashboardResponse on success, MUST return 401/403 for auth errors per lines 508-524, MUST return 500 for internal errors per lines 526-532
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 253-369, MUST include all todaysTasks groups (discounts, commissionPayouts, instantRewards, physicalGifts, rafflesToDraw) and thisWeeksTasks groups (upcomingDiscounts, upcomingRaffles, expiringBoosts), each group MUST have count, countFormatted, and items array
+
+## Step 12.5: Admin Dashboard Testing
+- [ ] **Task 12.5.1:** Create admin dashboard integration tests
+    - **Action:** Create `/tests/integration/admin/dashboard.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 508-532 (Error Responses), TestingPlanning.md (test patterns)
+    - **Implementation Guide:** MUST test 6 cases: (1) 401 returned for missing auth token, (2) 403 returned for non-admin user (creator token), (3) 200 returned with correct DashboardResponse structure for admin user, (4) empty arrays returned when no tasks exist (count:0, items:[]), (5) SLA status computed correctly (create gift_card redemption >24h ago → slaStatus='breach'), (6) multi-tenant isolation (admin for client A cannot see client B data → empty results)
+    - **Acceptance Criteria:** All 6 test cases MUST pass, tests MUST use test fixtures for admin/creator users, tests MUST clean up test data after each test, MUST verify response matches DashboardResponse schema per ADMIN_API_CONTRACTS.md lines 131-250
+
+- [ ] **Task 12.5.2:** Test dashboard formatted fields accuracy
+    - **Action:** Add test cases to `/tests/integration/admin/dashboard.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 174-248 (*Formatted fields), AdminTesting.md SHOULD #8
+    - **Implementation Guide:** MUST test 4 cases: (1) countFormatted shows "3 tasks" not "3", (2) slaStatusFormatted shows "On Track" / "At Risk" / "Breach" based on slaStatus enum, (3) claimedAtFormatted shows relative time "2 hours ago", (4) scheduledFormatted shows "Today 2:00 PM" or "Tomorrow 10:00 AM"
+    - **Acceptance Criteria:** All 4 formatted field patterns MUST match ADMIN_API_CONTRACTS.md examples per lines 174-248
+
+## Step 12.6: Admin Redemptions Repositories
+- [ ] **Task 12.6.1:** Create admin redemptions repository file
+    - **Action:** Create `/lib/repositories/admin/redemptions.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 682-748 (Business Logic queries), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.6.2:** Implement getInstantRewards function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 684-694 (Instant Rewards query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type IN ('gift_card','spark_ads','experience') AND status IN ('claimed','concluded') AND deleted_at IS NULL, MUST JOIN users for tiktok_handle and email, MUST JOIN rewards for type and value_data, MUST ORDER BY claimed_at DESC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return InstantRewardItem fields per ADMIN_API_CONTRACTS.md lines 632-643, email MUST be null for spark_ads type, MUST filter by client_id
+
+- [ ] **Task 12.6.3:** Implement getPhysicalGifts function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 696-707 (Physical Gifts query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 820-887 (physical_gift_redemptions table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type='physical_gift' AND deleted_at IS NULL, MUST JOIN physical_gift_redemptions for size_value, shipping_city, shipping_state, shipped_at, delivered_at, MUST JOIN users for tiktok_handle, MUST JOIN rewards for name, MUST ORDER BY claimed_at DESC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return PhysicalGiftItem fields per ADMIN_API_CONTRACTS.md lines 645-655, status MUST be computed from shipped_at/delivered_at (claimed→shipped→delivered), MUST filter by client_id
+
+- [ ] **Task 12.6.4:** Implement getPayBoosts function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 709-719 (Pay Boost query), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
+    - **Implementation Guide:** MUST query commission_boost_redemptions WHERE boost_status IN ('pending_payout','paid') AND redemptions.deleted_at IS NULL, MUST JOIN redemptions and users for tiktok_handle, MUST return id (from commission_boost_redemptions), final_payout_amount, payment_method, payment_account, boost_status, MUST ORDER BY expires_at DESC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return PayBoostItem fields per ADMIN_API_CONTRACTS.md lines 657-666, id MUST be commission_boost_redemptions.id (not redemptions.id), MUST filter by client_id
+
+- [ ] **Task 12.6.5:** Implement getDiscounts function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 721-732 (Discount query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions WHERE rewards.type='discount' AND status IN ('claimed','fulfilled','concluded') AND deleted_at IS NULL, MUST JOIN users for tiktok_handle, MUST JOIN rewards for value_data (percent, coupon_code), MUST return scheduled_activation_date, scheduled_activation_time, activation_date, expiration_date for status computation, MUST ORDER BY scheduled_activation_date ASC, scheduled_activation_time ASC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return DiscountItem fields per ADMIN_API_CONTRACTS.md lines 668-679, MUST filter by client_id
+
+- [ ] **Task 12.6.6:** Implement getPhysicalGiftById function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 752-795 (GET /api/admin/redemptions/physical/:id), SchemaFinalv2.md lines 590-661 (redemptions table), lines 820-887 (physical_gift_redemptions table)
+    - **Implementation Guide:** MUST query redemptions by id, MUST JOIN physical_gift_redemptions for all shipping fields (recipient name, address lines, city, state, postal_code, carrier, tracking_number, shipped_at, delivered_at), MUST JOIN users for tiktok_handle, MUST JOIN rewards for name and value_data (requires_size, size_category), MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return PhysicalGiftDetails fields per ADMIN_API_CONTRACTS.md lines 766-794, recipientName MUST be computed as first_name + ' ' + last_name, MUST return null if not found or wrong client_id
+
+- [ ] **Task 12.6.7:** Implement markPhysicalGiftShipped function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 799-844 (PATCH /api/admin/redemptions/physical/:id/ship), SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table), lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST update physical_gift_redemptions SET carrier, tracking_number, shipped_at, updated_at per lines 829-835, MUST update redemptions SET fulfillment_notes, fulfilled_at, fulfilled_by, status='fulfilled', updated_at per lines 837-843, MUST validate redemption exists and belongs to client_id, MUST validate current status allows shipping (not already delivered)
+    - **Acceptance Criteria:** Updates MUST match exact SQL from ADMIN_API_CONTRACTS.md lines 829-843, MUST throw error if not found or already delivered
+
+- [ ] **Task 12.6.8:** Implement markPhysicalGiftDelivered function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 848-881 (PATCH /api/admin/redemptions/physical/:id/deliver), SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table), lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST update physical_gift_redemptions SET delivered_at=NOW(), updated_at=NOW() per lines 871-874, MUST update redemptions SET status='concluded', concluded_at=NOW(), updated_at=NOW() per lines 876-880, MUST validate redemption exists and belongs to client_id, MUST validate shipped_at is not null (can't deliver before shipping)
+    - **Acceptance Criteria:** Updates MUST match exact SQL from ADMIN_API_CONTRACTS.md lines 870-880, MUST throw error if not found or not yet shipped
+
+- [ ] **Task 12.6.9:** Implement getPayBoostById function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 885-928 (GET /api/admin/redemptions/boost/:id), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table)
+    - **Implementation Guide:** MUST query commission_boost_redemptions by id, MUST JOIN redemptions for external_transaction_id, MUST JOIN users for tiktok_handle (via redemptions.user_id) and payout_sent_by handle, MUST return all fields per lines 899-926 (boost config, period, sales, payout tracking), MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return PayBoostDetails fields per ADMIN_API_CONTRACTS.md lines 898-927, MUST return null if not found or wrong client_id
+
+- [ ] **Task 12.6.10:** Implement markPayBoostPaid function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 932-977 (PATCH /api/admin/redemptions/boost/:id/pay), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table), lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST update commission_boost_redemptions SET boost_status='paid', payout_sent_at, payout_sent_by, payout_notes, updated_at per lines 963-969, MUST update redemptions SET status='concluded', concluded_at, external_transaction_id, updated_at per lines 971-976, MUST validate boost exists and belongs to client_id, MUST validate boost_status='pending_payout'
+    - **Acceptance Criteria:** Updates MUST match exact SQL from ADMIN_API_CONTRACTS.md lines 962-976, MUST throw error if not found or not in pending_payout status
+
+- [ ] **Task 12.6.11:** Implement getDiscountById function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 981-1018 (GET /api/admin/redemptions/discount/:id), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions by id, MUST JOIN users for tiktok_handle and fulfilled_by handle, MUST JOIN rewards for value_data (percent, duration_minutes, max_uses, coupon_code), MUST return all fields per lines 995-1017 (coupon config, activation tracking), MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return DiscountDetails fields per ADMIN_API_CONTRACTS.md lines 994-1017, MUST return null if not found or wrong client_id
+
+- [ ] **Task 12.6.12:** Implement activateDiscount function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1022-1060 (PATCH /api/admin/redemptions/discount/:id/activate), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST first query rewards.value_data->>'duration_minutes' per lines 1045-1049, MUST update redemptions SET status='fulfilled', activation_date=NOW(), expiration_date=NOW()+duration_minutes, fulfilled_at, fulfilled_by, updated_at per lines 1051-1059, MUST validate redemption exists and belongs to client_id, MUST validate status='claimed' and scheduled time has passed
+    - **Acceptance Criteria:** Updates MUST match exact SQL from ADMIN_API_CONTRACTS.md lines 1044-1059, MUST throw error if not found or not ready to activate
+
+- [ ] **Task 12.6.13:** Implement concludeInstantReward function
+    - **Action:** Add function to redemptions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1064-1095 (PATCH /api/admin/redemptions/instant/:id/conclude), SchemaFinalv2.md lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST update redemptions SET status='concluded', concluded_at=NOW(), fulfilled_at=NOW(), fulfilled_by, updated_at per lines 1087-1094, MUST validate redemption exists and belongs to client_id, MUST validate reward type IN ('gift_card','spark_ads','experience'), MUST validate status='claimed'
+    - **Acceptance Criteria:** Updates MUST match exact SQL from ADMIN_API_CONTRACTS.md lines 1086-1094, MUST throw error if not found or not in claimed status
+
+## Step 12.7: Admin Redemptions Services
+- [ ] **Task 12.7.1:** Create admin redemptions service file
+    - **Action:** Create `/lib/services/admin/redemptions.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 682-748 (Business Logic), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.7.2:** Implement getAllRedemptions function
+    - **Action:** Add main orchestration function to redemptions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 606-680 (Response Schema)
+    - **Implementation Guide:** MUST call all 4 repository functions (getInstantRewards, getPhysicalGifts, getPayBoosts, getDiscounts), MUST run queries in parallel for performance (Promise.all), MUST compute counts for each tab group, MUST return RedemptionsResponse structure with instantRewards, physicalGifts, payBoosts, discounts
+    - **Acceptance Criteria:** Service MUST return complete RedemptionsResponse per ADMIN_API_CONTRACTS.md lines 608-630, MUST handle empty results gracefully (return count:0, items:[])
+
+- [ ] **Task 12.7.3:** Implement computeDiscountStatus helper function
+    - **Action:** Add discount status computation helper to redemptions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 734-748 (computeDiscountStatus function)
+    - **Implementation Guide:** MUST implement exact logic from lines 736-747: (1) if status='concluded' return 'done', (2) if activation_date exists and now < expiration_date return 'active', (3) if activation_date exists and now >= expiration_date return 'done', (4) if now >= scheduledDateTime return 'ready', (5) else return 'claimed'
+    - **Acceptance Criteria:** Function MUST return DiscountStatus type ('claimed' | 'ready' | 'active' | 'done') per ADMIN_API_CONTRACTS.md line 677, MUST match exact logic from lines 736-747
+
+- [ ] **Task 12.7.4:** Implement computePhysicalGiftStatus helper function
+    - **Action:** Add physical gift status computation helper to redemptions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 652-653 (status derivation from physical_gift_redemptions state)
+    - **Implementation Guide:** MUST compute status from shipped_at/delivered_at: (1) if delivered_at is not null return 'delivered', (2) if shipped_at is not null return 'shipped', (3) else return 'claimed'
+    - **Acceptance Criteria:** Function MUST return PhysicalGiftStatus type ('claimed' | 'shipped' | 'delivered') per ADMIN_API_CONTRACTS.md line 652
+
+- [ ] **Task 12.7.5:** Implement getPhysicalGiftDetails service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 752-795 (GET physical/:id)
+    - **Implementation Guide:** MUST call repository getPhysicalGiftById, MUST compute status using computePhysicalGiftStatus, MUST throw NOT_FOUND error if repository returns null
+    - **Acceptance Criteria:** Service MUST return PhysicalGiftDetails with computed status, MUST throw appropriate error for not found
+
+- [ ] **Task 12.7.6:** Implement shipPhysicalGift service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 799-844 (PATCH ship)
+    - **Implementation Guide:** MUST validate request data (carrier, trackingNumber, shippedAt required), MUST call repository markPhysicalGiftShipped with admin user id
+    - **Acceptance Criteria:** Service MUST validate input, MUST pass admin_id to repository for fulfilled_by field
+
+- [ ] **Task 12.7.7:** Implement deliverPhysicalGift service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 848-881 (PATCH deliver)
+    - **Implementation Guide:** MUST call repository markPhysicalGiftDelivered
+    - **Acceptance Criteria:** Service MUST call repository function
+
+- [ ] **Task 12.7.8:** Implement getPayBoostDetails service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 885-928 (GET boost/:id)
+    - **Implementation Guide:** MUST call repository getPayBoostById, MUST throw NOT_FOUND error if repository returns null
+    - **Acceptance Criteria:** Service MUST return PayBoostDetails, MUST throw appropriate error for not found
+
+- [ ] **Task 12.7.9:** Implement payBoost service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 932-977 (PATCH pay)
+    - **Implementation Guide:** MUST validate request data (datePaid, transactionId required), MUST call repository markPayBoostPaid with admin user id
+    - **Acceptance Criteria:** Service MUST validate input, MUST pass admin_id to repository for payout_sent_by field
+
+- [ ] **Task 12.7.10:** Implement getDiscountDetails service function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 981-1018 (GET discount/:id)
+    - **Implementation Guide:** MUST call repository getDiscountById, MUST compute status using computeDiscountStatus, MUST throw NOT_FOUND error if repository returns null
+    - **Acceptance Criteria:** Service MUST return DiscountDetails with computed status, MUST throw appropriate error for not found
+
+- [ ] **Task 12.7.11:** Implement activateDiscountService function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 1022-1060 (PATCH activate)
+    - **Implementation Guide:** MUST call repository activateDiscount with admin user id
+    - **Acceptance Criteria:** Service MUST pass admin_id to repository for fulfilled_by field
+
+- [ ] **Task 12.7.12:** Implement concludeInstantRewardService function
+    - **Action:** Add function to redemptions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 1064-1095 (PATCH conclude)
+    - **Implementation Guide:** MUST call repository concludeInstantReward with admin user id
+    - **Acceptance Criteria:** Service MUST pass admin_id to repository for fulfilled_by field
+
+## Step 12.8: Admin Redemptions Routes
+- [ ] **Task 12.8.1:** Create GET /api/admin/redemptions route
+    - **Action:** Create `/app/api/admin/redemptions/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 595-750 (GET /api/admin/redemptions), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper from Task 12.1.1, MUST call redemptionsService.getAllRedemptions(clientId), MUST return 200 with RedemptionsResponse on success
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 608-680, MUST include all 4 tab groups (instantRewards, physicalGifts, payBoosts, discounts)
+
+- [ ] **Task 12.8.2:** Create GET /api/admin/redemptions/physical/[id] route
+    - **Action:** Create `/app/api/admin/redemptions/physical/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 752-795 (GET physical/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call service getPhysicalGiftDetails(clientId, id), MUST return 200 with PhysicalGiftDetails on success, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 766-794
+
+- [ ] **Task 12.8.3:** Create PATCH /api/admin/redemptions/physical/[id]/ship route
+    - **Action:** Create `/app/api/admin/redemptions/physical/[id]/ship/route.ts` with PATCH handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 799-844 (PATCH ship), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST validate request body per lines 810-815, MUST call service shipPhysicalGift, MUST return 200 with success message per lines 820-824, MUST return 404 if not found, MUST return 409 for invalid state
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 810-815, MUST return success response per lines 820-824
+
+- [ ] **Task 12.8.4:** Create PATCH /api/admin/redemptions/physical/[id]/deliver route
+    - **Action:** Create `/app/api/admin/redemptions/physical/[id]/deliver/route.ts` with PATCH handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 848-881 (PATCH deliver), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST call service deliverPhysicalGift, MUST return 200 with success message per lines 861-865, MUST return 404 if not found, MUST return 409 if not yet shipped
+    - **Acceptance Criteria:** Route MUST return success response per ADMIN_API_CONTRACTS.md lines 861-865
+
+- [ ] **Task 12.8.5:** Create GET /api/admin/redemptions/boost/[id] route
+    - **Action:** Create `/app/api/admin/redemptions/boost/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 885-928 (GET boost/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call service getPayBoostDetails(clientId, id), MUST return 200 with PayBoostDetails on success, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 898-927
+
+- [ ] **Task 12.8.6:** Create PATCH /api/admin/redemptions/boost/[id]/pay route
+    - **Action:** Create `/app/api/admin/redemptions/boost/[id]/pay/route.ts` with PATCH handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 932-977 (PATCH pay), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST validate request body per lines 943-948, MUST call service payBoost, MUST return 200 with success message per lines 953-957, MUST return 404 if not found, MUST return 409 for invalid state
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 943-948, MUST return success response per lines 953-957
+
+- [ ] **Task 12.8.7:** Create GET /api/admin/redemptions/discount/[id] route
+    - **Action:** Create `/app/api/admin/redemptions/discount/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 981-1018 (GET discount/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call service getDiscountDetails(clientId, id), MUST return 200 with DiscountDetails on success, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 994-1017
+
+- [ ] **Task 12.8.8:** Create PATCH /api/admin/redemptions/discount/[id]/activate route
+    - **Action:** Create `/app/api/admin/redemptions/discount/[id]/activate/route.ts` with PATCH handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1022-1060 (PATCH activate), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST call service activateDiscountService, MUST return 200 with success message per lines 1035-1039, MUST return 404 if not found, MUST return 409 if not ready to activate
+    - **Acceptance Criteria:** Route MUST return success response per ADMIN_API_CONTRACTS.md lines 1035-1039
+
+- [ ] **Task 12.8.9:** Create PATCH /api/admin/redemptions/instant/[id]/conclude route
+    - **Action:** Create `/app/api/admin/redemptions/instant/[id]/conclude/route.ts` with PATCH handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1064-1095 (PATCH conclude), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST call service concludeInstantRewardService, MUST return 200 with success message per lines 1076-1080, MUST return 404 if not found, MUST return 409 if not in claimed status
+    - **Acceptance Criteria:** Route MUST return success response per ADMIN_API_CONTRACTS.md lines 1076-1080
+
+- [ ] **Task 12.8.10:** Test redemptions list all tabs
+    - **Action:** Create `/tests/integration/admin/redemptions/redemptions-list.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 595-680 (GET /api/admin/redemptions), AdminTesting.md SHOULD #3
+    - **Implementation Guide:** MUST test 4 cases: (1) tab=instant returns only gift_card/spark_ads/experience types, (2) tab=physical returns only physical_gift type, (3) tab=boost returns only commission_boost type, (4) tab=discount returns only discount type with correct status derivation
+    - **Acceptance Criteria:** All 4 tab filters MUST return correct redemption types per ADMIN_API_CONTRACTS.md lines 620-680
+
+- [ ] **Task 12.8.11:** Test physical gift state transitions
+    - **Action:** Create `/tests/integration/admin/redemptions/physical-gift-flow.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 780-870 (ship/deliver endpoints), AdminTesting.md Bug #4, SchemaFinalv2.md lines 820-887 (physical_gift_redemptions)
+    - **Implementation Guide:** MUST test 5 cases: (1) ship succeeds when status='claimed', (2) ship fails when already shipped → 409, (3) deliver succeeds when shipped_at is set, (4) deliver fails when not yet shipped → 409, (5) deliver fails when already delivered → 409
+    - **Acceptance Criteria:** All 5 state transition cases MUST pass, prevents invalid-state-transition bug (AdminTesting.md Bug #4)
+
+- [ ] **Task 12.8.12:** Test commission boost payout flow
+    - **Action:** Create `/tests/integration/admin/redemptions/boost-payout-flow.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 871-960 (boost detail/pay endpoints), AdminTesting.md Bug #3, SchemaFinalv2.md lines 662-745 (commission_boost_redemptions)
+    - **Implementation Guide:** MUST test 5 cases: (1) GET returns correct final_payout_amount calculation, (2) pay succeeds when boost_status='pending_payout', (3) pay fails when boost_status='paid' → 409 (idempotency), (4) pay sets payout_sent_at and payout_sent_by correctly (audit trail), (5) pay with wrong redemption ID → 404
+    - **Acceptance Criteria:** All 5 cases MUST pass, final_payout_amount MUST match calculation per lines 920-935, prevents wrong-payout bug (AdminTesting.md Bug #3)
+
+- [ ] **Task 12.8.13:** Test discount activation flow
+    - **Action:** Create `/tests/integration/admin/redemptions/discount-activation.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1022-1060 (activate endpoint), AdminTesting.md Bug #4
+    - **Implementation Guide:** MUST test 4 cases: (1) activate succeeds when status='ready', (2) activate fails when status='claimed' (not ready yet) → 409, (3) activate fails when already activated → 409, (4) expiration_date set correctly based on duration_minutes
+    - **Acceptance Criteria:** All 4 cases MUST pass, activation MUST set expiration_date per lines 1055-1056
+
+- [ ] **Task 12.8.14:** Test instant reward conclude
+    - **Action:** Create `/tests/integration/admin/redemptions/instant-conclude.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1064-1095 (conclude endpoint), AdminTesting.md Bug #4
+    - **Implementation Guide:** MUST test 3 cases: (1) conclude succeeds when status='claimed', (2) conclude fails when already concluded → 409, (3) conclude sets concluded_at and fulfilled_by correctly (audit trail)
+    - **Acceptance Criteria:** All 3 cases MUST pass, audit fields MUST be set per AdminTesting.md Bug #11
+
+## Step 12.9: Admin Missions Repositories
+- [ ] **Task 12.9.1:** Create admin missions repository file
+    - **Action:** Create `/lib/repositories/admin/missions.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1132-1655 (Screen 3: Missions), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.9.2:** Implement getAllMissions function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1186-1197 (Business Logic query), SchemaFinalv2.md lines 358-420 (missions table), lines 458-589 (rewards table), lines 888-953 (raffle_participations table)
+    - **Implementation Guide:** MUST query missions with JOIN rewards for reward_name, MUST include subquery COUNT(raffle_participations) for raffle_entry_count, MUST return all fields per lines 1163-1179 (id, display_name, mission_type, target_value, target_unit, tier_eligibility, enabled, activated, raffle_end_date, reward_name, raffle_entry_count), MUST ORDER BY display_order ASC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return MissionItem fields per ADMIN_API_CONTRACTS.md lines 1163-1179, MUST include raffle_entry_count for raffle missions, MUST filter by client_id
+
+- [ ] **Task 12.9.3:** Implement getMissionById function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1213-1249 (GET /api/admin/missions/:id), SchemaFinalv2.md lines 358-420 (missions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query missions by id, MUST JOIN rewards for reward_name, MUST return all fields per lines 1227-1244 (id, title, display_name, description, mission_type, target_value, target_unit, reward_id, tier_eligibility, preview_from_tier, display_order, enabled, activated, raffle_end_date, reward_name), MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return MissionDetails fields per ADMIN_API_CONTRACTS.md lines 1227-1244, MUST return null if not found or wrong client_id
+
+- [ ] **Task 12.9.4:** Implement createMission function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1346-1355 (INSERT mission), SchemaFinalv2.md lines 358-420 (missions table)
+    - **Implementation Guide:** MUST INSERT into missions with all fields per lines 1348-1354 (client_id, title, display_name, description, mission_type, target_value, target_unit, reward_id, tier_eligibility, preview_from_tier, display_order, enabled, activated, raffle_end_date), MUST RETURN id and display_name
+    - **Acceptance Criteria:** Insert MUST match SQL from ADMIN_API_CONTRACTS.md lines 1346-1355, MUST return created mission id and display_name
+
+- [ ] **Task 12.9.5:** Implement createInlineReward function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1315-1320 (INSERT inline reward), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST INSERT into rewards with reward_source='mission' per lines 1317-1319, MUST set enabled=true, MUST copy tier_eligibility from mission, MUST RETURN id
+    - **Acceptance Criteria:** Insert MUST match SQL from ADMIN_API_CONTRACTS.md lines 1316-1319, MUST return created reward id, reward_source MUST be 'mission'
+
+- [ ] **Task 12.9.6:** Implement updateMission function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1387-1401 (UPDATE mission), SchemaFinalv2.md lines 358-420 (missions table)
+    - **Implementation Guide:** MUST UPDATE missions using COALESCE for optional fields per lines 1390-1400, MUST NOT allow updating mission_type or display_name per line 1403, MUST filter by id AND client_id
+    - **Acceptance Criteria:** Update MUST match SQL from ADMIN_API_CONTRACTS.md lines 1389-1400 (excluding updated_at which is not in schema), mission_type and display_name MUST NOT be updatable
+
+- [ ] **Task 12.9.7:** Implement getRaffleById function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1447-1453 (raffle mission query), SchemaFinalv2.md lines 358-420 (missions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query missions WHERE mission_type='raffle', MUST JOIN rewards for reward_name, MUST return id, display_name, tier_eligibility, raffle_end_date, activated, reward_name per lines 1449-1450, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return raffle mission fields per ADMIN_API_CONTRACTS.md lines 1421-1434, MUST return null if not found or not raffle type
+
+- [ ] **Task 12.9.8:** Implement getRaffleParticipants function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1455-1462 (participants query), SchemaFinalv2.md lines 888-953 (raffle_participations table)
+    - **Implementation Guide:** MUST query raffle_participations WHERE mission_id, MUST JOIN users for tiktok_handle, MUST return id, user_id, tiktok_handle, participated_at, is_winner per lines 1456-1460, MUST ORDER BY participated_at ASC, MUST filter by client_id
+    - **Acceptance Criteria:** Query MUST return RaffleParticipant fields per ADMIN_API_CONTRACTS.md lines 1436-1442, winner determined by is_winner=true per line 1462
+
+- [ ] **Task 12.9.9:** Implement activateRaffle function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1487-1496 (UPDATE activate), SchemaFinalv2.md lines 358-420 (missions table), line 378 (activated field)
+    - **Implementation Guide:** MUST UPDATE missions SET activated=true WHERE mission_type='raffle' AND activated=false per lines 1490-1495 (excluding updated_at which is not in schema), MUST filter by id AND client_id
+    - **Acceptance Criteria:** Update MUST set activated=true per SchemaFinalv2.md line 378, MUST only activate if currently not activated
+
+- [ ] **Task 12.9.10:** Implement selectRaffleWinner function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1526-1565 (select winner), SchemaFinalv2.md lines 888-953 (raffle_participations table), lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST execute 4-step process: (1) UPDATE all participants SET is_winner=false per lines 1529-1535, (2) UPDATE selected user SET is_winner=true, winner_selected_at=NOW(), selected_by=admin_id per lines 1537-1543, (3) UPDATE winner's redemption SET status='claimed', claimed_at=NOW() per lines 1545-1553, (4) UPDATE losers' redemptions SET status='rejected', rejection_reason='Did not win raffle' per lines 1555-1564, MUST filter by client_id
+    - **Acceptance Criteria:** All 4 UPDATE statements MUST match SQL from ADMIN_API_CONTRACTS.md lines 1528-1564, is_winner MUST follow SchemaFinalv2.md lines 929-932 (NULL→not picked, TRUE→won, FALSE→lost)
+
+- [ ] **Task 12.9.11:** Implement getAvailableRewards function
+    - **Action:** Add function to missions repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1601-1611 (Business Logic query), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query rewards WHERE client_id AND enabled=true AND reward_source='mission', MUST support optional tierEligibility filter, MUST return id, type, value_data, description per lines 1604-1610, MUST ORDER BY type, display_order
+    - **Acceptance Criteria:** Query MUST return rewards for mission dropdown per ADMIN_API_CONTRACTS.md lines 1593-1598, MUST filter reward_source='mission' per SchemaFinalv2.md line 470
+
+## Step 12.10: Admin Missions Services
+- [ ] **Task 12.10.1:** Create admin missions service file
+    - **Action:** Create `/lib/services/admin/missions.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1132-1655 (Screen 3: Missions), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.10.2:** Implement computeMissionStatus helper function
+    - **Action:** Add mission status computation helper to missions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 1199-1209 (computeMissionStatus function)
+    - **Implementation Guide:** MUST implement exact logic from lines 1201-1208: (1) if !enabled return 'draft', (2) if mission_type='raffle' AND !activated return 'draft', (3) if mission_type='raffle' AND raffle_end_date < now return 'ended', (4) else return 'active'
+    - **Acceptance Criteria:** Function MUST return MissionStatus type ('draft' | 'active' | 'ended') per ADMIN_API_CONTRACTS.md line 1183, MUST match exact logic from lines 1201-1208
+
+- [ ] **Task 12.10.3:** Implement formatMissionType helper function
+    - **Action:** Add mission type formatting helper to missions service
+    - **References:** ADMIN_API_CONTRACTS.md line 1167 (missionTypeFormatted)
+    - **Implementation Guide:** MUST format mission_type to display string: 'sales_dollars' → 'Sales ($)', 'sales_units' → 'Sales (units)', 'videos' → 'Videos', 'views' → 'Views', 'likes' → 'Likes', 'raffle' → 'Raffle'
+    - **Acceptance Criteria:** Function MUST return human-readable mission type string
+
+- [ ] **Task 12.10.4:** Implement formatTargetValue helper function
+    - **Action:** Add target value formatting helper to missions service
+    - **References:** ADMIN_API_CONTRACTS.md line 1169 (targetValueFormatted)
+    - **Implementation Guide:** MUST format based on target_unit: 'dollars' → "$X", 'units' → "X units", 'count' → "X", raffle (target_value=0) → "-"
+    - **Acceptance Criteria:** Function MUST return formatted target value string, MUST return "-" for raffle missions
+
+- [ ] **Task 12.10.5:** Implement getAllMissionsService function
+    - **Action:** Add function to missions service that wraps repository call and adds formatting
+    - **References:** ADMIN_API_CONTRACTS.md lines 1143-1210 (GET /api/admin/missions)
+    - **Implementation Guide:** MUST call repository getAllMissions, MUST compute status using computeMissionStatus for each mission, MUST format missionType, targetValue, tier, status, raffleEndDate using helpers, MUST return MissionsResponse with missions array and totalCount
+    - **Acceptance Criteria:** Service MUST return complete MissionsResponse per ADMIN_API_CONTRACTS.md lines 1157-1161, all *Formatted fields MUST be computed
+
+- [ ] **Task 12.10.6:** Implement getMissionDetailsService function
+    - **Action:** Add function to missions service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 1213-1249 (GET /api/admin/missions/:id)
+    - **Implementation Guide:** MUST call repository getMissionById, MUST throw NOT_FOUND error if repository returns null
+    - **Acceptance Criteria:** Service MUST return MissionDetails per ADMIN_API_CONTRACTS.md lines 1227-1244, MUST throw appropriate error for not found
+
+- [ ] **Task 12.10.7:** Implement getDisplayName helper function
+    - **Action:** Add display name lookup helper to missions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 1322-1332 (DISPLAY_NAMES mapping)
+    - **Implementation Guide:** MUST return display_name based on mission_type: 'sales_dollars' → 'Sales Sprint', 'sales_units' → 'Sales Sprint', 'videos' → 'Lights, Camera, Go!', 'views' → 'Road to Viral', 'likes' → 'Fan Favorite', 'raffle' → 'VIP Raffle'
+    - **Acceptance Criteria:** Function MUST return exact display names per ADMIN_API_CONTRACTS.md lines 1324-1331
+
+- [ ] **Task 12.10.8:** Implement getTargetUnit helper function
+    - **Action:** Add target unit lookup helper to missions service
+    - **References:** ADMIN_API_CONTRACTS.md lines 1334-1344 (TARGET_UNITS mapping)
+    - **Implementation Guide:** MUST return target_unit based on mission_type: 'sales_dollars' → 'dollars', 'sales_units' → 'units', 'videos'/'views'/'likes'/'raffle' → 'count'
+    - **Acceptance Criteria:** Function MUST return exact target units per ADMIN_API_CONTRACTS.md lines 1336-1343
+
+- [ ] **Task 12.10.9:** Implement createMissionService function
+    - **Action:** Add function to missions service for creating missions
+    - **References:** ADMIN_API_CONTRACTS.md lines 1251-1356 (POST /api/admin/missions)
+    - **Implementation Guide:** MUST validate request data, MUST call createInlineReward if inlineReward provided (step 1 per lines 1315-1320), MUST auto-set display_name using getDisplayName helper (step 2), MUST auto-set target_unit using getTargetUnit helper (step 3), MUST set target_value=0 for raffle missions, MUST call repository createMission (step 4)
+    - **Acceptance Criteria:** Service MUST follow 4-step process from ADMIN_API_CONTRACTS.md lines 1313-1355, MUST return {success: true, mission: {id, displayName}}
+
+- [ ] **Task 12.10.10:** Implement updateMissionService function
+    - **Action:** Add function to missions service for updating missions
+    - **References:** ADMIN_API_CONTRACTS.md lines 1359-1404 (PATCH /api/admin/missions/:id)
+    - **Implementation Guide:** MUST validate mission exists and belongs to client, MUST NOT allow updating mission_type or display_name, MUST call repository updateMission
+    - **Acceptance Criteria:** Service MUST enforce immutability of mission_type and display_name per line 1403, MUST return {success: true, message: 'Mission updated'}
+
+- [ ] **Task 12.10.11:** Implement getRaffleDetailsService function
+    - **Action:** Add function to missions service for getting raffle details
+    - **References:** ADMIN_API_CONTRACTS.md lines 1407-1464 (GET /api/admin/missions/raffle/:id)
+    - **Implementation Guide:** MUST call repository getRaffleById, MUST call repository getRaffleParticipants, MUST compute entryCount from participants.length, MUST find winner from participants WHERE is_winner=true, MUST format tierEligibility, raffleEndDate, participatedAt using helpers, MUST throw NOT_FOUND if raffle not found
+    - **Acceptance Criteria:** Service MUST return complete RaffleDetails per ADMIN_API_CONTRACTS.md lines 1421-1434, participants MUST include all formatted fields per lines 1436-1442
+
+- [ ] **Task 12.10.12:** Implement activateRaffleService function
+    - **Action:** Add function to missions service for activating raffles
+    - **References:** ADMIN_API_CONTRACTS.md lines 1467-1497 (POST /api/admin/missions/raffle/:id/activate)
+    - **Implementation Guide:** MUST validate raffle exists and belongs to client, MUST validate raffle is not already activated, MUST call repository activateRaffle
+    - **Acceptance Criteria:** Service MUST return {success: true, message: 'Raffle activated'} per lines 1480-1484, MUST throw error if already activated
+
+- [ ] **Task 12.10.13:** Implement selectRaffleWinnerService function
+    - **Action:** Add function to missions service for selecting raffle winner
+    - **References:** ADMIN_API_CONTRACTS.md lines 1500-1565 (POST /api/admin/missions/raffle/:id/select-winner)
+    - **Implementation Guide:** MUST validate raffle exists and belongs to client, MUST validate userId is a participant, MUST validate raffle_end_date has passed, MUST call repository selectRaffleWinner with admin_id, MUST get winner's handle from users table
+    - **Acceptance Criteria:** Service MUST return {success: true, message: 'Winner selected', winnerHandle} per lines 1518-1523, MUST handle all 4 database updates atomically
+
+- [ ] **Task 12.10.14:** Implement getAvailableRewardsService function
+    - **Action:** Add function to missions service for getting available rewards dropdown
+    - **References:** ADMIN_API_CONTRACTS.md lines 1569-1612 (GET /api/admin/rewards/available)
+    - **Implementation Guide:** MUST call repository getAvailableRewards with optional tierEligibility filter, MUST generate name from type + value_data using existing reward name generation logic (per SchemaFinalv2.md lines 516-527), MUST compute valueFormatted (e.g., "$50", "5% (30d)")
+    - **Acceptance Criteria:** Service MUST return AvailableRewardsResponse per ADMIN_API_CONTRACTS.md lines 1589-1598, name and valueFormatted MUST be computed by backend
+
+## Step 12.11: Admin Missions Routes
+- [ ] **Task 12.11.1:** Create GET /api/admin/missions route
+    - **Action:** Create `/app/api/admin/missions/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1143-1210 (GET /api/admin/missions), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper from Task 12.1.1, MUST call missionsService.getAllMissionsService(clientId), MUST return 200 with MissionsResponse on success
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1157-1184, MUST include missions array with all formatted fields
+
+- [ ] **Task 12.11.2:** Create GET /api/admin/missions/[id] route
+    - **Action:** Create `/app/api/admin/missions/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1213-1249 (GET /api/admin/missions/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call missionsService.getMissionDetailsService(clientId, id), MUST return 200 with MissionDetails on success, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1227-1244
+
+- [ ] **Task 12.11.3:** Add POST handler to /api/admin/missions route
+    - **Action:** Add POST handler to `/app/api/admin/missions/route.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1251-1356 (POST /api/admin/missions), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST validate request body per lines 1262-1274 (title, missionType, targetValue, tierEligibility required; rewardId OR inlineReward required), MUST call missionsService.createMissionService, MUST return 200 with {success, mission: {id, displayName}} per lines 1304-1310
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 1262-1298, MUST return success response per lines 1304-1310
+
+- [ ] **Task 12.11.4:** Add PATCH handler to /api/admin/missions/[id] route
+    - **Action:** Add PATCH handler to `/app/api/admin/missions/[id]/route.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1359-1404 (PATCH /api/admin/missions/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST validate request body (all fields optional per lines 1370-1375), MUST call missionsService.updateMissionService, MUST return 200 with {success, message} per lines 1380-1384, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST accept partial update body per ADMIN_API_CONTRACTS.md lines 1370-1375, MUST return success response per lines 1380-1384
+
+- [ ] **Task 12.11.5:** Create GET /api/admin/missions/raffle/[id] route
+    - **Action:** Create `/app/api/admin/missions/raffle/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1407-1464 (GET /api/admin/missions/raffle/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call missionsService.getRaffleDetailsService(clientId, id), MUST return 200 with RaffleDetails on success, MUST return 404 if not found or not raffle type
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1421-1442
+
+- [ ] **Task 12.11.6:** Create POST /api/admin/missions/raffle/[id]/activate route
+    - **Action:** Create `/app/api/admin/missions/raffle/[id]/activate/route.ts` with POST handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1467-1497 (POST /api/admin/missions/raffle/:id/activate), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call missionsService.activateRaffleService, MUST return 200 with {success, message} per lines 1480-1484, MUST return 404 if not found, MUST return 409 if already activated
+    - **Acceptance Criteria:** Route MUST return success response per ADMIN_API_CONTRACTS.md lines 1480-1484
+
+- [ ] **Task 12.11.7:** Create POST /api/admin/missions/raffle/[id]/select-winner route
+    - **Action:** Create `/app/api/admin/missions/raffle/[id]/select-winner/route.ts` with POST handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1500-1565 (POST /api/admin/missions/raffle/:id/select-winner), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST validate request body has userId per line 1512, MUST call missionsService.selectRaffleWinnerService, MUST return 200 with {success, message, winnerHandle} per lines 1518-1523, MUST return 404 if raffle not found, MUST return 400 if userId not a participant
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 1511-1513, MUST return success response per lines 1518-1523
+
+- [ ] **Task 12.11.8:** Create GET /api/admin/rewards/available route
+    - **Action:** Create `/app/api/admin/rewards/available/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1569-1612 (GET /api/admin/rewards/available), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract optional tierEligibility from query params per lines 1580-1584, MUST call missionsService.getAvailableRewardsService(clientId, tierEligibility), MUST return 200 with AvailableRewardsResponse on success
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1588-1598, tierEligibility filter MUST be optional
+
+- [ ] **Task 12.11.9:** Test missions CRUD flow
+    - **Action:** Create `/tests/integration/admin/missions/missions-crud.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1143-1405 (GET/POST/PATCH missions), AdminTesting.md SHOULD #4
+    - **Implementation Guide:** MUST test 6 cases: (1) GET /missions returns list with correct fields, (2) GET /missions/:id returns full details, (3) POST creates mission with auto-generated displayName, (4) POST with inlineReward creates both mission and reward, (5) PATCH updates only specified fields, (6) mission_type and display_name immutable after creation
+    - **Acceptance Criteria:** All 6 CRUD cases MUST pass, displayName MUST be auto-set per lines 1324-1332
+
+- [ ] **Task 12.11.10:** Test raffle winner selection workflow
+    - **Action:** Create `/tests/integration/admin/missions/raffle-workflow.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1407-1560 (raffle endpoints), AdminTesting.md Bug #5, SchemaFinalv2.md lines 888-953 (raffle_participations)
+    - **Implementation Guide:** MUST test 13 cases per AdminTesting.md Bug #5: (1) 0 participants → appropriate error/empty, (2) 1 participant → normal flow wins, (3) participant from wrong client → 403/404, (4) winner already selected → 409, (5) non-participant user_id → 400, (6) raffle not ended yet → 409, (7) raffle not activated → 409, (8) winner redemption moves to claimed, (9) losers redemptions marked rejected, (10) selected_by audit field set, (11) winner_selected_at timestamp set, (12) only one is_winner=true, (13) all losers have is_winner=false
+    - **Acceptance Criteria:** All 13 cases MUST pass, prevents wrong-raffle-winner bug (AdminTesting.md Bug #5)
+
+- [ ] **Task 12.11.11:** Test available rewards dropdown
+    - **Action:** Add test cases to `/tests/integration/admin/missions/missions-crud.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1569-1612 (GET /api/admin/rewards/available), AdminTesting.md SHOULD #5
+    - **Implementation Guide:** MUST test 3 cases: (1) returns only reward_source='mission' rewards, (2) excludes reward_source='vip_tier' rewards, (3) returns empty array when no mission rewards exist
+    - **Acceptance Criteria:** All 3 cases MUST pass, reward_source filter MUST work correctly
+
+## Step 12.12: Admin VIP Rewards Repositories
+- [ ] **Task 12.12.1:** Create admin vip-rewards repository file
+    - **Action:** Create `/lib/repositories/admin/vip-rewards.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1656-1956 (Screen 4: VIP Rewards), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.12.2:** Implement getAllVipRewards function
+    - **Action:** Add function to vip-rewards repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1702-1711 (Business Logic query), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query rewards WHERE client_id AND reward_source='vip_tier', MUST return id, type, description, value_data, tier_eligibility, redemption_frequency, redemption_quantity, enabled, display_order per lines 1705-1706, MUST ORDER BY tier_eligibility ASC, display_order ASC
+    - **Acceptance Criteria:** Query MUST return VipRewardItem fields per ADMIN_API_CONTRACTS.md lines 1684-1695, MUST filter reward_source='vip_tier' per SchemaFinalv2.md line 470
+
+- [ ] **Task 12.12.3:** Implement getVipRewardById function
+    - **Action:** Add function to vip-rewards repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1775-1784 (Business Logic query), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query rewards by id WHERE client_id AND reward_source='vip_tier', MUST return all fields per lines 1778-1779 (id, type, description, value_data, tier_eligibility, preview_from_tier, redemption_type, redemption_frequency, redemption_quantity, expires_days, enabled)
+    - **Acceptance Criteria:** Query MUST return VipRewardDetails fields per ADMIN_API_CONTRACTS.md lines 1749-1762, MUST return null if not found or wrong client_id
+
+- [ ] **Task 12.12.4:** Implement createVipReward function
+    - **Action:** Add function to vip-rewards repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1846-1858 (INSERT query), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST INSERT with reward_source='vip_tier', MUST auto-calculate display_order using subquery per line 1856, MUST convert camelCase valueData to snake_case value_data, MUST RETURN id
+    - **Acceptance Criteria:** Insert MUST match SQL from ADMIN_API_CONTRACTS.md lines 1847-1857, reward_source MUST be 'vip_tier'
+
+- [ ] **Task 12.12.5:** Implement updateVipReward function
+    - **Action:** Add function to vip-rewards repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 1901-1918 (UPDATE query), SchemaFinalv2.md lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST UPDATE using COALESCE for optional fields per lines 1904-1915, MUST filter by id AND client_id AND reward_source='vip_tier', MUST convert camelCase valueData to snake_case value_data, MUST set updated_at=NOW()
+    - **Acceptance Criteria:** Update MUST match SQL from ADMIN_API_CONTRACTS.md lines 1903-1918
+
+## Step 12.13: Admin VIP Rewards Services
+- [ ] **Task 12.13.1:** Create admin vip-rewards service file
+    - **Action:** Create `/lib/services/admin/vip-rewards.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1656-1956 (Screen 4: VIP Rewards), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.13.2:** Implement generateRewardName helper function
+    - **Action:** Add reward name generation helper to vip-rewards service
+    - **References:** ADMIN_API_CONTRACTS.md lines 1713-1731 (generateRewardName function), SchemaFinalv2.md lines 516-527 (name generation rules)
+    - **Implementation Guide:** MUST generate name based on type + value_data: gift_card → "$X Gift Card", commission_boost → "X% Pay Boost", spark_ads → "$X Ads Boost", discount → "X% Deal Boost", physical_gift → "Gift Drop: {description}", experience → description
+    - **Acceptance Criteria:** Function MUST return exact name formats per ADMIN_API_CONTRACTS.md lines 1717-1729 and SchemaFinalv2.md lines 520-527
+
+- [ ] **Task 12.13.3:** Implement formatRewardType helper function
+    - **Action:** Add reward type formatting helper to vip-rewards service
+    - **References:** ADMIN_API_CONTRACTS.md line 1688 (typeFormatted)
+    - **Implementation Guide:** MUST format type to display string: gift_card → "Gift Card", commission_boost → "Commission Boost", spark_ads → "Spark Ads", discount → "Discount", physical_gift → "Physical Gift", experience → "Experience"
+    - **Acceptance Criteria:** Function MUST return human-readable reward type string
+
+- [ ] **Task 12.13.4:** Implement getRedemptionType helper function
+    - **Action:** Add redemption type lookup helper to vip-rewards service
+    - **References:** ADMIN_API_CONTRACTS.md lines 1834-1844 (REDEMPTION_TYPES mapping), SchemaFinalv2.md line 476 (redemption_type)
+    - **Implementation Guide:** MUST return redemption_type based on type: gift_card/spark_ads/physical_gift/experience → 'instant', commission_boost/discount → 'scheduled'
+    - **Acceptance Criteria:** Function MUST return exact redemption types per ADMIN_API_CONTRACTS.md lines 1836-1843
+
+- [ ] **Task 12.13.5:** Implement getAllVipRewardsService function
+    - **Action:** Add function to vip-rewards service that wraps repository call and adds formatting
+    - **References:** ADMIN_API_CONTRACTS.md lines 1664-1731 (GET /api/admin/vip-rewards)
+    - **Implementation Guide:** MUST call repository getAllVipRewards, MUST generate name using generateRewardName for each reward, MUST format type, tier, frequency, status using helpers, MUST return VipRewardsResponse with rewards array and totalCount
+    - **Acceptance Criteria:** Service MUST return complete VipRewardsResponse per ADMIN_API_CONTRACTS.md lines 1678-1682, all *Formatted fields MUST be computed
+
+- [ ] **Task 12.13.6:** Implement getVipRewardDetailsService function
+    - **Action:** Add function to vip-rewards service that wraps repository call
+    - **References:** ADMIN_API_CONTRACTS.md lines 1735-1787 (GET /api/admin/vip-rewards/:id)
+    - **Implementation Guide:** MUST call repository getVipRewardById, MUST generate name using generateRewardName, MUST convert snake_case value_data to camelCase valueData per line 1786, MUST throw NOT_FOUND error if repository returns null
+    - **Acceptance Criteria:** Service MUST return VipRewardDetails per ADMIN_API_CONTRACTS.md lines 1749-1762, valueData MUST be camelCase
+
+- [ ] **Task 12.13.7:** Implement createVipRewardService function
+    - **Action:** Add function to vip-rewards service for creating VIP rewards
+    - **References:** ADMIN_API_CONTRACTS.md lines 1790-1870 (POST /api/admin/vip-rewards)
+    - **Implementation Guide:** MUST validate request data per lines 1860-1869, MUST auto-set redemption_type using getRedemptionType helper, MUST convert camelCase valueData to snake_case value_data, MUST call repository createVipReward, MUST generate name for response
+    - **Acceptance Criteria:** Service MUST follow validation rules from ADMIN_API_CONTRACTS.md lines 1860-1869, MUST return {success: true, reward: {id, name}}
+
+- [ ] **Task 12.13.8:** Implement updateVipRewardService function
+    - **Action:** Add function to vip-rewards service for updating VIP rewards
+    - **References:** ADMIN_API_CONTRACTS.md lines 1873-1922 (PATCH /api/admin/vip-rewards/:id)
+    - **Implementation Guide:** MUST validate reward exists and belongs to client, MUST recalculate redemption_type if type changes per line 1921, MUST convert camelCase valueData to snake_case value_data, MUST call repository updateVipReward
+    - **Acceptance Criteria:** Service MUST return {success: true, message: 'VIP reward updated'} per lines 1894-1898
+
+## Step 12.14: Admin VIP Rewards Routes
+- [ ] **Task 12.14.1:** Create GET /api/admin/vip-rewards route
+    - **Action:** Create `/app/api/admin/vip-rewards/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1664-1731 (GET /api/admin/vip-rewards), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST call vipRewardsService.getAllVipRewardsService(clientId), MUST return 200 with VipRewardsResponse on success
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1678-1700
+
+- [ ] **Task 12.14.2:** Add POST handler to /api/admin/vip-rewards route
+    - **Action:** Add POST handler to `/app/api/admin/vip-rewards/route.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1790-1870 (POST /api/admin/vip-rewards), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST validate request body per lines 1801-1813, MUST call vipRewardsService.createVipRewardService, MUST return 200 with {success, reward: {id, name}} per lines 1822-1829
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 1801-1813, MUST return success response per lines 1822-1829
+
+- [ ] **Task 12.14.3:** Create GET /api/admin/vip-rewards/[id] route
+    - **Action:** Create `/app/api/admin/vip-rewards/[id]/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1735-1787 (GET /api/admin/vip-rewards/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call vipRewardsService.getVipRewardDetailsService(clientId, id), MUST return 200 with VipRewardDetails on success, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1749-1772
+
+- [ ] **Task 12.14.4:** Add PATCH handler to /api/admin/vip-rewards/[id] route
+    - **Action:** Add PATCH handler to `/app/api/admin/vip-rewards/[id]/route.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1873-1922 (PATCH /api/admin/vip-rewards/:id), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST validate request body (all fields optional per lines 1884-1889), MUST call vipRewardsService.updateVipRewardService, MUST return 200 with {success, message} per lines 1894-1898, MUST return 404 if not found
+    - **Acceptance Criteria:** Route MUST accept partial update body per ADMIN_API_CONTRACTS.md lines 1884-1889, MUST return success response per lines 1894-1898
+
+- [ ] **Task 12.14.5:** Test VIP rewards CRUD flow
+    - **Action:** Create `/tests/integration/admin/vip-rewards/vip-rewards-crud.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1656-1956 (Screen 4: VIP Rewards), AdminTesting.md SHOULD #5
+    - **Implementation Guide:** MUST test 5 cases: (1) GET /vip-rewards returns only reward_source='vip_tier' rewards, (2) POST creates reward with reward_source='vip_tier' automatically set, (3) GET /vip-rewards/:id returns full details with valueData transformed, (4) PATCH updates only specified fields, (5) created reward excluded from /rewards/available (mission dropdown)
+    - **Acceptance Criteria:** All 5 cases MUST pass, reward_source MUST be auto-set to 'vip_tier' on creation
+
+## Step 12.15: Admin Sales Adjustments Repositories
+- [ ] **Task 12.15.1:** Create admin sales-adjustments repository file
+    - **Action:** Create `/lib/repositories/admin/sales-adjustments.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1959-2208 (Screen 5: Sales Adjustments), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.15.2:** Implement searchCreatorByHandle function
+    - **Action:** Add function to sales-adjustments repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2016-2027 (Business Logic query), SchemaFinalv2.md lines 123-155 (users table), lines 250-268 (tiers table)
+    - **Implementation Guide:** MUST query users WHERE client_id AND (tiktok_handle = handle OR tiktok_handle = '@' + handle), MUST LEFT JOIN tiers for tier_name, MUST return id, tiktok_handle, total_sales, total_units, checkpoint_sales_current, checkpoint_units_current, manual_adjustments_total, manual_adjustments_units, current_tier, tier_name per lines 2019-2022
+    - **Acceptance Criteria:** Query MUST return CreatorInfo fields per ADMIN_API_CONTRACTS.md lines 1993-2013, MUST handle handle with or without @ prefix
+
+- [ ] **Task 12.15.3:** Implement getAdjustmentsByUserId function
+    - **Action:** Add function to sales-adjustments repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2076-2087 (Business Logic query), SchemaFinalv2.md lines 271-286 (sales_adjustments table)
+    - **Implementation Guide:** MUST query sales_adjustments WHERE user_id AND client_id, MUST LEFT JOIN users for adjusted_by_handle, MUST return id, amount, amount_units, reason, adjustment_type, adjusted_by, created_at, applied_at, adjusted_by_handle per lines 2079-2081, MUST ORDER BY created_at DESC
+    - **Acceptance Criteria:** Query MUST return AdjustmentHistoryItem fields per ADMIN_API_CONTRACTS.md lines 2055-2070
+
+- [ ] **Task 12.15.4:** Implement createAdjustment function
+    - **Action:** Add function to sales-adjustments repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2149-2156 (INSERT query), SchemaFinalv2.md lines 271-286 (sales_adjustments table)
+    - **Implementation Guide:** MUST INSERT with user_id, client_id, amount, amount_units, adjustment_type, reason, adjusted_by, created_at=NOW() per lines 2151-2155, applied_at MUST remain NULL (set by daily sync job), MUST RETURN full record
+    - **Acceptance Criteria:** Insert MUST match SQL from ADMIN_API_CONTRACTS.md lines 2150-2155, applied_at MUST be NULL per line 2158
+
+## Step 12.16: Admin Sales Adjustments Services
+- [ ] **Task 12.16.1:** Create admin sales-adjustments service file
+    - **Action:** Create `/lib/services/admin/sales-adjustments.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1959-2208 (Screen 5: Sales Adjustments), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.16.2:** Implement formatAdjustmentAmount helper function
+    - **Action:** Add adjustment amount formatting helper to sales-adjustments service
+    - **References:** ADMIN_API_CONTRACTS.md line 2061 (amountFormatted)
+    - **Implementation Guide:** MUST format amount based on mode: sales → "+$200" or "-$50", units → "+50 units" or "-10 units", MUST include sign prefix
+    - **Acceptance Criteria:** Function MUST return formatted amount with sign per ADMIN_API_CONTRACTS.md line 2061
+
+- [ ] **Task 12.16.3:** Implement formatAdjustmentType helper function
+    - **Action:** Add adjustment type formatting helper to sales-adjustments service
+    - **References:** ADMIN_API_CONTRACTS.md line 2063 (adjustmentTypeFormatted)
+    - **Implementation Guide:** MUST format adjustment_type: manual_sale → "Manual Sale", refund → "Refund", bonus → "Bonus", correction → "Correction"
+    - **Acceptance Criteria:** Function MUST return human-readable adjustment type per SchemaFinalv2.md line 282
+
+- [ ] **Task 12.16.4:** Implement searchCreatorService function
+    - **Action:** Add function to sales-adjustments service for searching creators
+    - **References:** ADMIN_API_CONTRACTS.md lines 1967-2032 (GET /api/admin/creators/search)
+    - **Implementation Guide:** MUST call repository searchCreatorByHandle, MUST get client.vip_metric to determine which fields to populate (sales vs units) per lines 2029-2031, MUST format sales/units values, MUST return CreatorSearchResponse with found boolean
+    - **Acceptance Criteria:** Service MUST return CreatorSearchResponse per ADMIN_API_CONTRACTS.md lines 1987-1991, MUST populate correct fields based on vip_metric
+
+- [ ] **Task 12.16.5:** Implement getAdjustmentHistoryService function
+    - **Action:** Add function to sales-adjustments service for getting adjustment history
+    - **References:** ADMIN_API_CONTRACTS.md lines 2035-2088 (GET /api/admin/creators/:id/adjustments)
+    - **Implementation Guide:** MUST validate user exists and belongs to client, MUST call repository getAdjustmentsByUserId, MUST compute status from applied_at (NULL → 'pending', else → 'applied') per line 2066, MUST format all *Formatted fields
+    - **Acceptance Criteria:** Service MUST return AdjustmentHistoryResponse per ADMIN_API_CONTRACTS.md lines 2049-2053, status MUST be computed per line 2066
+
+- [ ] **Task 12.16.6:** Implement createAdjustmentService function
+    - **Action:** Add function to sales-adjustments service for creating adjustments
+    - **References:** ADMIN_API_CONTRACTS.md lines 2091-2175 (POST /api/admin/creators/:id/adjustments)
+    - **Implementation Guide:** MUST validate user exists and belongs to client, MUST validate amount vs amountUnits based on client.vip_metric per lines 2139-2147, MUST call repository createAdjustment with admin_id, MUST format response with all *Formatted fields
+    - **Acceptance Criteria:** Service MUST validate mutually exclusive amount/amountUnits per lines 2139-2147, MUST return adjustment with status='pending' and appliedAt=null per lines 2127-2128
+
+## Step 12.17: Admin Sales Adjustments Routes
+- [ ] **Task 12.17.1:** Create GET /api/admin/creators/search route
+    - **Action:** Create `/app/api/admin/creators/search/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 1967-2032 (GET /api/admin/creators/search), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract handle from query params (required per line 1982), MUST call salesAdjustmentsService.searchCreatorService(clientId, handle), MUST return 200 with CreatorSearchResponse
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 1987-2013, handle query param MUST be required
+
+- [ ] **Task 12.17.2:** Create GET /api/admin/creators/[id]/adjustments route
+    - **Action:** Create `/app/api/admin/creators/[id]/adjustments/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2035-2088 (GET /api/admin/creators/:id/adjustments), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call salesAdjustmentsService.getAdjustmentHistoryService(clientId, id), MUST return 200 with AdjustmentHistoryResponse, MUST return 404 if user not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 2049-2074
+
+- [ ] **Task 12.17.3:** Add POST handler to /api/admin/creators/[id]/adjustments route
+    - **Action:** Add POST handler to `/app/api/admin/creators/[id]/adjustments/route.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2091-2175 (POST /api/admin/creators/:id/adjustments), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST validate request body per lines 2102-2107, MUST call salesAdjustmentsService.createAdjustmentService, MUST return 200 with {success, adjustment, error} per lines 2114-2134, MUST return 404 if user not found
+    - **Acceptance Criteria:** Route MUST accept request body per ADMIN_API_CONTRACTS.md lines 2102-2107, MUST return success response per lines 2114-2134
+
+- [ ] **Task 12.17.4:** Test creator search functionality
+    - **Action:** Create `/tests/integration/admin/sales-adjustments/adjustments-flow.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 1967-2032 (GET /api/admin/creators/search), AdminTesting.md SHOULD #6
+    - **Implementation Guide:** MUST test 4 cases: (1) search by @handle finds user, (2) search by handle without @ finds same user, (3) search by HANDLE (uppercase) finds same user (case insensitive), (4) search for non-existent handle returns found=false
+    - **Acceptance Criteria:** All 4 cases MUST pass, search MUST be case-insensitive and handle @ prefix
+
+- [ ] **Task 12.17.5:** Test manual adjustment integrity
+    - **Action:** Add test cases to `/tests/integration/admin/sales-adjustments/adjustments-flow.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2091-2175 (POST /api/admin/creators/:id/adjustments), AdminTesting.md Bug #6
+    - **Implementation Guide:** MUST test 5 cases: (1) adjustment created with correct user_id, (2) adjustment uses correct metric based on client.vip_metric (sales vs units), (3) applied_at is NULL on creation (set by sync job), (4) adjusted_by set to admin's user_id (audit trail), (5) amount/amountUnits mutually exclusive per client.vip_metric
+    - **Acceptance Criteria:** All 5 cases MUST pass, prevents manual-adjustment-misapplication bug (AdminTesting.md Bug #6)
+
+## Step 12.18: Admin Creator Lookup Repositories
+- [ ] **Task 12.18.1:** Create admin creator-lookup repository file
+    - **Action:** Create `/lib/repositories/admin/creator-lookup.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2214-2407 (Screen 6: Creator Lookup), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.18.2:** Implement getCreatorProfile function
+    - **Action:** Add function to creator-lookup repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2307-2317 (profile query), SchemaFinalv2.md lines 123-155 (users table), lines 250-268 (tiers table)
+    - **Implementation Guide:** MUST query users by id WHERE client_id, MUST LEFT JOIN tiers for tier_name, MUST return id, tiktok_handle, email, current_tier, created_at, total_sales, total_units, checkpoint_sales_current, checkpoint_sales_target, checkpoint_units_current, checkpoint_units_target, tier_name per lines 2309-2313
+    - **Acceptance Criteria:** Query MUST return CreatorProfile fields per ADMIN_API_CONTRACTS.md lines 2243-2264, MUST return null if not found
+
+- [ ] **Task 12.18.3:** Implement getActiveRedemptions function
+    - **Action:** Add function to creator-lookup repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2319-2332 (active redemptions query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table), lines 662-745 (commission_boost_redemptions), lines 820-887 (physical_gift_redemptions)
+    - **Implementation Guide:** MUST query redemptions WHERE user_id AND client_id AND status NOT IN ('concluded','rejected') AND deleted_at IS NULL, MUST JOIN rewards for type and value_data, MUST LEFT JOIN commission_boost_redemptions for boost_status, MUST LEFT JOIN physical_gift_redemptions for shipped_at and delivered_at, MUST ORDER BY claimed_at DESC
+    - **Acceptance Criteria:** Query MUST return ActiveRedemption fields per ADMIN_API_CONTRACTS.md lines 2266-2276
+
+- [ ] **Task 12.18.4:** Implement getMissionProgress function
+    - **Action:** Add function to creator-lookup repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2334-2344 (mission progress query), SchemaFinalv2.md lines 421-457 (mission_progress table), lines 358-420 (missions table)
+    - **Implementation Guide:** MUST query mission_progress WHERE user_id AND client_id AND status IN ('active','completed'), MUST JOIN missions for display_name, mission_type, target_value, MUST return id, current_value, status, display_name, mission_type, target_value, MUST ORDER BY updated_at DESC
+    - **Acceptance Criteria:** Query MUST return MissionProgressItem fields per ADMIN_API_CONTRACTS.md lines 2278-2288, status MUST match SchemaFinalv2.md lines 439-442
+
+- [ ] **Task 12.18.5:** Implement getRedemptionHistory function
+    - **Action:** Add function to creator-lookup repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2346-2356 (redemption history query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions WHERE user_id AND client_id AND status='concluded', MUST JOIN rewards for type and value_data, MUST return id, claimed_at, concluded_at, type, value_data, MUST ORDER BY concluded_at DESC, MUST LIMIT 10
+    - **Acceptance Criteria:** Query MUST return RedemptionHistoryItem fields per ADMIN_API_CONTRACTS.md lines 2290-2297, MUST limit to 10 records
+
+## Step 12.19: Admin Creator Lookup Services
+- [ ] **Task 12.19.1:** Create admin creator-lookup service file
+    - **Action:** Create `/lib/services/admin/creator-lookup.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2214-2407 (Screen 6: Creator Lookup), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.19.2:** Implement computeSubStatus helper function
+    - **Action:** Add sub-status computation helper to creator-lookup service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2358-2371 (computeSubStatus function)
+    - **Implementation Guide:** MUST compute sub-status from sub-state tables: if commission_boost → return boost_status, if physical_gift → return 'delivered'/'shipped'/'pending_shipment' based on shipped_at/delivered_at, else return null
+    - **Acceptance Criteria:** Function MUST match exact logic from ADMIN_API_CONTRACTS.md lines 2360-2370
+
+- [ ] **Task 12.19.3:** Implement formatMissionProgress helper function
+    - **Action:** Add mission progress formatting helper to creator-lookup service
+    - **References:** ADMIN_API_CONTRACTS.md line 2285 (progressFormatted)
+    - **Implementation Guide:** MUST format progress based on mission_type: sales_dollars → "$320/$500", sales_units/videos/views/likes → "7/10", raffle → "entered"
+    - **Acceptance Criteria:** Function MUST return progress string per ADMIN_API_CONTRACTS.md line 2285
+
+- [ ] **Task 12.19.4:** Implement getCreatorDetailsService function
+    - **Action:** Add main orchestration function to creator-lookup service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2222-2372 (GET /api/admin/creators/:id/details)
+    - **Implementation Guide:** MUST call all 4 repository functions (profile, activeRedemptions, missionProgress, redemptionHistory) in parallel, MUST compute subStatus for each active redemption using computeSubStatus, MUST format all *Formatted fields, MUST get client.vip_metric to populate correct sales/units fields, MUST throw NOT_FOUND if profile is null
+    - **Acceptance Criteria:** Service MUST return complete CreatorDetailsResponse per ADMIN_API_CONTRACTS.md lines 2236-2241
+
+## Step 12.20: Admin Creator Lookup Routes
+- [ ] **Task 12.20.1:** Create GET /api/admin/creators/[id]/details route
+    - **Action:** Create `/app/api/admin/creators/[id]/details/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2222-2372 (GET /api/admin/creators/:id/details), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract id from params, MUST call creatorLookupService.getCreatorDetailsService(clientId, id), MUST return 200 with CreatorDetailsResponse, MUST return 404 if creator not found
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 2236-2303
+
+- [ ] **Task 12.20.2:** Test creator details aggregation
+    - **Action:** Create `/tests/integration/admin/creator-lookup/creator-details.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2222-2372 (GET /api/admin/creators/:id/details), AdminTesting.md SHOULD #7
+    - **Implementation Guide:** MUST test 5 cases: (1) returns profile with correct tier info, (2) returns activeRedemptions with computed subStatus, (3) returns missionProgress with progressFormatted, (4) returns redemptionHistory limited to 10 items, (5) returns 404 for non-existent creator
+    - **Acceptance Criteria:** All 5 cases MUST pass, all 4 data sections MUST be populated correctly per lines 2243-2303
+
+## Step 12.21: Admin Data Sync Repositories
+- [ ] **Task 12.21.1:** Create admin data-sync repository file
+    - **Action:** Create `/lib/repositories/admin/data-sync.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2409-2595 (Screen 7: Data Sync), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.21.2:** Implement getCurrentSyncStatus function
+    - **Action:** Add function to data-sync repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2471-2478 (current status query), SchemaFinalv2.md lines 328-353 (sync_logs table)
+    - **Implementation Guide:** MUST query sync_logs WHERE client_id ORDER BY started_at DESC LIMIT 1, MUST return id, status, started_at, completed_at, records_processed, error_message per lines 2473-2474
+    - **Acceptance Criteria:** Query MUST return CurrentSyncStatus fields per ADMIN_API_CONTRACTS.md lines 2438-2446, MUST return null if no sync history
+
+- [ ] **Task 12.21.3:** Implement getSyncHistory function
+    - **Action:** Add function to data-sync repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2480-2490 (history query), SchemaFinalv2.md lines 328-353 (sync_logs table)
+    - **Implementation Guide:** MUST query sync_logs WHERE client_id ORDER BY started_at DESC LIMIT 10, MUST LEFT JOIN users for triggered_by_handle, MUST return all fields per lines 2482-2484 (id, status, source, started_at, completed_at, records_processed, error_message, file_name, triggered_by, triggered_by_handle)
+    - **Acceptance Criteria:** Query MUST return SyncHistoryItem fields per ADMIN_API_CONTRACTS.md lines 2448-2463, MUST limit to 10 records
+
+- [ ] **Task 12.21.4:** Implement createSyncLog function
+    - **Action:** Add function to data-sync repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2526-2533 (INSERT query), SchemaFinalv2.md lines 328-353 (sync_logs table)
+    - **Implementation Guide:** MUST INSERT with client_id, status='running', source='manual', started_at=NOW(), file_name, triggered_by per lines 2528-2531, MUST RETURN id
+    - **Acceptance Criteria:** Insert MUST match SQL from ADMIN_API_CONTRACTS.md lines 2527-2532, status MUST be 'running' per SchemaFinalv2.md line 335
+
+- [ ] **Task 12.21.5:** Implement updateSyncLogSuccess function
+    - **Action:** Add function to data-sync repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2540-2547 (UPDATE success), SchemaFinalv2.md lines 328-353 (sync_logs table)
+    - **Implementation Guide:** MUST UPDATE sync_logs SET status='success', completed_at=NOW(), records_processed per lines 2542-2545
+    - **Acceptance Criteria:** Update MUST match SQL from ADMIN_API_CONTRACTS.md lines 2541-2546
+
+- [ ] **Task 12.21.6:** Implement updateSyncLogFailed function
+    - **Action:** Add function to data-sync repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2549-2556 (UPDATE failed), SchemaFinalv2.md lines 328-353 (sync_logs table)
+    - **Implementation Guide:** MUST UPDATE sync_logs SET status='failed', completed_at=NOW(), error_message per lines 2551-2554
+    - **Acceptance Criteria:** Update MUST match SQL from ADMIN_API_CONTRACTS.md lines 2550-2555
+
+## Step 12.22: Admin Data Sync Services
+- [ ] **Task 12.22.1:** Create admin data-sync service file
+    - **Action:** Create `/lib/services/admin/data-sync.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2409-2595 (Screen 7: Data Sync), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.22.2:** Implement formatSyncStatus helper function
+    - **Action:** Add sync status formatting helper to data-sync service
+    - **References:** ADMIN_API_CONTRACTS.md line 2440 (statusFormatted)
+    - **Implementation Guide:** MUST format status: running → "Running", success → "Success", failed → "Failed"
+    - **Acceptance Criteria:** Function MUST return human-readable status per SchemaFinalv2.md line 335
+
+- [ ] **Task 12.22.3:** Implement formatSyncSource helper function
+    - **Action:** Add sync source formatting helper to data-sync service
+    - **References:** ADMIN_API_CONTRACTS.md line 2458 (sourceFormatted)
+    - **Implementation Guide:** MUST format source: auto → "Auto", manual → "Manual"
+    - **Acceptance Criteria:** Function MUST return human-readable source per SchemaFinalv2.md line 336
+
+- [ ] **Task 12.22.4:** Implement getSyncStatusService function
+    - **Action:** Add function to data-sync service for getting sync status
+    - **References:** ADMIN_API_CONTRACTS.md lines 2417-2491 (GET /api/admin/sync/status)
+    - **Implementation Guide:** MUST call repository getCurrentSyncStatus and getSyncHistory, MUST format all *Formatted fields, MUST handle case where no sync history exists
+    - **Acceptance Criteria:** Service MUST return complete DataSyncResponse per ADMIN_API_CONTRACTS.md lines 2431-2436
+
+- [ ] **Task 12.22.5:** Implement uploadCsvService function
+    - **Action:** Add function to data-sync service for CSV upload
+    - **References:** ADMIN_API_CONTRACTS.md lines 2494-2557 (POST /api/admin/sync/upload)
+    - **Implementation Guide:** MUST validate file is CSV and <= 10MB per lines 2521-2524, MUST validate csvType='creator_metrics', MUST call repository createSyncLog, MUST trigger async processing job, MUST return syncLogId immediately (processing continues in background)
+    - **Acceptance Criteria:** Service MUST validate file per lines 2521-2524, MUST return {success: true, syncLogId} per lines 2512-2516
+
+## Step 12.23: Admin Data Sync Routes
+- [ ] **Task 12.23.1:** Create GET /api/admin/sync/status route
+    - **Action:** Create `/app/api/admin/sync/status/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2417-2491 (GET /api/admin/sync/status), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST call dataSyncService.getSyncStatusService(clientId), MUST return 200 with DataSyncResponse
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 2431-2467
+
+- [ ] **Task 12.23.2:** Create POST /api/admin/sync/upload route
+    - **Action:** Create `/app/api/admin/sync/upload/route.ts` with POST handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2494-2557 (POST /api/admin/sync/upload), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST parse multipart form data for file and csvType, MUST call dataSyncService.uploadCsvService, MUST return 200 with {success, syncLogId, error}, MUST return 400 for invalid CSV, MUST return 413 for file > 10MB per lines 2570-2575
+    - **Acceptance Criteria:** Route MUST accept multipart form data per ADMIN_API_CONTRACTS.md lines 2498-2507, MUST return success response per lines 2511-2516
+
+- [ ] **Task 12.23.3:** Test CSV upload validation and safety
+    - **Action:** Create `/tests/integration/admin/data-sync/csv-upload.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2494-2557 (POST /api/admin/sync/upload), AdminTesting.md Bug #7
+    - **Implementation Guide:** MUST test 9 cases per AdminTesting.md Bug #7: (1) upload blocked when sync_logs has status='running' → 409, (2) duplicate handles in CSV → last row wins + warning returned, (3) unknown handles → skipped + returned in response, (4) wrong client's handles → skipped silently, (5) file > 10MB → 413, (6) invalid CSV format → 400, (7) partial failure → transaction rollback, (8) success returns syncLogId, (9) sync_log created with status='running' and triggered_by set
+    - **Acceptance Criteria:** All 9 cases MUST pass, prevents CSV-upload-data-corruption bug (AdminTesting.md Bug #7)
+
+- [ ] **Task 12.23.4:** Test sync status endpoint
+    - **Action:** Add test cases to `/tests/integration/admin/data-sync/csv-upload.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2417-2491 (GET /api/admin/sync/status), AdminTesting.md SHOULD #2
+    - **Implementation Guide:** MUST test 3 cases: (1) returns currentSync with correct status, (2) returns history limited to 10 items ordered by started_at DESC, (3) returns empty history for new client
+    - **Acceptance Criteria:** All 3 cases MUST pass, history MUST be ordered correctly per lines 2480-2490
+
+## Step 12.24: Admin Reports Repositories
+- [ ] **Task 12.24.1:** Create admin reports repository file
+    - **Action:** Create `/lib/repositories/admin/reports.repository.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2597-3076 (Screen 8: Reports), ARCHITECTURE.md Section 5 (Repository Layer)
+    - **Acceptance Criteria:** File exists with repository class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.24.2:** Implement getRewardsSummary function
+    - **Action:** Add function to reports repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2831-2915 (rewards summary query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table), lines 662-745 (commission_boost_redemptions table)
+    - **Implementation Guide:** MUST use UNION ALL query for all 6 reward types per lines 2832-2914, MUST filter WHERE status='concluded' AND concluded_at BETWEEN start_date AND end_date, MUST compute total_spent differently per type: gift_card/spark_ads from value_data.amount, commission_boost from final_payout_amount, discount/physical_gift/experience → NULL
+    - **Acceptance Criteria:** Query MUST return RewardsSummaryRow fields per ADMIN_API_CONTRACTS.md lines 2656-2663, total_spent sources MUST match table lines 2943-2950
+
+- [ ] **Task 12.24.3:** Implement getCreatorActivity function
+    - **Action:** Add function to reports repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2917-2940 (creator activity query), SchemaFinalv2.md lines 590-661 (redemptions table), lines 458-589 (rewards table)
+    - **Implementation Guide:** MUST query redemptions GROUP BY rewards.type, MUST COUNT(id) for redemption_count, MUST COUNT(DISTINCT user_id) for unique_creators, MUST filter WHERE status='concluded' AND concluded_at BETWEEN start_date AND end_date
+    - **Acceptance Criteria:** Query MUST return CreatorActivityRow fields per ADMIN_API_CONTRACTS.md lines 2680-2687
+
+- [ ] **Task 12.24.4:** Implement getCreatorActivityTotals function
+    - **Action:** Add function to reports repository
+    - **References:** ADMIN_API_CONTRACTS.md lines 2932-2940 (overall totals query), SchemaFinalv2.md lines 590-661 (redemptions table)
+    - **Implementation Guide:** MUST query redemptions for overall COUNT(id) and COUNT(DISTINCT user_id), MUST filter WHERE status='concluded' AND concluded_at BETWEEN start_date AND end_date
+    - **Acceptance Criteria:** Query MUST return total_redemptions and total_unique_creators per ADMIN_API_CONTRACTS.md lines 2673-2676
+
+## Step 12.25: Admin Reports Services
+- [ ] **Task 12.25.1:** Create admin reports service file
+    - **Action:** Create `/lib/services/admin/reports.service.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2597-3076 (Screen 8: Reports), ARCHITECTURE.md Section 5 (Service Layer)
+    - **Acceptance Criteria:** File exists with service class/object pattern matching ARCHITECTURE.md Section 5
+
+- [ ] **Task 12.25.2:** Implement computeDateRange helper function
+    - **Action:** Add date range computation helper to reports service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2790-2828 (computeDateRange function)
+    - **Implementation Guide:** MUST compute start/end dates based on preset: this_month → startOfMonth/endOfMonth, last_month → same for previous month, this_quarter → startOfQuarter/endOfQuarter, last_quarter → same for previous quarter, custom → use provided startDate/endDate, MUST generate periodLabel ("January 2025", "Q1 2025", or "Jan 1 - Jan 31, 2025")
+    - **Acceptance Criteria:** Function MUST match exact logic from ADMIN_API_CONTRACTS.md lines 2792-2828
+
+- [ ] **Task 12.25.3:** Implement formatRewardTypePlural helper function
+    - **Action:** Add reward type plural formatting helper to reports service
+    - **References:** ADMIN_API_CONTRACTS.md line 2658 (rewardTypeFormatted in reports)
+    - **Implementation Guide:** MUST format type to plural display: gift_card → "Gift Cards", commission_boost → "Commission Boosts", spark_ads → "Spark Ads", discount → "Discounts", physical_gift → "Physical Gifts", experience → "Experiences"
+    - **Acceptance Criteria:** Function MUST return plural reward type strings per example response lines 2706-2746
+
+- [ ] **Task 12.25.4:** Implement getReportsService function
+    - **Action:** Add main orchestration function to reports service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2605-2951 (GET /api/admin/reports)
+    - **Implementation Guide:** MUST validate preset and custom date params, MUST call computeDateRange, MUST call repository getRewardsSummary and getCreatorActivity and getCreatorActivityTotals in parallel, MUST compute totalCount and totalSpent sums for RewardsSummaryReport, MUST format all *Formatted fields
+    - **Acceptance Criteria:** Service MUST return complete ReportsResponse per ADMIN_API_CONTRACTS.md lines 2628-2632
+
+- [ ] **Task 12.25.5:** Implement generateExcelReport helper function
+    - **Action:** Add Excel generation helper to reports service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2983-3038 (Excel generation logic)
+    - **Implementation Guide:** MUST use xlsx library, MUST create workbook with 2 sheets: "Rewards Summary" (columns: Reward Type, Count, Total Spent with totals row) and "Creator Activity" (columns: Reward Type, Redemptions, Unique Creators with totals row) per lines 2987-3001
+    - **Acceptance Criteria:** Function MUST generate Excel buffer with exact sheet structure per ADMIN_API_CONTRACTS.md lines 2987-3037
+
+- [ ] **Task 12.25.6:** Implement generateFilename helper function
+    - **Action:** Add filename generation helper to reports service
+    - **References:** ADMIN_API_CONTRACTS.md lines 3003-3011 (generateFilename function)
+    - **Implementation Guide:** MUST generate filename based on dateRange: custom → "rewards-report-{startDate}-to-{endDate}.xlsx", presets → "rewards-report-{periodLabel-lowercased}.xlsx"
+    - **Acceptance Criteria:** Function MUST match exact logic from ADMIN_API_CONTRACTS.md lines 3005-3010
+
+- [ ] **Task 12.25.7:** Implement exportReportsService function
+    - **Action:** Add export orchestration function to reports service
+    - **References:** ADMIN_API_CONTRACTS.md lines 2954-3039 (GET /api/admin/reports/export)
+    - **Implementation Guide:** MUST call getReportsService to get data, MUST call generateExcelReport to create buffer, MUST call generateFilename for Content-Disposition header
+    - **Acceptance Criteria:** Service MUST return {buffer, filename, contentType} for route to send as binary response
+
+## Step 12.26: Admin Reports Routes
+- [ ] **Task 12.26.1:** Create GET /api/admin/reports route
+    - **Action:** Create `/app/api/admin/reports/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2605-2951 (GET /api/admin/reports), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract preset from query params (required per line 2621), MUST extract optional startDate/endDate for custom preset, MUST call reportsService.getReportsService(clientId, preset, startDate, endDate), MUST return 200 with ReportsResponse, MUST return 400 if custom preset without dates per lines 3044-3049
+    - **Acceptance Criteria:** Route MUST return exact response structure per ADMIN_API_CONTRACTS.md lines 2628-2688
+
+- [ ] **Task 12.26.2:** Create GET /api/admin/reports/export route
+    - **Action:** Create `/app/api/admin/reports/export/route.ts` with GET handler
+    - **References:** ADMIN_API_CONTRACTS.md lines 2954-3039 (GET /api/admin/reports/export), ARCHITECTURE.md Section 5 (Presentation Layer)
+    - **Implementation Guide:** MUST use withAdminAuth wrapper, MUST extract preset and optional startDate/endDate from query params, MUST call reportsService.exportReportsService, MUST return binary response with Content-Type 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and Content-Disposition 'attachment; filename="{filename}"' per lines 2977-2979
+    - **Acceptance Criteria:** Route MUST return binary Excel file with correct headers per ADMIN_API_CONTRACTS.md lines 2976-2979
+
+- [ ] **Task 12.26.3:** Test reports date range presets
+    - **Action:** Create `/tests/integration/admin/reports/reports-generation.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2605-2951 (GET /api/admin/reports), AdminTesting.md SHOULD #10
+    - **Implementation Guide:** MUST test 5 cases: (1) this_month returns correct start/end dates, (2) last_month returns correct start/end dates, (3) this_quarter returns correct start/end dates, (4) last_quarter returns correct start/end dates, (5) custom with startDate/endDate works correctly
+    - **Acceptance Criteria:** All 5 preset cases MUST pass, date calculations MUST match logic per lines 2790-2828
+
+- [ ] **Task 12.26.4:** Test reports data accuracy
+    - **Action:** Add test cases to `/tests/integration/admin/reports/reports-generation.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2831-2951 (report queries), AdminTesting.md Bug #8
+    - **Implementation Guide:** MUST test 4 cases: (1) rewardsSummary counts only concluded redemptions in date range, (2) creatorActivity counts unique creators correctly, (3) totalSpent calculated correctly per reward type, (4) empty date range returns zero counts not error
+    - **Acceptance Criteria:** All 4 cases MUST pass, prevents report-inaccuracy bug (AdminTesting.md Bug #8)
+
+- [ ] **Task 12.26.5:** Test reports export
+    - **Action:** Add test cases to `/tests/integration/admin/reports/reports-generation.test.ts`
+    - **References:** ADMIN_API_CONTRACTS.md lines 2954-3039 (GET /api/admin/reports/export), AdminTesting.md SHOULD #10
+    - **Implementation Guide:** MUST test 3 cases: (1) returns binary Excel file with correct Content-Type, (2) filename matches preset pattern, (3) Excel has 2 sheets (Rewards Summary, Creator Activity)
+    - **Acceptance Criteria:** All 3 cases MUST pass, Content-Type MUST be 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 ---
 
