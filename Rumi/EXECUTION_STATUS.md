@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-29 05:25 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-29 05:50 [Update this timestamp when you modify this document]
 
 ---
 
@@ -68,11 +68,33 @@
 
 ### When Completing Current Task
 1. Mark task [x] in EXECUTION_PLAN.md
-2. Commit: "Complete: Task X.Y.Z - [description]"
-3. Add entry to "Recently Completed" in this doc
-4. Clear "What's Left" section
-5. Move to next sequential task
-6. Update "Last Updated" timestamp at top
+2. Add entry to "Recently Completed" in this doc
+3. Clear "What's Left" section
+4. Move to next sequential task
+5. Update "Last Updated" timestamp at top
+6. **ALWAYS share Acceptance Criteria Verification table** (see below)
+
+### Acceptance Criteria Verification (REQUIRED)
+After completing each task, ALWAYS share a verification table with the user:
+
+| Criteria (from EXECUTION_PLAN.md) | Implementation (file:line) | Source Doc Reference | Status |
+|-----------------------------------|---------------------------|---------------------|--------|
+| [Each acceptance criteria item]   | [Where implemented]       | [API_CONTRACTS.md line X] | ✅/❌ |
+
+**Rules:**
+- Match each criteria from EXECUTION_PLAN.md to actual implementation
+- Cross-reference with source docs (API_CONTRACTS.md, ARCHITECTURE.md, etc.)
+- **MUST mention any discrepancies:**
+  - Between EXECUTION_PLAN.md and source docs
+  - Between source docs and actual implementation
+  - Missing criteria not implemented
+  - Extra features added not in plan
+- If discrepancy found: explain what differs and why (or ask user)
+
+### When Completing a Step (all tasks in X.Y.*)
+1. Commit all step changes: "Complete: Step X.Y - [description]"
+2. Example: After Task 3.3.8, commit "Complete: Step 3.3 - Auth API routes"
+3. Do NOT commit after individual tasks - only after completing entire step
 
 ### When Considering a Change
 1. Use "Change Request Decision Tree" below
@@ -83,16 +105,31 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 3.3.6
-**Description:** Create forgot-password route
+**Task ID:** Task 3.4.1
+**Description:** Next step (check EXECUTION_PLAN.md)
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Task 3.3.6: Create forgot-password route
-- [ ] Task 3.3.7-3.3.8: Remaining auth API routes
+- [ ] Check EXECUTION_PLAN.md for Step 3.4 tasks
 
 ### Recently Completed in This Session
+- [x] Task 3.3.8: Create user-status route
+  - Created `appcode/app/api/auth/user-status/route.ts`
+  - Validates auth-token cookie, queries user recognition status
+  - Returns `{ userId, isRecognized, redirectTo, emailVerified }`
+  - Updates last_login_at AFTER checking status (preserves first-login detection)
+  - **STEP 3.3 COMPLETE**
+- [x] Task 3.3.7: Create reset-password route
+  - Created `appcode/app/api/auth/reset-password/route.ts`
+  - Validates token and password (8-128 chars), calls authService.resetPassword
+  - Returns `{ success, message }`
+  - Error codes: INVALID_TOKEN, TOKEN_EXPIRED, TOKEN_USED, WEAK_PASSWORD
+- [x] Task 3.3.6: Create forgot-password route
+  - Created `appcode/app/api/auth/forgot-password/route.ts`
+  - Accepts identifier (email OR handle), calls authService.forgotPassword
+  - Returns `{ sent, emailHint, expiresIn }` - ALWAYS 200 (anti-enumeration)
+  - Returns 429 TOO_MANY_REQUESTS for rate limit
 - [x] Task 3.3.5: Create login route
   - Created `appcode/app/api/auth/login/route.ts`
   - Validates handle format, calls authService.login
