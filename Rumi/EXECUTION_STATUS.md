@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-29 05:15 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-29 05:25 [Update this timestamp when you modify this document]
 
 ---
 
@@ -83,16 +83,22 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 3.3.5
-**Description:** Create login route
+**Task ID:** Task 3.3.6
+**Description:** Create forgot-password route
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Task 3.3.5: Create login route
-- [ ] Task 3.3.6-3.3.8: Remaining auth API routes
+- [ ] Task 3.3.6: Create forgot-password route
+- [ ] Task 3.3.7-3.3.8: Remaining auth API routes
 
 ### Recently Completed in This Session
+- [x] Task 3.3.5: Create login route
+  - Created `appcode/app/api/auth/login/route.ts`
+  - Validates handle format, calls authService.login
+  - Sets auth-token cookie (7 days), Secure + SameSite=Strict
+  - Returns `{ success, userId, sessionToken }`
+  - Logs login attempts for security auditing
 - [x] Task 3.3.4: Create resend-otp route
   - Created `appcode/app/api/auth/resend-otp/route.ts`
   - Gets otp_session cookie, calls authService.resendOTP
