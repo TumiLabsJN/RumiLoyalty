@@ -417,34 +417,34 @@
     - **References:** Loyalty.md Pattern 9 (Sensitive Data Encryption)
     - **Acceptance Criteria:** Encrypt/decrypt functions work, use ENCRYPTION_KEY from env
 
-- [ ] **Task 2.3.3:** Create data transformation utility
+- [x] **Task 2.3.3:** Create data transformation utility
     - **Action:** Create `/lib/utils/transformers.ts` with functions for snake_case → camelCase conversion and special case transformations
     - **References:** ARCHITECTURE.md Section 7 (Data Transformation Conventions, lines 954-1024), API_CONTRACTS.md (all response schemas)
     - **Implementation Guide:** Include `transformToCamelCase()` for general field name conversion, `transformDurationMinutesToDays()` for discount duration fields, `transformNestedJson()` for JSONB columns, ensure encrypted fields are handled per lines 1008-1017
     - **Acceptance Criteria:** MUST transform all snake_case database fields to camelCase for API responses, MUST handle special cases (duration_minutes → durationDays, nested JSON keys, encrypted fields), follows Section 7 transformation patterns
 
-- [ ] **Task 2.3.4:** Add transformation tests
+- [x] **Task 2.3.4:** Add transformation tests
     - **Action:** Create `/tests/unit/utils/transformers.test.ts` with test cases for all transformation patterns
     - **References:** ARCHITECTURE.md Section 7 (lines 960-1017 for transformation examples)
     - **Acceptance Criteria:** Tests cover snake_case → camelCase conversion, discount duration transformation (10080 minutes → 7 days), nested JSON transformations, encrypted field handling
 
-- [ ] **Task 2.3.5:** Create validation utility
+- [x] **Task 2.3.5:** Create validation utility
     - **Action:** Create `/lib/utils/validation.ts` with Zod schemas for common validations
     - **References:** API_CONTRACTS.md (request schemas)
     - **Acceptance Criteria:** Schemas for email, handle, UUID formats
 
-- [ ] **Task 2.3.6:** Create error handling utility
+- [x] **Task 2.3.6:** Create error handling utility
     - **Action:** Create `/lib/utils/errors.ts` with AppError class and error response formatter
     - **References:** API_CONTRACTS.md (error responses)
     - **Acceptance Criteria:** Standard error format matching API contracts
 
-- [ ] **Task 2.3.7:** Create Google Calendar utility file
+- [x] **Task 2.3.7:** Create Google Calendar utility file
     - **Action:** Create `/lib/utils/googleCalendar.ts` with calendar event creation functions
     - **References:** Loyalty.md lines 1987-2089 (Google Calendar Integration), googleapis npm package
     - **Implementation Guide:** (1) Initialize Google Calendar API client using service account credentials from GOOGLE_CALENDAR_CREDENTIALS env var, (2) Export createCalendarEvent function accepting: title, description, dueDateTime, reminderMinutes (optional), (3) Export deleteCalendarEvent function accepting eventId, (4) Export markEventCompleted function accepting eventId, (5) Use admin calendar ID from GOOGLE_CALENDAR_ID env var, (6) Handle API errors gracefully (log but don't fail parent operation)
     - **Acceptance Criteria:** File exports createCalendarEvent, deleteCalendarEvent, markEventCompleted functions, uses googleapis package, reads credentials from environment variables, includes error handling that doesn't break calling code
 
-- [ ] **Task 2.3.8:** Add Google Calendar environment variables
+- [x] **Task 2.3.8:** Add Google Calendar environment variables
     - **Action:** Add GOOGLE_CALENDAR_CREDENTIALS (service account JSON) and GOOGLE_CALENDAR_ID (admin calendar ID) to `.env.example` and document setup
     - **References:** Loyalty.md lines 1987-2089 (Google Calendar Integration)
     - **Acceptance Criteria:** Environment variables documented, .env.example updated, README includes Google Calendar setup instructions
@@ -456,106 +456,106 @@
 **Objective:** Implement complete auth flow with multi-tenant isolation.
 
 ## Step 3.1: Auth Repositories
-- [ ] **Task 3.1.1:** Create user repository file
+- [x] **Task 3.1.1:** Create user repository file
     - **Action:** Create `/lib/repositories/userRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938 for file naming)
     - **Acceptance Criteria:** File exists with repository object pattern matching Section 5 examples
 
-- [ ] **Task 3.1.2:** Implement findByHandle function
+- [x] **Task 3.1.2:** Implement findByHandle function
     - **Action:** Add function with signature `findByHandle(clientId: string, handle: string)`
     - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 8 (Multi-Tenant Query Isolation), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** Query MUST filter by client_id AND tiktok_handle, follows tenant isolation rules from Section 9
 
-- [ ] **Task 3.1.3:** Implement findByEmail function
+- [x] **Task 3.1.3:** Implement findByEmail function
     - **Action:** Add function with signature `findByEmail(clientId: string, email: string)`
     - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** MUST decrypt encrypted_email for comparison (Section 9 checklist item 6), MUST filter by client_id (Section 9 Critical Rule #1)
 
-- [ ] **Task 3.1.4:** Implement create function
+- [x] **Task 3.1.4:** Implement create function
     - **Action:** Add function to insert new user with encrypted fields
     - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** MUST encrypt email/phone before INSERT (Section 9 checklist item 6), MUST validate client_id is provided (Section 9 Critical Rule #2), return created user
 
-- [ ] **Task 3.1.5:** Implement updateLastLogin function
+- [x] **Task 3.1.5:** Implement updateLastLogin function
     - **Action:** Add function to update last_login_at timestamp for user
     - **References:** SchemaFinalv2.md (users table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** MUST filter by client_id AND user_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5)
 
-- [ ] **Task 3.1.6:** Create OTP repository file
+- [x] **Task 3.1.6:** Create OTP repository file
     - **Action:** Create `/lib/repositories/otpRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 3.1.7:** Implement OTP CRUD functions
+- [x] **Task 3.1.7:** Implement OTP CRUD functions
     - **Action:** Add create, findValidBySessionId, markUsed, incrementAttempts, deleteExpired functions for otp_codes table
     - **References:** SchemaFinalv2.md lines 158-184 (otp_codes table), API_CONTRACTS.md lines 520-605 (OTP verification flow), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** MUST query by session_id (unique identifier from HTTP-only cookie), MUST check expires_at < NOW() for expiration, MUST check used = false for single-use, MUST check attempts < 3 for rate limiting, UPDATE operations MUST verify count > 0 (Section 9 checklist item 4)
 
-- [ ] **Task 3.1.8:** Create client repository file
+- [x] **Task 3.1.8:** Create client repository file
     - **Action:** Create `/lib/repositories/clientRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 3.1.9:** Implement findById function
+- [x] **Task 3.1.9:** Implement findById function
     - **Action:** Add function to fetch client by UUID
     - **References:** SchemaFinalv2.md (clients table)
     - **Acceptance Criteria:** Queries clients table (no client_id filter needed - this IS the tenant table per Section 9 exception), returns client or null
 
 ## Step 3.2: Auth Services
-- [ ] **Task 3.2.1:** Create auth service file
+- [x] **Task 3.2.1:** Create auth service file
     - **Action:** Create `/lib/services/authService.ts`
     - **References:** ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943 for function naming)
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns (orchestrates repositories, implements business rules, no direct DB access)
 
-- [ ] **Task 3.2.2:** Implement checkHandle function
+- [x] **Task 3.2.2:** Implement checkHandle function
     - **Action:** Add function calling userRepository.findByHandle
     - **References:** API_CONTRACTS.md /auth/check-handle, Loyalty.md Flow 3
     - **Acceptance Criteria:** Returns { available: boolean }
 
-- [ ] **Task 3.2.3:** Implement initiateSignup function
+- [x] **Task 3.2.3:** Implement initiateSignup function
     - **Action:** Add function with transaction for user creation + OTP generation
     - **References:** Loyalty.md Flow 3 (Signup), Pattern 1 (Transactional Workflows)
     - **Acceptance Criteria:** MUST use transaction, check handle uniqueness, send OTP via Resend
 
-- [ ] **Task 3.2.4:** Implement verifyOTP function
+- [x] **Task 3.2.4:** Implement verifyOTP function
     - **Action:** Add function to validate OTP and create session
     - **References:** Loyalty.md Flow 4 (OTP Verification), Pattern 2 (Idempotent Operations)
     - **Acceptance Criteria:** MUST mark OTP as used, create Supabase session, update last_login_at
 
-- [ ] **Task 3.2.5:** Implement resendOTP function
+- [x] **Task 3.2.5:** Implement resendOTP function
     - **Action:** Add function to generate new OTP
     - **References:** Loyalty.md Flow 4, Pattern 2
     - **Acceptance Criteria:** MUST be idempotent (rate limit), invalidate previous OTPs
 
-- [ ] **Task 3.2.6:** Implement login function
+- [x] **Task 3.2.6:** Implement login function
     - **Action:** Add function for existing user login
-    - **References:** Loyalty.md Flow 5 (Login), API_CONTRACTS.md /auth/login
-    - **Acceptance Criteria:** Validate credentials, generate OTP, send email
+    - **References:** Loyalty.md Flow 4 (Returning User Login), API_CONTRACTS.md /auth/login (lines 948-1108)
+    - **Acceptance Criteria:** Verify password via Supabase Auth signInWithPassword(), check email_verified, update last_login_at
 
-- [ ] **Task 3.2.7:** Implement forgotPassword function
+- [x] **Task 3.2.7:** Implement forgotPassword function
     - **Action:** Add function to initiate password reset
-    - **References:** Loyalty.md Flow 6 (Password Reset)
-    - **Acceptance Criteria:** Generate reset token, send email
+    - **References:** Loyalty.md Flow 5 (Password Reset), API_CONTRACTS.md lines 1464-1613
+    - **Acceptance Criteria:** Generate reset token, send email, anti-enumeration (always return success)
 
-- [ ] **Task 3.2.8:** Implement resetPassword function
+- [x] **Task 3.2.8:** Implement resetPassword function
     - **Action:** Add function to complete password reset
-    - **References:** Loyalty.md Flow 6
-    - **Acceptance Criteria:** Validate token, update password, invalidate token
+    - **References:** API_CONTRACTS.md lines 1623-1768
+    - **Acceptance Criteria:** Validate token (bcrypt compare), update password via Supabase Auth, invalidate token
 
 ## Step 3.3: Auth API Routes
-- [ ] **Task 3.3.1:** Create check-handle route
+- [x] **Task 3.3.1:** Create check-handle route
     - **Action:** Create `/app/api/auth/check-handle/route.ts` with POST handler
     - **References:** API_CONTRACTS.md lines 34-184 (POST /api/auth/check-handle), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST implement 3-scenario routing logic (lines 104-137): (A) exists+email→login, (B) exists+no email→signup, (C) not found→signup. Normalize handle with @ prefix (line 108-111). Validate handle regex `^[a-zA-Z0-9_.]{1,30}$` (line 168). Return errors: HANDLE_REQUIRED, INVALID_HANDLE, HANDLE_TOO_LONG (lines 142-164)
     - **Acceptance Criteria:** MUST return `{ exists: boolean, has_email: boolean, route: 'signup'|'login', handle: string }` per lines 56-62, implements all 3 routing scenarios per lines 123-136, validates handle format per Section 10.3 line 168, returns 200 for valid requests or 400 for validation errors, follows route pattern from Section 5
 
-- [ ] **Task 3.3.2:** Create signup route
+- [x] **Task 3.3.2:** Create signup route
     - **Action:** Create `/app/api/auth/signup/route.ts` with POST handler
     - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.4 (Validation Checklist Template, lines 1396-1401)
     - **Implementation Guide:** MUST implement 8-step workflow (lines 247-356): (1) validate input (email format line 252, password 8-128 chars lines 257-262, agreedToTerms line 265), (2) check existing email line 271-276, (3) hash password with bcrypt rounds=10 line 281, (4) create user with client_id + default tier 'tier_1' + terms version '2025-01-18' lines 286-308, (5) generate 6-digit OTP line 312-315, (6) store OTP in otp_codes table expires 5 min lines 319-336, (7) send OTP email via Resend lines 340-346, (8) set HTTP-only cookie lines 350-355. Return errors: EMAIL_ALREADY_EXISTS, INVALID_EMAIL, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, TERMS_NOT_ACCEPTED, OTP_SEND_FAILED (lines 360-406)
     - **Acceptance Criteria:** MUST return `{ success: boolean, otpSent: boolean, sessionId: string, userId: string }` per lines 214-219, implements all 8 steps of signup workflow per lines 247-356, validates per Section 10.4 checklist, hashes password with bcrypt rounds=10 (line 281), stores hashed OTP in otp_codes table (line 319-336), sends email via Resend (line 340-346), sets HTTP-only secure cookie with Max-Age=300 (line 353), returns 201 for success or 400/500 for errors, follows route pattern from Section 5
 
-- [ ] **Task 3.3.3:** Create verify-otp route
+- [x] **Task 3.3.3:** Create verify-otp route
     - **Action:** Create `/app/api/auth/verify-otp/route.ts` with POST handler
     - **References:** API_CONTRACTS.md lines 442-722 (POST /api/auth/verify-otp), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST implement 11-step workflow (lines 495-634): (1) get session ID from otp_session HTTP-only cookie line 498-503, (2) validate code format 6 digits line 508-511, (3) query OTP record by session_id + used=false lines 515-527, (4) check OTP exists and not used lines 530-543, (5) check expiration 5 minutes lines 547-553, (6) check max 3 attempts lines 557-570, (7) verify OTP with bcrypt compare lines 574-596 incrementing attempts on failure, (8) mark OTP as used lines 600-603, (9) update users.email_verified=true lines 607-611, (10) create authenticated session with Supabase Auth lines 614-621, (11) set auth_token cookie Max-Age=2592000 (30 days) and clear otp_session cookie lines 625-633. Return errors: INVALID_CODE_FORMAT, INVALID_OTP (with attemptsRemaining), OTP_EXPIRED, OTP_ALREADY_USED, MAX_ATTEMPTS_EXCEEDED, SESSION_NOT_FOUND, INVALID_SESSION (lines 638-693)

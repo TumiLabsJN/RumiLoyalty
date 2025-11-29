@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-28 22:25 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-29 05:00 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 2.3.3 - Create data transformation utility**
+1. Current task: **Task 3.3.1 - Create check-handle route**
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
@@ -18,7 +18,7 @@
 8. Admin client: `appcode/lib/supabase/admin-client.ts` - **CREATED (bypasses RLS, cron/admin only)**
 9. **CRITICAL:** Read "Decision Authority" section in EXECUTION_PLAN.md - do NOT make architectural decisions not in source docs. If ambiguous, ASK USER.
 10. Schema uses **VARCHAR(50) with CHECK constraints**, NOT PostgreSQL ENUMs.
-11. **Phase 1 COMPLETE.** Phase 2 in progress.
+11. **Phase 1 & 2 COMPLETE.** Phase 3 in progress.
 
 ### Credentials (stored in .env.local)
 - `SUPABASE_URL`: https://vyvkvlhzzglfklrwzcby.supabase.co
@@ -83,22 +83,95 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 2.3.3
-**Description:** Create data transformation utility
+**Task ID:** Task 3.3.4
+**Description:** Create resend-otp route
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Read EXECUTION_PLAN.md Task 2.3.3 for requirements
-- [ ] Create `appcode/lib/utils/transformers.ts` with snake_case → camelCase conversion
-- [ ] Handle special cases: duration_minutes → durationDays, nested JSON, encrypted fields
+- [ ] Task 3.3.4: Create resend-otp route
+- [ ] Task 3.3.5-3.3.8: Remaining auth API routes
+
+### Recently Completed in This Session
+- [x] Task 3.3.3: Create verify-otp route
+  - Created `appcode/app/api/auth/verify-otp/route.ts`
+  - Gets otp_session cookie, validates 6-digit code, calls authService.verifyOTP
+  - Sets auth-token cookie (30 days), clears otp_session cookie
+  - Returns `{ success, verified, userId, sessionToken }`
+- [x] Task 3.3.2: Create signup route
+  - Created `appcode/app/api/auth/signup/route.ts`
+  - Validates email, password (8-128 chars), agreedToTerms
+  - Calls authService.initiateSignup, sets otp_session HTTP-only cookie (Max-Age=300)
+  - Returns `{ success, otpSent, sessionId, userId, message, email }` with 201 status
+  - Fixed: Added userId to SignupResult interface and route response
+- [x] Task 3.3.1: Create check-handle route
+  - Created `appcode/app/api/auth/check-handle/route.ts`
+  - Validates handle format (regex, length), calls authService.checkHandle
+  - Returns `{ exists, has_email, route, handle }` per API_CONTRACTS.md
+- [x] Task 3.2.8: Implement resetPassword function
+  - 6-step workflow: find token by bcrypt compare, validate, update password via Supabase Auth admin API
+- [x] Task 3.2.7: Implement forgotPassword function
+  - 6-step workflow: lookup user by email/handle, anti-enumeration, rate limit (3/hour), generate token
+- [x] Task 3.2.6: Implement login function
+  - 5-step workflow: find user by handle, verify password via Supabase Auth, check email_verified
+- [x] Task 3.2.5: Implement resendOTP function
+  - 10-step workflow: query OTP, rate limit (30s), invalidate old OTP, generate new OTP
 
 ### Next Action
-Read EXECUTION_PLAN.md Task 2.3.3 and ARCHITECTURE.md Section 7
+Create verify-otp API route
 
 ---
 
 ## ✅ RECENTLY COMPLETED (Last 10 Tasks)
+- [x] **Tasks 3.2.1-3.2.3** - Auth service (Completed: 2025-11-29 01:00)
+  - Created appcode/lib/services/authService.ts
+  - checkHandle: 3-scenario routing per API_CONTRACTS.md
+  - initiateSignup: 8-step workflow with rollback, bcrypt rounds=10
+- [x] **Tasks 3.1.8-3.1.9** - Client repository (Completed: 2025-11-29 00:35)
+  - Created appcode/lib/repositories/clientRepository.ts
+  - Functions: findById, findBySubdomain
+- [x] **Tasks 3.1.6-3.1.7** - OTP repository (Completed: 2025-11-29 00:30)
+  - Created appcode/lib/repositories/otpRepository.ts
+  - Functions: create, findValidBySessionId, markUsed, incrementAttempts, deleteExpired
+- [x] **Tasks 3.1.1-3.1.5** - User repository (Completed: 2025-11-29 00:10)
+  - Created appcode/lib/repositories/userRepository.ts
+  - All functions enforce tenant isolation (client_id filtering)
+- [x] **Task 2.3.8** - Add Google Calendar env vars (Completed: 2025-11-28 23:45)
+  - Created appcode/.env.example with all env vars documented
+  - Added GOOGLE_CALENDAR_CREDENTIALS and GOOGLE_CALENDAR_ID placeholders to .env.local
+  - Created docs/GOOGLE_CALENDAR_SETUP.md with full setup guide
+- [x] **Task 2.3.7** - Create Google Calendar utility (Completed: 2025-11-28 23:35)
+  - Created appcode/lib/utils/googleCalendar.ts
+  - createCalendarEvent, deleteCalendarEvent, markEventCompleted
+  - Helper functions for each event type (instant reward, physical gift, discount, payout, raffle)
+  - Non-blocking error handling (logs but doesn't throw)
+  - Service account authentication with GOOGLE_CALENDAR_CREDENTIALS
+- [x] **Task 2.3.6** - Create error handling utility (Completed: 2025-11-28 23:25)
+  - Created appcode/lib/utils/errors.ts
+  - AppError class with code, statusCode, details
+  - Specialized classes: UnauthorizedError, ForbiddenError, NotFoundError, ValidationError, BusinessError, InternalError
+  - formatErrorResponse() for API routes
+  - Error factory functions matching API_CONTRACTS.md error responses
+  - Type guards: isAppError, isErrorCode
+- [x] **Task 2.3.5** - Create validation utility (Completed: 2025-11-28 23:15)
+  - Created appcode/lib/utils/validation.ts (380 lines)
+  - Zod schemas: email, handle, uuid, password, OTP, pagination
+  - All API request body schemas from API_CONTRACTS.md
+  - Helper functions: safeParse, parse, getValidationErrors, isValidUuid, isValidEmail, isValidHandle
+  - Type exports for all schemas
+- [x] **Task 2.3.4** - Add transformation tests (Completed: 2025-11-28 23:00)
+  - Created tests/unit/utils/transformers.test.ts (centralized location)
+  - Installed Jest + ts-jest in appcode
+  - Added npm test/test:watch/test:coverage scripts
+  - 41 tests covering all transformation patterns
+  - All tests pass
+- [x] **Task 2.3.3** - Create data transformation utility (Completed: 2025-11-28 22:45)
+  - Created appcode/lib/utils/transformers.ts
+  - snakeToCamel/camelToSnake string conversion
+  - transformToCamelCase/transformToSnakeCase for objects
+  - transformDurationMinutesToDays (÷1440) and reverse
+  - transformValueData for JSONB with special duration handling
+  - transformDatabaseRow/transformDatabaseRows for full row transformation
 - [x] **Task 2.3.2** - Create encryption utility (Completed: 2025-11-28 22:25)
   - Created appcode/lib/utils/encryption.ts
   - AES-256-GCM encryption/decryption
@@ -211,12 +284,23 @@ See full workflow in previous version of this document.
 - [x] Task 2.2.2: Create admin client
 - [x] Task 2.3.1: Create auth utility
 - [x] Task 2.3.2: Create encryption utility
-- [ ] Task 2.3.3: Create data transformation utility ← **CURRENT**
-- [ ] Task 2.3.4: Add transformation tests
-- [ ] Task 2.3.5: Create validation utility
-- [ ] Task 2.3.6: Create error handling utility
-- [ ] Task 2.3.7: Create Google Calendar utility
-- [ ] Task 2.3.8: Add Google Calendar env vars
+- [x] Task 2.3.3: Create data transformation utility
+- [x] Task 2.3.4: Add transformation tests
+- [x] Task 2.3.5: Create validation utility
+- [x] Task 2.3.6: Create error handling utility
+- [x] Task 2.3.7: Create Google Calendar utility
+- [x] Task 2.3.8: Add Google Calendar env vars - PHASE 2 COMPLETE
+- [x] Task 3.1.1-3.1.5: User repository (all functions)
+- [x] Task 3.1.6-3.1.7: OTP repository (all functions)
+- [x] Task 3.1.8-3.1.9: Client repository (all functions) - **STEP 3.1 COMPLETE**
+- [x] Task 3.2.1: Create auth service file
+- [x] Task 3.2.2: Implement checkHandle function
+- [x] Task 3.2.3: Implement initiateSignup function
+- [x] Task 3.2.4: Implement verifyOTP function
+- [x] Task 3.2.5: Implement resendOTP function
+- [x] Task 3.2.6: Implement login function
+- [x] Task 3.2.7: Implement forgotPassword function
+- [x] Task 3.2.8: Implement resetPassword function - **STEP 3.2 COMPLETE**
 
 ---
 
