@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-29 05:00 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-11-29 05:15 [Update this timestamp when you modify this document]
 
 ---
 
@@ -83,16 +83,22 @@
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 3.3.4
-**Description:** Create resend-otp route
+**Task ID:** Task 3.3.5
+**Description:** Create login route
 **Status:** [ ] Not Started
 **Started:** -
 
 ### What's Left
-- [ ] Task 3.3.4: Create resend-otp route
-- [ ] Task 3.3.5-3.3.8: Remaining auth API routes
+- [ ] Task 3.3.5: Create login route
+- [ ] Task 3.3.6-3.3.8: Remaining auth API routes
 
 ### Recently Completed in This Session
+- [x] Task 3.3.4: Create resend-otp route
+  - Created `appcode/app/api/auth/resend-otp/route.ts`
+  - Gets otp_session cookie, calls authService.resendOTP
+  - Fixed OTP expiry from 10 to 5 minutes per API_CONTRACTS.md
+  - Returns `{ success, sent, expiresAt, remainingSeconds }`
+  - Returns 429 for RESEND_TOO_SOON
 - [x] Task 3.3.3: Create verify-otp route
   - Created `appcode/app/api/auth/verify-otp/route.ts`
   - Gets otp_session cookie, validates 6-digit code, calls authService.verifyOTP
