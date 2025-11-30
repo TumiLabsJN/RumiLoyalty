@@ -11,17 +11,17 @@
 
 **Steps Documented:**
 - Step 3.2 - Authentication Services ✅
-- Step 3.1 - Authentication Repositories (pending)
+- Step 3.1 - Authentication Repositories ✅
 - Step 3.3 - Authentication API Routes (pending)
 
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
 | `appcode/lib/services/authService.ts` | 789 | Business logic for all auth workflows |
-| `appcode/lib/repositories/userRepository.ts` | TBD | User CRUD with tenant isolation |
-| `appcode/lib/repositories/otpRepository.ts` | TBD | OTP verification management |
-| `appcode/lib/repositories/clientRepository.ts` | TBD | Client/tenant queries |
-| `appcode/lib/repositories/passwordResetRepository.ts` | TBD | Password reset token management |
+| `appcode/lib/repositories/userRepository.ts` | 358 | User CRUD with tenant isolation (RPC) |
+| `appcode/lib/repositories/otpRepository.ts` | 271 | OTP verification management (RPC, USING(false)) |
+| `appcode/lib/repositories/clientRepository.ts` | 134 | Client/tenant queries (RPC) |
+| `appcode/lib/repositories/passwordResetRepository.ts` | 262 | Password reset token management (RPC, USING(false)) |
 
 **Database Tables Used:**
 - `users` (SchemaFinalv2.md:131-170)
@@ -31,7 +31,7 @@
 
 **Quick Navigation:**
 - [Service Functions](#service-functions) - All 7 auth service functions
-- [Database Queries](#database-queries) - Repository queries (TBD Step 3.1)
+- [Database Queries](#database-queries) - Repository layer functions with RPC
 - [API Endpoints](#api-endpoints) - Routes (TBD Step 3.3)
 - [Error Handling](#error-handling) - Error codes and flows
 - [Security Context](#security-context) - Auth patterns and RLS
@@ -856,6 +856,1011 @@ async resetPassword(token: string, newPassword: string): Promise<ResetPasswordRe
 - Can't query by token directly
 - Must compare plaintext token against all hashes
 - Performance: Typically <10 valid tokens per user at any time
+
+---
+
+## Database Queries
+
+**Purpose:** Repository layer functions for database access with tenant isolation
+
+**Security Model:**
+- User, OTP, Client, Password Reset repositories use **RPC functions with SECURITY DEFINER** to bypass RLS for unauthenticated auth routes
+- `otps` and `password_reset_tokens` tables have `USING(false)` RLS policies - all access via RPC only
+- `users` table uses RPC for auth operations (unauthenticated routes)
+- `clients` table is the tenant root - no client_id filter needed
+- Cleanup operations (deleteExpired) use admin client directly
+
+---
+
+### userRepository
+
+**File:** `appcode/lib/repositories/userRepository.ts` (358 lines)
+
+**Purpose:** User CRUD operations with tenant isolation
+
+**All queries use RPC functions to bypass RLS for unauthenticated auth routes** (see ARCHITECTURE.md Section 12)
+
+#### findByHandle()
+
+**Location:** `userRepository.ts:98-118`
+
+**Signature:**
+```typescript
+async findByHandle(clientId: string, handle: string): Promise<UserData | null>
+```
+
+**Implementation:**
+```typescript
+async findByHandle(clientId: string, handle: string): Promise<UserData | null> {
+  const supabase = createAdminClient();
+
+  // Normalize handle (remove @ if present)
+  const normalizedHandle = handle.startsWith('@') ? handle.slice(1) : handle;
+
+  const { data, error } = await supabase.rpc('auth_find_user_by_handle', {
+    p_client_id: clientId,
+    p_handle: normalizedHandle,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return mapRpcResultToUserData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_user_by_handle(p_client_id, p_handle)`
+- **Tenant Isolation:** RPC enforces `client_id` filter internally
+- **Returns:** Array (access via `data[0]`) or empty array if not found
+- **Normalization:** Removes `@` prefix before query (line 102)
+
+---
+
+#### findByEmail()
+
+**Location:** `userRepository.ts:129-149`
+
+**Signature:**
+```typescript
+async findByEmail(clientId: string, email: string): Promise<UserData | null>
+```
+
+**Implementation:**
+```typescript
+async findByEmail(clientId: string, email: string): Promise<UserData | null> {
+  const supabase = createAdminClient();
+
+  // Normalize email (lowercase)
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const { data, error } = await supabase.rpc('auth_find_user_by_email', {
+    p_client_id: clientId,
+    p_email: normalizedEmail,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return mapRpcResultToUserData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_user_by_email(p_client_id, p_email)`
+- **Tenant Isolation:** RPC enforces `client_id` filter internally
+- **Returns:** Array (access via `data[0]`) or empty array if not found
+- **Normalization:** Lowercase + trim (line 133)
+
+---
+
+#### findByAuthId()
+
+**Location:** `userRepository.ts:159-175`
+
+**Signature:**
+```typescript
+async findByAuthId(authId: string): Promise<UserData | null>
+```
+
+**Implementation:**
+```typescript
+async findByAuthId(authId: string): Promise<UserData | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_find_user_by_id', {
+    p_user_id: authId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return mapRpcResultToUserData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_user_by_id(p_user_id)`
+- **Tenant Isolation:** Not needed - query by globally unique Supabase Auth ID
+- **Returns:** Array (access via `data[0]`) or empty array if not found
+- **Used by:** Authenticated routes to fetch current user data
+
+---
+
+#### create()
+
+**Location:** `userRepository.ts:185-232`
+
+**Signature:**
+```typescript
+async create(userData: {
+  id: string;
+  clientId: string;
+  tiktokHandle: string;
+  email: string;
+  passwordHash: string;
+  termsVersion?: string;
+}): Promise<UserData>
+```
+
+**Implementation:**
+```typescript
+async create(userData: {
+  id: string;
+  clientId: string;
+  tiktokHandle: string;
+  email: string;
+  passwordHash: string;
+  termsVersion?: string;
+}): Promise<UserData> {
+  const supabase = createAdminClient();
+
+  // Validate client_id is provided (Section 9 Critical Rule #2)
+  if (!userData.clientId) {
+    throw new Error('client_id is required for user creation');
+  }
+
+  const { data, error } = await supabase.rpc('auth_create_user', {
+    p_id: userData.id,
+    p_client_id: userData.clientId,
+    p_tiktok_handle: userData.tiktokHandle,
+    p_email: userData.email.toLowerCase().trim(),
+    p_password_hash: userData.passwordHash,
+    p_terms_version: userData.termsVersion,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Failed to create user');
+  }
+
+  return mapRpcResultToUserData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_create_user(p_id, p_client_id, p_tiktok_handle, p_email, p_password_hash, p_terms_version)`
+- **Tenant Isolation:** `client_id` required parameter (validated line 196)
+- **Returns:** Array with created user (access via `data[0]`)
+- **Security:** NO `is_admin` parameter allowed (prevents privilege escalation)
+- **Fields Set:**
+  - `current_tier`: 'tier_1' (default)
+  - `email_verified`: false (requires OTP verification)
+  - `created_at`: NOW()
+
+---
+
+#### updateLastLogin()
+
+**Location:** `userRepository.ts:242-252`
+
+**Signature:**
+```typescript
+async updateLastLogin(clientId: string, userId: string): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async updateLastLogin(clientId: string, userId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.rpc('auth_update_last_login', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_update_last_login(p_user_id)`
+- **Tenant Isolation:** Not needed - userId is globally unique
+- **Updates:** `last_login_at = NOW()`
+- **Security:** SECURITY DEFINER bypasses RLS
+
+---
+
+#### markEmailVerified()
+
+**Location:** `userRepository.ts:262-272`
+
+**Signature:**
+```typescript
+async markEmailVerified(clientId: string, userId: string): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async markEmailVerified(clientId: string, userId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.rpc('auth_mark_email_verified', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_mark_email_verified(p_user_id)`
+- **Tenant Isolation:** Not needed - userId is globally unique
+- **Updates:** `email_verified = true`
+- **Called by:** verifyOTP after successful OTP verification
+
+---
+
+#### updateTermsAcceptance()
+
+**Location:** `userRepository.ts:285-305`
+
+**Signature:**
+```typescript
+async updateTermsAcceptance(
+  clientId: string,
+  userId: string,
+  termsVersion: string
+): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async updateTermsAcceptance(
+  clientId: string,
+  userId: string,
+  termsVersion: string
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error, count } = await supabase
+    .from('users')
+    .update({
+      terms_accepted_at: new Date().toISOString(),
+      terms_version: termsVersion,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .eq('client_id', clientId); // TENANT ISOLATION
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **NOT converted to RPC** - Terms captured at signup via `auth_create_user`
+- **Used for:** Updating terms AFTER signup
+- **Tenant Isolation:** `.eq('client_id', clientId)` (line 300)
+- **Uses:** Server client (respects RLS)
+- **Updates:** `terms_accepted_at`, `terms_version`, `updated_at`
+
+---
+
+#### handleExists()
+
+**Location:** `userRepository.ts:316-331`
+
+**Signature:**
+```typescript
+async handleExists(clientId: string, handle: string): Promise<boolean>
+```
+
+**Implementation:**
+```typescript
+async handleExists(clientId: string, handle: string): Promise<boolean> {
+  const supabase = createAdminClient();
+
+  const normalizedHandle = handle.startsWith('@') ? handle.slice(1) : handle;
+
+  const { data, error } = await supabase.rpc('auth_handle_exists', {
+    p_client_id: clientId,
+    p_handle: normalizedHandle,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? false;
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_handle_exists(p_client_id, p_handle)`
+- **Tenant Isolation:** RPC enforces `client_id` filter internally
+- **Returns:** Boolean (true if handle exists in tenant)
+
+---
+
+#### emailExists()
+
+**Location:** `userRepository.ts:342-357`
+
+**Signature:**
+```typescript
+async emailExists(clientId: string, email: string): Promise<boolean>
+```
+
+**Implementation:**
+```typescript
+async emailExists(clientId: string, email: string): Promise<boolean> {
+  const supabase = createAdminClient();
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const { data, error } = await supabase.rpc('auth_email_exists', {
+    p_client_id: clientId,
+    p_email: normalizedEmail,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? false;
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_email_exists(p_client_id, p_email)`
+- **Tenant Isolation:** RPC enforces `client_id` filter internally
+- **Returns:** Boolean (true if email exists in tenant)
+
+---
+
+### otpRepository
+
+**File:** `appcode/lib/repositories/otpRepository.ts` (271 lines)
+
+**Purpose:** OTP code management for email verification
+
+**Security:** Table has `USING(false)` RLS policy - all access via RPC functions (see ARCHITECTURE.md Section 12)
+
+**Validity Checks:** Performed in application code after RPC fetch (expiration, attempts, used status)
+
+#### create()
+
+**Location:** `otpRepository.ts:66-100`
+
+**Signature:**
+```typescript
+async create(otpData: {
+  userId?: string | null;
+  sessionId: string;
+  codeHash: string;
+  expiresAt: Date;
+}): Promise<OtpData>
+```
+
+**Implementation:**
+```typescript
+async create(otpData: {
+  userId?: string | null;
+  sessionId: string;
+  codeHash: string;
+  expiresAt: Date;
+}): Promise<OtpData> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_create_otp', {
+    p_user_id: otpData.userId ?? '',
+    p_session_id: otpData.sessionId,
+    p_code_hash: otpData.codeHash,
+    p_expires_at: otpData.expiresAt.toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error('Failed to create OTP');
+  }
+
+  // RPC returns just the ID, construct full OtpData
+  return {
+    id: data,
+    userId: otpData.userId ?? null,
+    sessionId: otpData.sessionId,
+    codeHash: otpData.codeHash,
+    expiresAt: otpData.expiresAt.toISOString(),
+    attempts: 0,
+    used: false,
+    createdAt: new Date().toISOString(),
+  };
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_create_otp(p_user_id, p_session_id, p_code_hash, p_expires_at)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** UUID string (OTP ID only, not full row)
+- **Expiration:** Set by caller (typically 5 minutes)
+- **Hash:** Code stored as bcrypt hash, not plaintext
+
+---
+
+#### findBySessionId()
+
+**Location:** `otpRepository.ts:110-126`
+
+**Signature:**
+```typescript
+async findBySessionId(sessionId: string): Promise<OtpData | null>
+```
+
+**Implementation:**
+```typescript
+async findBySessionId(sessionId: string): Promise<OtpData | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_find_otp_by_session', {
+    p_session_id: sessionId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return mapRpcResultToOtpData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_otp_by_session(p_session_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** Array (access via `data[0]`) or empty array if not found
+- **NO validity checks** - fetches OTP regardless of expiration/used/attempts
+
+---
+
+#### findValidBySessionId()
+
+**Location:** `otpRepository.ts:136-152`
+
+**Signature:**
+```typescript
+async findValidBySessionId(sessionId: string): Promise<OtpData | null>
+```
+
+**Implementation:**
+```typescript
+async findValidBySessionId(sessionId: string): Promise<OtpData | null> {
+  const otp = await this.findBySessionId(sessionId);
+
+  if (!otp) {
+    return null;
+  }
+
+  // Check validity in application code
+  const now = new Date();
+  const expiresAt = new Date(otp.expiresAt);
+
+  if (otp.used || otp.attempts >= 3 || expiresAt <= now) {
+    return null;
+  }
+
+  return otp;
+}
+```
+
+**Query Details:**
+- **Uses:** `findBySessionId()` then validates in app code
+- **Validity Checks (lines 144-147):**
+  - Not used (`otp.used === false`)
+  - Attempts < 3 (`otp.attempts < 3`)
+  - Not expired (`expiresAt > now`)
+- **Returns:** `null` if any check fails
+
+---
+
+#### markUsed()
+
+**Location:** `otpRepository.ts:161-171`
+
+**Signature:**
+```typescript
+async markUsed(sessionId: string): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async markUsed(sessionId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.rpc('auth_mark_otp_used', {
+    p_session_id: sessionId,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_mark_otp_used(p_session_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Updates:** `used = true` (one-time use enforcement)
+
+---
+
+#### incrementAttempts()
+
+**Location:** `otpRepository.ts:182-194`
+
+**Signature:**
+```typescript
+async incrementAttempts(sessionId: string): Promise<number>
+```
+
+**Implementation:**
+```typescript
+async incrementAttempts(sessionId: string): Promise<number> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_increment_otp_attempts', {
+    p_session_id: sessionId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? 0;
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_increment_otp_attempts(p_session_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** New attempt count (used to show "X attempts remaining")
+- **Max Attempts:** 3 (enforced in application code)
+
+---
+
+#### deleteExpired()
+
+**Location:** `otpRepository.ts:203-219`
+
+**Signature:**
+```typescript
+async deleteExpired(): Promise<number>
+```
+
+**Implementation:**
+```typescript
+async deleteExpired(): Promise<number> {
+  const supabase = createAdminClient();
+
+  // Note: With USING(false) policy, we need to use service_role
+  // which bypasses RLS. This already uses admin client.
+  const { data, error } = await supabase
+    .from('otp_codes')
+    .delete()
+    .lt('expires_at', new Date().toISOString())
+    .select('id');
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.length ?? 0;
+}
+```
+
+**Query Details:**
+- **NOT converted to RPC** - Cleanup job uses admin client directly
+- **Filter:** `expires_at < NOW()`
+- **Uses:** Admin client (bypasses `USING(false)` policy)
+- **Returns:** Count of deleted rows
+
+---
+
+### clientRepository
+
+**File:** `appcode/lib/repositories/clientRepository.ts` (134 lines)
+
+**Purpose:** Client/tenant configuration queries
+
+**Exception:** `clients` table is the tenant root - no `client_id` filter needed (see ARCHITECTURE.md Section 9)
+
+#### findById()
+
+**Location:** `clientRepository.ts:89-105`
+
+**Signature:**
+```typescript
+async findById(id: string): Promise<ClientData | null>
+```
+
+**Implementation:**
+```typescript
+async findById(id: string): Promise<ClientData | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_get_client_by_id', {
+    p_client_id: id,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return mapRpcResultToClientData(data[0]);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_get_client_by_id(p_client_id)`
+- **Tenant Isolation:** N/A - clients table IS the tenant definition
+- **Returns:** Array (access via `data[0]`) with limited columns for security:
+  - `id`, `name`, `subdomain`, `logo_url`, `primary_color`
+  - Excludes sensitive config fields (tier calculation mode, etc.)
+
+---
+
+#### findBySubdomain()
+
+**Location:** `clientRepository.ts:116-133`
+
+**Signature:**
+```typescript
+async findBySubdomain(subdomain: string): Promise<ClientData | null>
+```
+
+**Implementation:**
+```typescript
+async findBySubdomain(subdomain: string): Promise<ClientData | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('subdomain', subdomain)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+    throw error;
+  }
+
+  return data ? mapToClientData(data) : null;
+}
+```
+
+**Query Details:**
+- **NOT converted to RPC** - Future multi-tenant feature (subdomain-based tenant detection)
+- **Current:** MVP uses `CLIENT_ID` env var instead
+- **Uses:** Server client
+- **Filter:** `subdomain = ?`
+
+---
+
+### passwordResetRepository
+
+**File:** `appcode/lib/repositories/passwordResetRepository.ts` (262 lines)
+
+**Purpose:** Password reset token management
+
+**Security:** Table has `USING(false)` RLS policy - all access via RPC functions (see ARCHITECTURE.md Section 12)
+
+**Token Storage:** Bcrypt hashes (not plaintext) with 15-minute expiration
+
+#### create()
+
+**Location:** `passwordResetRepository.ts:67-100`
+
+**Signature:**
+```typescript
+async create(data: {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  ipAddress?: string;
+}): Promise<PasswordResetData>
+```
+
+**Implementation:**
+```typescript
+async create(data: {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  ipAddress?: string;
+}): Promise<PasswordResetData> {
+  const supabase = createAdminClient();
+
+  const { data: tokenId, error } = await supabase.rpc('auth_create_reset_token', {
+    p_user_id: data.userId,
+    p_token_hash: data.tokenHash,
+    p_expires_at: data.expiresAt.toISOString(),
+    p_ip_address: data.ipAddress,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!tokenId) {
+    throw new Error('Failed to create password reset token');
+  }
+
+  // RPC returns just the ID, construct full data
+  return {
+    id: tokenId,
+    userId: data.userId,
+    tokenHash: data.tokenHash,
+    createdAt: new Date().toISOString(),
+    expiresAt: data.expiresAt.toISOString(),
+    usedAt: null,
+    ipAddress: data.ipAddress ?? null,
+  };
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_create_reset_token(p_user_id, p_token_hash, p_expires_at, p_ip_address)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** UUID string (token ID only)
+- **Expiration:** 15 minutes (set by caller)
+- **Hash:** Token stored as bcrypt hash, not plaintext
+
+---
+
+#### findAllValid()
+
+**Location:** `passwordResetRepository.ts:111-121`
+
+**Signature:**
+```typescript
+async findAllValid(): Promise<PasswordResetData[]>
+```
+
+**Implementation:**
+```typescript
+async findAllValid(): Promise<PasswordResetData[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_find_valid_reset_tokens');
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map(mapRpcResultToPasswordResetData);
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_valid_reset_tokens()`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** Array of all non-expired, non-used tokens
+- **Used for:** Token verification (iterate and bcrypt compare since hashes can't be queried directly)
+- **Filters (in RPC):** `expires_at > NOW() AND used_at IS NULL`
+
+---
+
+#### findRecentByUserId()
+
+**Location:** `passwordResetRepository.ts:173-194`
+
+**Signature:**
+```typescript
+async findRecentByUserId(userId: string): Promise<PasswordResetData[]>
+```
+
+**Implementation:**
+```typescript
+async findRecentByUserId(userId: string): Promise<PasswordResetData[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_find_recent_reset_tokens', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  // RPC returns only id and created_at for rate limiting
+  return (data ?? []).map((row: { id: string; created_at: string }) => ({
+    id: row.id,
+    userId: userId,
+    tokenHash: '', // Not returned by RPC (not needed for rate limiting)
+    createdAt: row.created_at,
+    expiresAt: '', // Not returned by RPC
+    usedAt: null,
+    ipAddress: null,
+  }));
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_find_recent_reset_tokens(p_user_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Returns:** Partial data (id, created_at only) for rate limiting
+- **Filters (in RPC):** `user_id = ? AND created_at > NOW() - INTERVAL '1 hour'`
+- **Used for:** Prevent spam (limit password reset requests per user)
+
+---
+
+#### markUsed()
+
+**Location:** `passwordResetRepository.ts:204-214`
+
+**Signature:**
+```typescript
+async markUsed(id: string): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async markUsed(id: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.rpc('auth_mark_reset_token_used', {
+    p_token_id: id,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_mark_reset_token_used(p_token_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Updates:** `used_at = NOW()` (one-time use enforcement)
+
+---
+
+#### invalidateAllForUser()
+
+**Location:** `passwordResetRepository.ts:226-236`
+
+**Signature:**
+```typescript
+async invalidateAllForUser(userId: string): Promise<void>
+```
+
+**Implementation:**
+```typescript
+async invalidateAllForUser(userId: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.rpc('auth_invalidate_user_reset_tokens', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+```
+
+**Query Details:**
+- **RPC Function:** `auth_invalidate_user_reset_tokens(p_user_id)`
+- **RLS Policy:** `USING(false)` - requires RPC
+- **Updates:** Marks all unused tokens as used (`used_at = NOW()`)
+- **Called when:**
+  - User successfully resets password (invalidate all other tokens)
+  - User requests a new reset (invalidate old ones)
+
+---
+
+#### deleteExpired()
+
+**Location:** `passwordResetRepository.ts:245-261`
+
+**Signature:**
+```typescript
+async deleteExpired(): Promise<number>
+```
+
+**Implementation:**
+```typescript
+async deleteExpired(): Promise<number> {
+  const supabase = createAdminClient();
+
+  // Note: With USING(false) policy, we need to use service_role
+  // which bypasses RLS. This already uses admin client.
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .delete()
+    .lt('expires_at', new Date().toISOString())
+    .select('id');
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.length ?? 0;
+}
+```
+
+**Query Details:**
+- **NOT converted to RPC** - Cleanup job uses admin client directly
+- **Filter:** `expires_at < NOW()`
+- **Uses:** Admin client (bypasses `USING(false)` policy)
+- **Returns:** Count of deleted rows
+
+---
+
+### Multi-Tenant Isolation Summary
+
+**User Queries:**
+- ✅ All find/exists functions include `client_id` parameter
+- ✅ Tenant isolation enforced by RPC functions internally
+- ✅ `updateTermsAcceptance()` uses `.eq('client_id', clientId)` (direct query)
+
+**OTP Queries:**
+- ✅ `USING(false)` RLS policy - all access via RPC
+- ✅ Tenant isolation via linked `user_id` (users table enforces client_id)
+- ✅ No direct client_id filter needed (OTPs are session-scoped)
+
+**Client Queries:**
+- ✅ NO client_id filter - `clients` table IS the tenant root
+- ✅ Exception documented in ARCHITECTURE.md Section 9
+
+**Password Reset Queries:**
+- ✅ `USING(false)` RLS policy - all access via RPC
+- ✅ Tenant isolation via `user_id` (users table enforces client_id)
+- ✅ No direct client_id filter needed (tokens are user-scoped)
 
 ---
 
