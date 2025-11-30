@@ -10,9 +10,9 @@
 ## Quick Reference
 
 **Steps Documented:**
-- Step 3.2 - Authentication Services ✅
 - Step 3.1 - Authentication Repositories ✅
-- Step 3.3 - Authentication API Routes (pending)
+- Step 3.2 - Authentication Services ✅
+- Step 3.3 - Authentication API Routes ✅
 
 **Key Files:**
 | File | Lines | Purpose |
@@ -22,6 +22,7 @@
 | `appcode/lib/repositories/otpRepository.ts` | 271 | OTP verification management (RPC, USING(false)) |
 | `appcode/lib/repositories/clientRepository.ts` | 134 | Client/tenant queries (RPC) |
 | `appcode/lib/repositories/passwordResetRepository.ts` | 262 | Password reset token management (RPC, USING(false)) |
+| `appcode/app/api/auth/*/route.ts` | ~75 each | 9 API route handlers |
 
 **Database Tables Used:**
 - `users` (SchemaFinalv2.md:131-170)
@@ -32,7 +33,7 @@
 **Quick Navigation:**
 - [Service Functions](#service-functions) - All 7 auth service functions
 - [Database Queries](#database-queries) - Repository layer functions with RPC
-- [API Endpoints](#api-endpoints) - Routes (TBD Step 3.3)
+- [API Endpoints](#api-endpoints) - All 9 auth routes
 - [Error Handling](#error-handling) - Error codes and flows
 - [Security Context](#security-context) - Auth patterns and RLS
 
@@ -856,6 +857,57 @@ async resetPassword(token: string, newPassword: string): Promise<ResetPasswordRe
 - Can't query by token directly
 - Must compare plaintext token against all hashes
 - Performance: Typically <10 valid tokens per user at any time
+
+---
+
+## API Endpoints
+
+**Purpose:** HTTP route handlers that expose auth functionality to frontend
+
+**Location:** `appcode/app/api/auth/*/route.ts`
+
+**Pattern:** All routes follow ARCHITECTURE.md Section 5 (Presentation Layer):
+1. Validate request (body/params/auth)
+2. Call service function
+3. Return JSON response with appropriate status code
+
+### Route Summary
+
+| Route | Method | Auth Required | Service Function | Purpose |
+|-------|--------|---------------|------------------|---------|
+| `/api/auth/check-handle` | POST | No | `authService.checkHandle()` | Verify TikTok handle exists in tenant |
+| `/api/auth/signup` | POST | No | `authService.initiateSignup()` | Create user, send OTP email |
+| `/api/auth/verify-otp` | POST | No (session cookie) | `authService.verifyOTP()` | Verify OTP code, complete signup |
+| `/api/auth/resend-otp` | POST | No (session cookie) | `authService.resendOTP()` | Generate new OTP, resend email |
+| `/api/auth/login` | POST | No | `authService.login()` | Authenticate with handle/password |
+| `/api/auth/forgot-password` | POST | No | `authService.forgotPassword()` | Send password reset email |
+| `/api/auth/reset-password` | POST | No | `authService.resetPassword()` | Reset password with token |
+| `/api/auth/user-status` | GET | Yes | Repository direct | Get user recognition status, set routing |
+| `/api/auth/onboarding-info` | GET | Yes | N/A (MVP hardcoded) | Get client-specific welcome message |
+
+### Unauthenticated Routes (Public)
+
+**check-handle, signup, verify-otp, resend-otp, login, forgot-password, reset-password**
+
+These routes use `createAdminClient()` + RPC functions to bypass RLS. See ARCHITECTURE.md Section 12.
+
+### Authenticated Routes (Protected)
+
+**user-status, onboarding-info**
+
+These routes require valid `auth-token` cookie. Use `supabase.auth.getUser()` to validate session.
+
+### Error Response Pattern
+
+All routes return consistent error format:
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Human-readable message"
+}
+```
+
+Common codes: `UNAUTHORIZED` (401), `INVALID_INPUT` (400), `INTERNAL_ERROR` (500)
 
 ---
 
@@ -2344,7 +2396,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ---
 
-**Document Version:** 1.0
-**Steps Completed:** 1 / 3 (Step 3.2 only)
+**Document Version:** 1.1
+**Steps Completed:** 3 / 3 (Steps 3.1, 3.2, 3.3 complete)
 **Last Updated:** 2025-11-30
-**Completeness:** Services complete, Repositories pending (Step 3.1), API Routes pending (Step 3.3)
+**Completeness:** Repositories ✅, Services ✅, API Routes ✅ - Next: Step 3.4 (Testing)

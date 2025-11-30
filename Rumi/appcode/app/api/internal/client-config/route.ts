@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server-client'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 
 /**
  * INTERNAL ENDPOINT - Client Configuration
+ *
+ * Uses RPC function (auth_get_client_by_id) to bypass RLS for unauthenticated access.
  *
  * Security: Only accessible via server-side requests with x-internal-request header
  * Used by: /app/login/layout.tsx (server component)
@@ -31,7 +33,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    // Note: createAdminClient is SYNC, not async!
+    const supabase = createAdminClient()
 
     // TODO: Determine client_id from subdomain or environment
     // MVP: Use single client from environment variable
@@ -42,18 +45,22 @@ export async function GET(request: NextRequest) {
       throw new Error('CLIENT_ID not configured')
     }
 
-    // Query Supabase for client configuration
-    // Note: Only query fields that exist in schema (SchemaFinalv2.md lines 110-114)
-    const { data, error } = await supabase
-      .from('clients')
-      .select('logo_url, name, primary_color')
-      .eq('id', clientId)
-      .single()
+    // Query via RPC function (bypasses RLS)
+    const { data, error } = await supabase.rpc('auth_get_client_by_id', {
+      p_client_id: clientId,
+    })
 
     if (error) {
-      console.error('Supabase query failed:', error)
+      console.error('Supabase RPC failed:', error)
       throw error
     }
+
+    if (!data || data.length === 0) {
+      console.error('Client not found:', clientId)
+      throw new Error('Client not found')
+    }
+
+    const client = data[0]
 
     // Construct privacy policy path (file-based system already exists)
     // Points to existing API route: /app/api/clients/[clientId]/privacy/route.ts
@@ -61,10 +68,10 @@ export async function GET(request: NextRequest) {
 
     // Build response with fallbacks
     const config = {
-      logoUrl: data?.logo_url || "/images/fizee-logo.png",
+      logoUrl: client.logo_url || "/images/fizee-logo.png",
       privacyPolicyUrl,
-      clientName: data?.name || "Rewards Program",
-      primaryColor: data?.primary_color || "#F59E0B"
+      clientName: client.name || "Rewards Program",
+      primaryColor: client.primary_color || "#F59E0B"
     }
 
     // Return with aggressive caching (1 hour)

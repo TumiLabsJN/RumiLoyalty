@@ -167,6 +167,7 @@ Loyalty program platform for content creators based on TikTok video performance 
 7. **Audit trails** - Commission boost state history for financial compliance (Pattern 7)
 8. **Cross-tenant protection** - All UPDATE/DELETE queries filter by client_id (Pattern 8)
 9. **Sensitive data encryption** - Payment accounts encrypted at rest with AES-256-GCM (Pattern 9)
+10. **SECURITY DEFINER auth** - Unauthenticated auth routes use RPC functions to bypass RLS (Pattern 10)
 
 #### Security Model
 
@@ -1946,11 +1947,33 @@ Create calendar events as reminders for all manual tasks, triggered when action 
 
 ---
 
+### Pattern 10: SECURITY DEFINER for Unauthenticated Auth Routes
+
+**Requirement:** Auth routes (signup, login, forgot-password, reset-password) must query the database BEFORE the user is authenticated. Standard RLS fails because `auth.uid()` is NULL.
+
+**Apply to:**
+- `otp_codes` table (signup/verify-otp flow)
+- `password_reset_tokens` table (forgot-password/reset-password flow)
+- User lookups by handle during login (via RPC)
+
+**Solution:** PostgreSQL SECURITY DEFINER functions that execute with owner privileges, bypassing RLS. Tables use `USING(false)` deny-all policies - ALL access must go through RPC.
+
+**Rule:** Never use admin client or direct table access for these tables. Always call the appropriate RPC function via `supabase.rpc()`.
+
+**Key Implementation Notes:**
+- `createAdminClient()` is SYNC (not async) - don't use `await`
+- RPC returns ARRAY - access first element via `data[0]`
+- Each RPC follows naming convention: `auth_<action>_<entity>` (e.g., `auth_create_otp`)
+
+👉 **Implementation:** ARCHITECTURE.md Section 12 (RPC function groups, repository patterns, gotchas)
+
+---
+
 ### Implementation Checklist
 
-**Before implementing flows:** Apply Patterns 1-9 (transactional workflows, idempotent operations, state validation, auto-sync triggers, status constraints, soft delete, audit trails, multi-tenant isolation, encryption)
+**Before implementing flows:** Apply Patterns 1-10 (transactional workflows, idempotent operations, state validation, auto-sync triggers, status constraints, soft delete, audit trails, multi-tenant isolation, encryption, SECURITY DEFINER auth)
 
-👉 **Testing requirements:** ARCHITECTURE.md Section 11 (test scenarios for all 9 patterns)
+👉 **Testing requirements:** ARCHITECTURE.md Section 11 (test scenarios for all 10 patterns)
 
 ---
 

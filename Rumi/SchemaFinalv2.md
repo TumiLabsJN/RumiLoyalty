@@ -182,6 +182,8 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 - Attempt counter for rate limiting
 - Used flag prevents code reuse
 
+**Access Pattern:** RLS policy is `USING(false)` (deny all direct access). All access goes through SECURITY DEFINER RPC functions (`auth_create_otp`, `auth_find_otp_by_session`, `auth_increment_otp_attempts`, `auth_mark_otp_used`). See ARCHITECTURE.md Section 12.
+
 ---
 
 ### 1.4 password_reset_tokens Table
@@ -217,6 +219,8 @@ CREATE INDEX idx_otp_expires ON otp_codes(expires_at);
 5. Backend validates: bcrypt.compare(token, token_hash), checks expiration, checks used_at
 6. If valid → update users.password_hash, set used_at = NOW()
 7. Token can never be reused (used_at prevents replay)
+
+**Access Pattern:** RLS policy is `USING(false)` (deny all direct access). All access goes through SECURITY DEFINER RPC functions (`auth_create_reset_token`, `auth_find_valid_reset_tokens`, `auth_find_recent_reset_tokens`, `auth_mark_reset_token_used`, `auth_invalidate_user_reset_tokens`). See ARCHITECTURE.md Section 12.
 
 ---
 

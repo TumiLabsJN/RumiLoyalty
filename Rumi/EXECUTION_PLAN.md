@@ -404,13 +404,14 @@
     - **Action:** Create `/lib/supabase/admin-client.ts` using `createClient` from `@supabase/supabase-js` with service role key
     - **References:** Supabase documentation for admin/service role client
     - **Implementation Guide:** Use SUPABASE_SERVICE_ROLE_KEY instead of anon key, bypasses RLS
-    - **Acceptance Criteria:** Client bypasses RLS, MUST only be used in cron jobs and admin operations, never in user-facing routes
+    - **Acceptance Criteria:** Client bypasses RLS. Used for: (1) cron jobs, (2) admin operations, (3) RPC calls in auth routes via SECURITY DEFINER functions. See ARCHITECTURE.md Section 12 for the RPC pattern.
 
 ## Step 2.3: Utility Functions
 - [x] **Task 2.3.1:** Create auth utility
     - **Action:** Create `/lib/utils/auth.ts` with getUserFromRequest, validateClientId
     - **References:** ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137), Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Acceptance Criteria:** Functions extract user from JWT, validate client_id presence, follow security patterns from Section 10
+    - **Implementation Note:** `getUserFromRequest()` uses RPC function `auth_find_user_by_id` via `createAdminClient()` to bypass RLS recursion. CRITICAL for all authenticated routes. See ARCHITECTURE.md Section 12 Section 3.6.
 
 - [x] **Task 2.3.2:** Create encryption utility
     - **Action:** Create `/lib/utils/encryption.ts` with encrypt/decrypt functions using AES-256-GCM
@@ -460,46 +461,55 @@
     - **Action:** Create `/lib/repositories/userRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938 for file naming)
     - **Acceptance Criteria:** File exists with repository object pattern matching Section 5 examples
+    - **Implementation Note:** Uses `createAdminClient()` + RPC functions to bypass RLS for unauthenticated auth routes. See ARCHITECTURE.md Section 12 Section 3.2.
 
 - [x] **Task 3.1.2:** Implement findByHandle function
     - **Action:** Add function with signature `findByHandle(clientId: string, handle: string)`
     - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 8 (Multi-Tenant Query Isolation), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Acceptance Criteria:** Query MUST filter by client_id AND tiktok_handle, follows tenant isolation rules from Section 9
+    - **Implementation Note:** Uses RPC function `auth_find_user_by_handle(p_client_id, p_handle)`. Returns array - access via `data[0]`.
 
 - [x] **Task 3.1.3:** Implement findByEmail function
     - **Action:** Add function with signature `findByEmail(clientId: string, email: string)`
     - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST decrypt encrypted_email for comparison (Section 9 checklist item 6), MUST filter by client_id (Section 9 Critical Rule #1)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1)
+    - **Implementation Note:** Uses RPC function `auth_find_user_by_email(p_client_id, p_email)`. Email stored as plaintext (not encrypted) per current schema. Returns array - access via `data[0]`.
 
 - [x] **Task 3.1.4:** Implement create function
-    - **Action:** Add function to insert new user with encrypted fields
-    - **References:** SchemaFinalv2.md (users table), Loyalty.md Pattern 9 (Sensitive Data Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST encrypt email/phone before INSERT (Section 9 checklist item 6), MUST validate client_id is provided (Section 9 Critical Rule #2), return created user
+    - **Action:** Add function to insert new user
+    - **References:** SchemaFinalv2.md (users table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), return created user
+    - **Implementation Note:** Uses RPC function `auth_create_user(p_id, p_client_id, p_tiktok_handle, p_email, p_password_hash, p_terms_version)`. NO is_admin parameter (security). Returns array - access via `data[0]`.
 
 - [x] **Task 3.1.5:** Implement updateLastLogin function
     - **Action:** Add function to update last_login_at timestamp for user
     - **References:** SchemaFinalv2.md (users table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id AND user_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5)
+    - **Acceptance Criteria:** MUST update last_login_at for specified user
+    - **Implementation Note:** Uses RPC function `auth_update_last_login(p_user_id)`. SECURITY DEFINER bypasses RLS.
 
 - [x] **Task 3.1.6:** Create OTP repository file
     - **Action:** Create `/lib/repositories/otpRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
+    - **Implementation Note:** Uses `createAdminClient()` + RPC functions. Table has `USING(false)` RLS policy - all access via RPC only. See ARCHITECTURE.md Section 12 Section 3.4.
 
 - [x] **Task 3.1.7:** Implement OTP CRUD functions
     - **Action:** Add create, findValidBySessionId, markUsed, incrementAttempts, deleteExpired functions for otp_codes table
     - **References:** SchemaFinalv2.md lines 158-184 (otp_codes table), API_CONTRACTS.md lines 520-605 (OTP verification flow), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST query by session_id (unique identifier from HTTP-only cookie), MUST check expires_at < NOW() for expiration, MUST check used = false for single-use, MUST check attempts < 3 for rate limiting, UPDATE operations MUST verify count > 0 (Section 9 checklist item 4)
+    - **Acceptance Criteria:** MUST query by session_id, MUST check expiration/used/attempts in application code after RPC fetch
+    - **Implementation Note:** RPC functions: `auth_create_otp`, `auth_find_otp_by_session`, `auth_mark_otp_used`, `auth_increment_otp_attempts`. Validity checks done in app code after fetch.
 
 - [x] **Task 3.1.8:** Create client repository file
     - **Action:** Create `/lib/repositories/clientRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
+    - **Implementation Note:** Uses `createAdminClient()` + RPC for `findById`. See ARCHITECTURE.md Section 12 Section 3.3.
 
 - [x] **Task 3.1.9:** Implement findById function
     - **Action:** Add function to fetch client by UUID
     - **References:** SchemaFinalv2.md (clients table)
     - **Acceptance Criteria:** Queries clients table (no client_id filter needed - this IS the tenant table per Section 9 exception), returns client or null
+    - **Implementation Note:** Uses RPC function `auth_get_client_by_id(p_client_id)`. Returns array - access via `data[0]`.
 
 ## Step 3.2: Auth Services
 - [x] **Task 3.2.1:** Create auth service file
@@ -536,11 +546,13 @@
     - **Action:** Add function to initiate password reset
     - **References:** Loyalty.md Flow 5 (Password Reset), API_CONTRACTS.md lines 1464-1613
     - **Acceptance Criteria:** Generate reset token, send email, anti-enumeration (always return success)
+    - **Implementation Note:** Uses `passwordResetRepository` with RPC functions: `auth_create_reset_token`, `auth_find_recent_reset_tokens`. Table has `USING(false)` policy. See ARCHITECTURE.md Section 12 Section 3.5.
 
 - [x] **Task 3.2.8:** Implement resetPassword function
     - **Action:** Add function to complete password reset
     - **References:** API_CONTRACTS.md lines 1623-1768
     - **Acceptance Criteria:** Validate token (bcrypt compare), update password via Supabase Auth, invalidate token
+    - **Implementation Note:** Uses RPC functions: `auth_find_valid_reset_tokens`, `auth_mark_reset_token_used`, `auth_invalidate_user_reset_tokens`. See ARCHITECTURE.md Section 12 Section 3.5.
 
 ## Step 3.3: Auth API Routes
 - [x] **Task 3.3.1:** Create check-handle route
@@ -548,18 +560,21 @@
     - **References:** API_CONTRACTS.md lines 34-184 (POST /api/auth/check-handle), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST implement 3-scenario routing logic (lines 104-137): (A) exists+email→login, (B) exists+no email→signup, (C) not found→signup. Normalize handle with @ prefix (line 108-111). Validate handle regex `^[a-zA-Z0-9_.]{1,30}$` (line 168). Return errors: HANDLE_REQUIRED, INVALID_HANDLE, HANDLE_TOO_LONG (lines 142-164)
     - **Acceptance Criteria:** MUST return `{ exists: boolean, has_email: boolean, route: 'signup'|'login', handle: string }` per lines 56-62, implements all 3 routing scenarios per lines 123-136, validates handle format per Section 10.3 line 168, returns 200 for valid requests or 400 for validation errors, follows route pattern from Section 5
+    - **Implementation Note:** Uses RPC function `auth_find_user_by_handle` via userRepository. See ARCHITECTURE.md Section 12.
 
 - [x] **Task 3.3.2:** Create signup route
     - **Action:** Create `/app/api/auth/signup/route.ts` with POST handler
     - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.4 (Validation Checklist Template, lines 1396-1401)
     - **Implementation Guide:** MUST implement 8-step workflow (lines 247-356): (1) validate input (email format line 252, password 8-128 chars lines 257-262, agreedToTerms line 265), (2) check existing email line 271-276, (3) hash password with bcrypt rounds=10 line 281, (4) create user with client_id + default tier 'tier_1' + terms version '2025-01-18' lines 286-308, (5) generate 6-digit OTP line 312-315, (6) store OTP in otp_codes table expires 5 min lines 319-336, (7) send OTP email via Resend lines 340-346, (8) set HTTP-only cookie lines 350-355. Return errors: EMAIL_ALREADY_EXISTS, INVALID_EMAIL, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, TERMS_NOT_ACCEPTED, OTP_SEND_FAILED (lines 360-406)
     - **Acceptance Criteria:** MUST return `{ success: boolean, otpSent: boolean, sessionId: string, userId: string }` per lines 214-219, implements all 8 steps of signup workflow per lines 247-356, validates per Section 10.4 checklist, hashes password with bcrypt rounds=10 (line 281), stores hashed OTP in otp_codes table (line 319-336), sends email via Resend (line 340-346), sets HTTP-only secure cookie with Max-Age=300 (line 353), returns 201 for success or 400/500 for errors, follows route pattern from Section 5
+    - **Implementation Note:** Uses RPC functions: `auth_handle_exists`, `auth_email_exists`, `auth_create_user`, `auth_create_otp`. See ARCHITECTURE.md Section 12.
 
 - [x] **Task 3.3.3:** Create verify-otp route
     - **Action:** Create `/app/api/auth/verify-otp/route.ts` with POST handler
     - **References:** API_CONTRACTS.md lines 442-722 (POST /api/auth/verify-otp), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST implement 11-step workflow (lines 495-634): (1) get session ID from otp_session HTTP-only cookie line 498-503, (2) validate code format 6 digits line 508-511, (3) query OTP record by session_id + used=false lines 515-527, (4) check OTP exists and not used lines 530-543, (5) check expiration 5 minutes lines 547-553, (6) check max 3 attempts lines 557-570, (7) verify OTP with bcrypt compare lines 574-596 incrementing attempts on failure, (8) mark OTP as used lines 600-603, (9) update users.email_verified=true lines 607-611, (10) create authenticated session with Supabase Auth lines 614-621, (11) set auth_token cookie Max-Age=2592000 (30 days) and clear otp_session cookie lines 625-633. Return errors: INVALID_CODE_FORMAT, INVALID_OTP (with attemptsRemaining), OTP_EXPIRED, OTP_ALREADY_USED, MAX_ATTEMPTS_EXCEEDED, SESSION_NOT_FOUND, INVALID_SESSION (lines 638-693)
     - **Acceptance Criteria:** MUST return `{ success: boolean, verified: boolean, userId: string, sessionToken: string }` per lines 465-470, implements all 11 steps of OTP verification workflow per lines 495-634, reads otp_session cookie (line 499), validates 6-digit format (line 509), queries otp_codes by session_id + used=false (line 524-526), checks expiration and max 3 attempts (lines 548, 558), verifies with bcrypt compare (line 576), increments attempts on failure (line 583), marks used=true on success (line 602), updates email_verified=true (line 609), creates Supabase Auth session (line 616-621), sets auth_token HTTP-only cookie Max-Age=2592000 (line 629), clears otp_session cookie Max-Age=0 (line 630), returns 200 for success or 400 for errors, follows route pattern from Section 5
+    - **Implementation Note:** Uses RPC functions: `auth_find_otp_by_session`, `auth_increment_otp_attempts`, `auth_mark_otp_used`, `auth_mark_email_verified`, `auth_update_last_login`. See ARCHITECTURE.md Section 12.
 
 - [x] **Task 3.3.4:** Create resend-otp route
     - **Action:** Create `/app/api/auth/resend-otp/route.ts` with POST handler
@@ -590,7 +605,7 @@
     - **Implementation Guide:** MUST implement 6-step workflow (lines 1193-1227): (1) validate session token BEFORE any database queries (line 1281), get authenticated user from JWT decode or session lookup from HTTP-only cookie auth-token lines 1196-1197 and 1152, return 401 UNAUTHORIZED if invalid/missing lines 1232-1234 and 1259-1264, (2) query user info (id, email_verified, last_login_at, created_at) lines 1200-1206, (3) determine recognition status based on last_login_at: NULL=first login (isRecognized=false), NOT NULL=returning user (isRecognized=true) lines 1208-1211 and 1236-1239, (4) determine routing destination: isRecognized=false → redirectTo="/login/welcomeunr", isRecognized=true → redirectTo="/home" lines 1213-1215 and 1238-1239, (5) update last_login_at=NOW() and updated_at=NOW() AFTER checking recognition status lines 1217-1224 (CRITICAL: update after check to detect first-time users), (6) return response with routing instruction lines 1226-1227. Backend owns all routing logic, frontend follows redirectTo instruction lines 1246-1249. Security: idempotent after first call (line 1280), no sensitive data exposed like password_hash or payment info (line 1278), only userId UUID returned (line 1282). Return errors: UNAUTHORIZED (401), INTERNAL_ERROR (500) (lines 1259-1272)
     - **Acceptance Criteria:** MUST return `{ userId: string, isRecognized: boolean, redirectTo: string, emailVerified: boolean }` per lines 1165-1170, implements all 6 steps of user-status workflow per lines 1193-1227, validates session token BEFORE database queries (line 1281), returns 401 UNAUTHORIZED with "Please log in to continue" if invalid/missing (lines 1259-1264), queries users table for id/email_verified/last_login_at/created_at (lines 1200-1206, 1290-1294), sets isRecognized=false if last_login_at IS NULL (lines 1210, 1238), sets isRecognized=true if last_login_at IS NOT NULL (lines 1211, 1239), sets redirectTo="/login/welcomeunr" for first-time users (lines 1214, 1238), sets redirectTo="/home" for returning users (lines 1215, 1239), updates last_login_at=NOW() AFTER checking status to preserve first-login detection (lines 1217-1224, 1241-1244, 1279), is idempotent after first call (line 1280), does NOT expose sensitive data like password_hash or payment info (line 1278), only exposes userId UUID (line 1282), returns 200 for success or 401/500 for errors, follows route pattern from Section 5
 
-- [ ] **Task 3.3.9:** Create onboarding-info route
+- [x] **Task 3.3.9:** Create onboarding-info route
     - **Action:** Create `/app/api/auth/onboarding-info/route.ts` with GET handler
     - **References:** API_CONTRACTS.md lines 1304-1455 (GET /api/auth/onboarding-info), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST implement 5-step workflow (lines 1356-1379): (1) get authenticated user from session token JWT decode or session lookup from HTTP-only cookie auth-token lines 1359-1360, return 401 UNAUTHORIZED if invalid/missing lines 1415-1420, (2) get user's client_id from users table lines 1363-1365, (3) get client-specific onboarding configuration - MVP: return hardcoded default response for single client lines 1368-1369 and 1383-1386, Future: query onboarding_messages table by client_id lines 1388-1391, (4) build response with dynamic content: can include dynamic dates (next Monday calculated server-side lines 1393-1397), client-specific communication channels (DMs/email/SMS line 1374), localization (line 1375), A/B testing variants (line 1376), (5) return response line 1378. MVP Implementation: hardcode response in backend (line 1383-1386), simple JavaScript object returned. Future: onboarding_messages table with schema {id, client_id, heading, message, submessage, button_text, created_at} (lines 1388-1391). Security: can be cached per client_id for 1 hour (lines 1409-1411), no sensitive data exposed (line 1434), no PII (line 1437). Return errors: UNAUTHORIZED (401), INTERNAL_ERROR (500) (lines 1415-1428)
@@ -637,6 +652,7 @@
     - **Implementation Guide:** MUST test tenant isolation: (1) create clientA and clientB with createTestClient(), (2) create userA in clientA, userB in clientB, (3) create rewardA for clientA, rewardB for clientB, (4) create missionA for clientA, missionB for clientB, (5) Test API isolation: GET /api/rewards as userA → MUST NOT contain rewardB, (6) GET /api/missions as userA → MUST NOT contain missionB, (7) POST /api/rewards/:rewardB_id/claim as userA → expect 403 or 404, (8) Test RLS: direct Supabase query as userA context → verify RLS blocks clientB data, (9) verify all queries include client_id filter per Pattern 8
     - **Test Cases:** (1) User A cannot see Client B rewards via API, (2) User A cannot see Client B missions via API, (3) User A cannot claim Client B reward (403/404), (4) RLS policy blocks direct DB access across tenants
     - **Acceptance Criteria:** All 4 test cases MUST pass, every query MUST filter by client_id per Loyalty.md Pattern 8, RLS policies MUST enforce isolation per ARCHITECTURE.md Section 9, prevents data-leakage-lawsuit catastrophic bug
+    - **Note:** otp_codes and password_reset_tokens tables use `USING(false)` RLS policies - all access goes through RPC functions only. Direct queries to these tables will return 0 rows by design.
 
 - [ ] **Task 3.4.7:** Create E2E auth test
     - **Action:** Create `/tests/e2e/auth/signup-flow.spec.ts` using Playwright

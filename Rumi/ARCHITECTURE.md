@@ -1404,6 +1404,7 @@ async function claimReward(userId: string, rewardId: string) {
 - [ ] All queries include .eq('client_id', user.client_id)
 - [ ] User object comes from authenticated session
 - [ ] No cross-tenant data leakage possible
+- [ ] RLS policies use helper functions `is_admin_of_client()` / `get_current_user_client_id()` to avoid recursion
 
 ### Testing
 - [ ] Unit tests verify authorization logic
@@ -1491,10 +1492,178 @@ export async function GET(request: Request) {
 
 ---
 
+## 12. SECURITY DEFINER PATTERN FOR AUTH
+
+### Overview
+
+Authentication routes present a unique challenge: they need to query the database BEFORE the user is authenticated. Standard RLS policies fail because `auth.uid()` is NULL for unauthenticated requests.
+
+**Problem:** RLS policies that check user permissions cause:
+1. **Infinite recursion** - Admin policies query `users` table within themselves
+2. **Zero rows returned** - When `auth.uid() = NULL`, no policies match
+3. **Security holes** - `USING(true)` policies are overly permissive
+
+**Solution:** SECURITY DEFINER RPC functions with GRANT/REVOKE access control.
+
+### When to Use This Pattern
+
+| Scenario | Use RPC? | Reason |
+|----------|----------|--------|
+| Unauthenticated auth routes (signup, login, check-handle) | YES | `auth.uid()` is NULL |
+| OTP verification (verify-otp, resend-otp) | YES | User has session cookie but no JWT |
+| Password reset (forgot-password, reset-password) | YES | User has token but no JWT |
+| `getUserFromRequest()` in auth.ts | YES | Queries users table, triggers RLS recursion |
+| Authenticated routes (dashboard, missions, rewards) | NO | Use standard RLS with helper functions |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SECURITY LAYERS                               │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 1: GRANT/REVOKE                                          │
+│  ├─ All auth RPC functions: REVOKE FROM PUBLIC                  │
+│  ├─ Groups A,B,D,E: GRANT TO service_role only                  │
+│  └─ Group C: GRANT TO authenticated (for RLS policies)          │
+│                                                                 │
+│  Layer 2: SECURITY DEFINER Functions                            │
+│  ├─ Run with definer privileges (bypass RLS)                    │
+│  ├─ Return minimal data (boolean, limited columns)              │
+│  └─ No privilege escalation parameters                          │
+│                                                                 │
+│  Layer 3: RLS Policies (for authenticated users)                │
+│  ├─ Admin policies use is_admin_of_client() helper              │
+│  ├─ Creator policies use get_current_user_client_id() helper    │
+│  └─ No self-referencing subqueries (no recursion)               │
+│                                                                 │
+│  Layer 4: Client ID Trust Boundary                              │
+│  ├─ client_id from process.env.CLIENT_ID (server-side)          │
+│  └─ Never from user input                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### RPC Function Groups
+
+**20 SECURITY DEFINER functions in 5 groups:**
+
+| Group | Count | Purpose | Granted To |
+|-------|-------|---------|------------|
+| A | 6 | Auth routes (anon access): find user, check uniqueness, create user, get client | service_role |
+| B | 3 | Cookie auth (OTP session): find user by ID, mark verified, update login | service_role |
+| C | 2 | RLS helpers: is_admin_of_client(), get_current_user_client_id() | authenticated |
+| D | 4 | OTP operations: create, find, mark used, increment attempts | service_role |
+| E | 5 | Password reset: create token, find valid, find recent, mark used, invalidate | service_role |
+
+### Repository Pattern
+
+Auth repositories use `createAdminClient()` to call RPC functions:
+
+```typescript
+// File: lib/repositories/userRepository.ts
+import { createAdminClient } from '@/lib/supabase/admin-client';
+
+async findByHandle(clientId: string, handle: string): Promise<UserData | null> {
+  // Note: createAdminClient() is SYNC, not async!
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc('auth_find_user_by_handle', {
+    p_client_id: clientId,
+    p_handle: handle,
+  });
+
+  // IMPORTANT: RPC returns ARRAY, not single object
+  if (error || !data || data.length === 0) return null;
+  return mapToUserData(data[0]);  // Access first element
+}
+```
+
+### Key Gotchas
+
+| Gotcha | Wrong | Right |
+|--------|-------|-------|
+| Client sync | `await createAdminClient()` | `createAdminClient()` (sync) |
+| RPC returns | `const user = data;` | `const user = data[0];` (array) |
+| Admin client | Direct table queries | RPC function calls only |
+
+### Why Admin Client + RPC Is OK
+
+This does NOT violate the "never admin client for user-facing routes" guidance because:
+
+1. **We're calling RPC functions, not direct table queries**
+2. **RPC functions have explicit GRANT/REVOKE** - only `service_role` can call them
+3. **The functions themselves are the security boundary** - they only expose what's needed
+4. **The admin client is used to INVOKE the security mechanism**, not to bypass it
+
+Think of it as:
+- ❌ Admin client + direct table query = bypasses RLS = BAD
+- ✅ Admin client + RPC function with GRANT = enforces function-level security = GOOD
+
+### Tables with USING(false) Policies
+
+Two tables deny ALL direct access - operations go through RPC only:
+
+| Table | Policy | Reason |
+|-------|--------|--------|
+| `otp_codes` | `USING(false)` | OTP created before auth, `auth.uid()` is NULL |
+| `password_reset_tokens` | `USING(false)` | Token created/used without auth |
+
+This is MORE secure than `USING(true)` because:
+- Direct queries are blocked even if someone bypasses the API
+- All access must go through controlled RPC functions
+- Defense in depth: even if GRANT fails, RLS blocks direct access
+
+### RLS Helper Functions
+
+Two helper functions break the recursion cycle for authenticated users:
+
+```sql
+-- Called BY admin RLS policies (breaks recursion)
+CREATE OR REPLACE FUNCTION is_admin_of_client(p_client_id UUID)
+RETURNS BOOLEAN AS $$
+  SELECT CASE
+    WHEN auth.uid() IS NULL THEN false
+    ELSE EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND client_id = p_client_id AND is_admin = true
+    )
+  END;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- Called BY creator RLS policies (breaks recursion)
+CREATE OR REPLACE FUNCTION get_current_user_client_id()
+RETURNS UUID AS $$
+  SELECT CASE
+    WHEN auth.uid() IS NULL THEN NULL
+    ELSE (SELECT client_id FROM public.users WHERE id = auth.uid())
+  END;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+```
+
+**Note:** These are granted to `authenticated` role (not `service_role`) because they're called BY RLS policies during authenticated requests.
+
+### Migration Reference
+
+All functions, policies, and GRANT/REVOKE statements are in:
+`supabase/migrations/20251129165155_fix_rls_with_security_definer.sql`
+
+### Files Using This Pattern
+
+| File | Functions Using RPC |
+|------|---------------------|
+| `lib/repositories/userRepository.ts` | 8 functions |
+| `lib/repositories/clientRepository.ts` | 1 function |
+| `lib/repositories/otpRepository.ts` | 4 functions |
+| `lib/repositories/passwordResetRepository.ts` | 5 functions |
+| `lib/utils/auth.ts` | `getUserFromRequest()` |
+| `app/api/internal/client-config/route.ts` | 1 direct RPC call |
+
+---
+
 ## SUMMARY
 
 **Architecture:** Repository + Service Pattern
 **Enforcement:** All repositories enforce tenant isolation via `client_id`
+**Auth Pattern:** SECURITY DEFINER RPC functions for unauthenticated routes (Section 12)
 **Testing:** Unit tests for services, integration tests for API routes
 **Scalability:** Clean separation enables future growth (caching, multiple DBs, etc.)
 

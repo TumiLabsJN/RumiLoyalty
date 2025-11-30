@@ -1,112 +1,35 @@
-# Most IMportant 21/11
+# 29/11
 
-## Admin Flows Work
-**Alternative C - Hybrid** Wireframe, API Contract
-### 1. Business Decision ✅
-Which Admin flows you will need
-- Redemptions Management
-- Missions Management
-- Analytics/Reporting
+## Technical Documentation (Debugging)
 
-### 2. Quick FrontEnd Sketch (Wireframe) 
-Understand what elements you will need for the MVP Admin Dashboard.
-- Think carefully. 
+We created:
+Check documents. 
 
-#### Redemptions Management
-Every Reward Type... what could you possibly need to understand per Reward type. 
-- Admin work and flows
-- ...
+1) FSDocumentationMVP.md  
+Metaprompt that has the instructions of what we should document after EACH STEP (Step = 3.4, 3.5. NOT = 3.4.1 , 3.5.1)
 
-Now with reward_source column you can have a Admin UI with two tables.
-1) Create rewards for VIP level 
-2) Create rewards for missions 
+2) IMPL_DOC_TEMPLATE.md
+Template for the 
 
-#### Missions Management
-Every mission type. What could you possibly need
-- Since creating missions through Frontend (Not SQL)
-  - Preview of mission (ensure naming works)
-- Manual modification stages
+3) Message Prompt
 
-#### Analytics/Reporting
-- Commission Payments is a very important one
-- Users completed missions ? 
+## Validate recent update
+**Tests (did some, do more)**
 
+### Documetn Crosscheck
+1. Run RPCImpactRevision.md ✅ (This maps what potential changes you need to do)
+2. Check the changes for each Document. After deciding, ask if we are sure there are no other changes.
+3. If not, continue to each document
 
-### 3. 
-API Contract Creation and 
-2. Document them in API_CONTRACTS.md 
-3. Weave them into EXECUTION_PLAN.md
+### Congruency Test
+- Check if Frontend Page code needs updates, based on the previous review 
+  - Ask: Now that we finished RPCImpactRevision.md, should we revise our frontend page code that this impacts to ensure we dont need to update anything ?
+with Frontend page code.
 
+## Technical Document Creation
+Apply the new Technical Documents methodology to our current repo. 
+- Will HELP for future debugging, or any issues fresh CLI instances have. Minimize chance for hallucination and bugs
 
-
-## Preparing Repo for Future Work 
-**Future work means not being able to spend full days coding. You are 
-building a system which will help you "jump back into" coding with "ease".
-
-
-## Documentation Check
-### RewardUIFlow.md <> API_CONTRACTS ✅
-
-### MissionsRewards.xlsx <> API_CONTRACTS ⚠️
-```CLI: RewardUIFLow.md ``
-- Tasks
-  CommissionBoost ✅
-  PhysicalGift ✅
-  Discount ✅
-  Instant Rewards ✅
-  Standard Mission Flow ✅
-  Raffle Mision Flow
-
-### MissionsRewardsFlows.md <> API_CONTRACTS ⚠️
-- Tasks
-  CommissionBoost ✅
-  PhysicalGift ✅
-  Discount ✅
-  Instant Rewards ✅
-  Standard Mission Flow ✅
-  Raffle Mision Flow
-
-### Miro <> API_CONTRACTS ⚠️
-
-1. Compare to API_Contracts
-2. Edit each stage in each tab to match the UI Flow
-3. Do for every tab in the excel
-
-### ANALYZE
-**RewardUIFlow.md**
-0. CLI friendly
-1. UI State information mixed with **SOME** Schema attributes
-- Important distinction, not FULL UI state info. Just what's related to UI
-
-**MissionRewardsFlows**
-0. CLI friendly
-1. UI State information mixed with **SOME** Schema attributes
-- Important distinction, not FULL UI state info. Just what's related to UI
-
-**MissionsRewards.xlsx**
-0. Human friendly.
-1. UI State information mixed with **SOME** Schema attributes
-
-## EXECUTION_PLAN
-### Loyalty.md ✅
-Create a prompt specifying that Loyalty.md may be out of date. IF differnences arise, to include you in the decision making process and not execute without your OK
-
-### SchemaFinalv2.md 
-Create a prompt specifying that Loyalty.md may be out of date. IF differnences arise, to include you in the decision making process and not execute without your OK
-
-### MissionsRewardsFlow.md ✅
-Create a prompt specifying that Loyalty.md may be out of date. IF differnences arise, to include you in the decision making process and not execute without your OK
-
-### Testing 
-1. Identify what best testing methodology is, considering the suggestions from consultants:
-GeminiTests.md
-CodexTests.md
-Claude: TestingStrategy.md 
-
-2. If testing is done at different steps of implementation, it needs to be in EXECUTION_PLAN.md.
-- Following same methodology of SELF CONTAINED. 
-  - Maybe first agree on a testing plan, using EXECUTION_PLAN.md as the guideline (SOURCE OF TRUTH) (For it to be referencable in executionplan, as the other tasks are now with API_CONTRACTS.md )
-    - Then weave it into EXECUTION_PLAN.md
 
 ## Clean Repo
 Check which .mds are deletable

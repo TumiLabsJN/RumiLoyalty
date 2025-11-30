@@ -1312,7 +1312,152 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      auth_create_otp: {
+        Args: {
+          p_code_hash: string
+          p_expires_at: string
+          p_session_id: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      auth_create_reset_token: {
+        Args: {
+          p_expires_at: string
+          p_ip_address?: string
+          p_token_hash: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      auth_create_user: {
+        Args: {
+          p_client_id: string
+          p_email: string
+          p_id: string
+          p_password_hash: string
+          p_terms_version?: string
+          p_tiktok_handle: string
+        }
+        Returns: {
+          client_id: string
+          created_at: string
+          current_tier: string
+          email: string
+          email_verified: boolean
+          id: string
+          is_admin: boolean
+          terms_accepted_at: string
+          terms_version: string
+          tiktok_handle: string
+        }[]
+      }
+      auth_email_exists: {
+        Args: { p_client_id: string; p_email: string }
+        Returns: boolean
+      }
+      auth_find_otp_by_session: {
+        Args: { p_session_id: string }
+        Returns: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          session_id: string
+          used: boolean
+          user_id: string
+        }[]
+      }
+      auth_find_recent_reset_tokens: {
+        Args: { p_user_id: string }
+        Returns: {
+          created_at: string
+          id: string
+        }[]
+      }
+      auth_find_user_by_email: {
+        Args: { p_client_id: string; p_email: string }
+        Returns: {
+          client_id: string
+          email: string
+          email_verified: boolean
+          id: string
+          is_admin: boolean
+          tiktok_handle: string
+        }[]
+      }
+      auth_find_user_by_handle: {
+        Args: { p_client_id: string; p_handle: string }
+        Returns: {
+          client_id: string
+          email: string
+          email_verified: boolean
+          id: string
+          is_admin: boolean
+          last_login_at: string
+          tiktok_handle: string
+        }[]
+      }
+      auth_find_user_by_id: {
+        Args: { p_user_id: string }
+        Returns: {
+          client_id: string
+          current_tier: string
+          email: string
+          email_verified: boolean
+          id: string
+          is_admin: boolean
+          tiktok_handle: string
+        }[]
+      }
+      auth_find_valid_reset_tokens: {
+        Args: never
+        Returns: {
+          expires_at: string
+          id: string
+          token_hash: string
+          used_at: string
+          user_id: string
+        }[]
+      }
+      auth_get_client_by_id: {
+        Args: { p_client_id: string }
+        Returns: {
+          id: string
+          logo_url: string
+          name: string
+          primary_color: string
+          subdomain: string
+        }[]
+      }
+      auth_handle_exists: {
+        Args: { p_client_id: string; p_handle: string }
+        Returns: boolean
+      }
+      auth_increment_otp_attempts: {
+        Args: { p_session_id: string }
+        Returns: number
+      }
+      auth_invalidate_user_reset_tokens: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      auth_mark_email_verified: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      auth_mark_otp_used: { Args: { p_session_id: string }; Returns: undefined }
+      auth_mark_reset_token_used: {
+        Args: { p_token_id: string }
+        Returns: undefined
+      }
+      auth_update_last_login: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      get_current_user_client_id: { Args: never; Returns: string }
+      is_admin_of_client: { Args: { p_client_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

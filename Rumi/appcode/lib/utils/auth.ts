@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server-client';
+import { createAdminClient } from '@/lib/supabase/admin-client';
 import type { Database } from '@/lib/types/database';
 
 type User = Database['public']['Tables']['users']['Row'];
@@ -40,8 +41,9 @@ export interface AuthenticatedUser {
 /**
  * Get authenticated user from Supabase session
  *
- * Extracts user from JWT token via Supabase auth, then fetches
- * full user data including client_id for multitenancy enforcement.
+ * Uses RPC function (auth_find_user_by_id) to bypass RLS recursion.
+ * This is CRITICAL - without RPC, the admin_full_access_users policy
+ * causes infinite recursion when querying the users table.
  *
  * @throws UnauthorizedError if no valid session
  * @throws ForbiddenError if user not found in database
@@ -59,15 +61,27 @@ export async function getUserFromRequest(): Promise<AuthenticatedUser> {
     throw new UnauthorizedError('Invalid or expired session');
   }
 
-  // 2. Fetch full user data from users table (includes client_id)
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id, client_id, email, tiktok_handle, current_tier, is_admin')
-    .eq('id', authUser.id)
-    .single();
+  // 2. Fetch full user data via RPC function (bypasses RLS)
+  // Note: createAdminClient is SYNC, not async!
+  const adminClient = createAdminClient();
+  const { data, error: userError } = await adminClient.rpc('auth_find_user_by_id', {
+    p_user_id: authUser.id,
+  });
 
-  if (userError || !user) {
+  if (userError) {
+    throw new ForbiddenError('Failed to fetch user data');
+  }
+
+  if (!data || data.length === 0) {
     throw new ForbiddenError('User not found in database');
+  }
+
+  const user = data[0];
+
+  // These fields should always be present for authenticated users
+  // If null, something is wrong with the user record
+  if (!user.email || !user.current_tier) {
+    throw new ForbiddenError('Incomplete user profile');
   }
 
   return {
@@ -76,7 +90,7 @@ export async function getUserFromRequest(): Promise<AuthenticatedUser> {
     email: user.email,
     tiktokHandle: user.tiktok_handle,
     currentTier: user.current_tier,
-    isAdmin: user.is_admin,
+    isAdmin: user.is_admin ?? false,
   };
 }
 

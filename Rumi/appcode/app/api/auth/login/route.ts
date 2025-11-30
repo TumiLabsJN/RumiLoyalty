@@ -22,10 +22,11 @@ import { checkLoginRateLimit, recordFailedLogin, clearLoginRateLimit } from '@/l
 const HANDLE_REGEX = /^@?[a-zA-Z0-9_.]{1,30}$/;
 
 export async function POST(request: NextRequest) {
+  // Parse request body outside try-catch to have handle available in catch
+  const body = await request.json().catch(() => ({}));
+  const { handle, password } = body;
+
   try {
-    // Parse request body
-    const body = await request.json().catch(() => ({}));
-    const { handle, password } = body;
 
     // Validate required fields
     if (!handle || !password) {
@@ -125,15 +126,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     // Log failed login attempt for security auditing
-    const body = await request.clone().json().catch(() => ({}));
-    const failedHandle = body.handle || 'unknown';
+    const failedHandle = handle || 'unknown';
     console.log(`[AUTH] Login failed: handle=${failedHandle}, error=${error instanceof Error ? error.message : 'unknown'}`);
 
     // Handle specific business errors with appropriate error codes
     if (error instanceof BusinessError) {
       // Record failed attempt for rate limiting (only for credential errors)
-      if (error.code === 'INVALID_CREDENTIALS' && body.handle && process.env.CLIENT_ID) {
-        const rateLimitResult = recordFailedLogin(process.env.CLIENT_ID, body.handle);
+      if (error.code === 'INVALID_CREDENTIALS' && handle && process.env.CLIENT_ID) {
+        const rateLimitResult = recordFailedLogin(process.env.CLIENT_ID, handle);
         if (rateLimitResult.isLocked) {
           console.log(`[AUTH] Account locked after 5 failed attempts: handle=${failedHandle}`);
           return NextResponse.json(

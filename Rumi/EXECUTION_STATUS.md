@@ -8,7 +8,7 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 3.3.1 - Create check-handle route**
+1. Current task: **Task 3.4.1 - Create auth test infrastructure** (Step 3.3 COMPLETE)
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
@@ -106,7 +106,7 @@ After completing each task, ALWAYS share a verification table with the user:
 ## ✅ RESOLVED: RLS Security Fix
 
 **Status:** COMPLETE - All 17 tests passing
-**Documentation:** `/home/jorge/Loyalty/Rumi/SecurityDefiner.md`
+**Documentation:** ARCHITECTURE.md Section 12 (SECURITY DEFINER Pattern)
 **Migration:** `supabase/migrations/20251129165155_fix_rls_with_security_definer.sql`
 
 ### What Was Fixed
