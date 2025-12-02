@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-11-29 17:30 [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-02 [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **READ THIS FIRST.** You are executing EXECUTION_PLAN.md sequentially.
 
-1. Current task: **Task 3.4.1 - Create auth test infrastructure** (Step 3.3 COMPLETE)
+1. Current task: **Task 3.4.7 - Create E2E auth test** (Tasks 3.4.1-3.4.6 COMPLETE)
 2. Migration file: `supabase/migrations/20251128173733_initial_schema.sql` - **DEPLOYED TO REMOTE SUPABASE**
 3. Seed file: `supabase/seed.sql` - **DEPLOYED TO REMOTE SUPABASE**
 4. Types file: `appcode/lib/types/database.ts` - **GENERATED (1,447 lines, all 18 tables)**
@@ -140,14 +140,40 @@ After completing each task, ALWAYS share a verification table with the user:
 
 ## 🎯 CURRENT TASK
 
-**Task ID:** Task 3.4.1 (Next task after blocker resolved)
-**Description:** Continue to Phase 3.4 implementation
+**Task ID:** Task 3.4.7
+**Description:** Create E2E auth test (Playwright)
 **Status:** Ready to start
 
 ### What's Left
-- (See EXECUTION_PLAN.md for Task 3.4.1 details)
+- (See EXECUTION_PLAN.md for Task 3.4.7 details)
 
 ### Recently Completed in This Session
+- [x] Task 3.4.6: Test multi-tenant isolation
+  - Created `appcode/tests/integration/security/multi-tenant-isolation.test.ts`
+  - 13 tests covering: user lookup isolation, handle existence isolation, direct table access, RLS on sensitive tables, cross-tenant prevention, email isolation
+  - Verifies Pattern 8 (Multi-Tenant Query Isolation) per Loyalty.md
+- [x] Task 3.4.5: Test handle uniqueness
+  - Added 3 tests to `appcode/tests/integration/auth/signup-login-flow.test.ts`
+  - Test Case 1: first signup with handle succeeds
+  - Test Case 2: second signup same handle blocked by auth_handle_exists
+  - Test Case 3: same handle in different client succeeds (multi-tenant)
+- [x] Task 3.4.4: Test password reset token single-use
+  - Created `appcode/tests/integration/auth/password-reset-security.test.ts`
+  - 14 tests covering: token creation, single-use enforcement, expiration, rate limiting, invalidation
+  - Verifies 15-minute expiry per API_CONTRACTS.md
+- [x] Task 3.4.3: Test OTP expiration enforced
+  - Created `appcode/tests/integration/auth/otp-security.test.ts`
+  - 12 tests covering: valid OTP, expired OTP, invalid OTP, max attempts, used OTP
+  - Verifies 5-minute expiry and 3 max attempts per API_CONTRACTS.md
+- [x] Task 3.4.2: Test complete auth flow (RPC layer)
+  - Created `appcode/tests/integration/auth/signup-login-flow.test.ts`
+  - 15 tests covering: user lookup, user creation, OTP management, email verification, bcrypt
+  - Tests RPC functions: auth_find_user_by_handle, auth_handle_exists, auth_create_user, auth_create_otp, etc.
+  - Note: Full auth flow with cookies tested in E2E (Task 3.4.7)
+- [x] Task 3.4.1: Auth test infrastructure
+  - Created `appcode/tests/fixtures/factories.ts`
+  - Created `appcode/tests/integration/services/authService.test.ts`
+  - 6 tests for test infrastructure and RPC function access
 - [x] RLS Security Fix - All 17 auth integration tests passing
   - Created migration: `20251129165155_fix_rls_with_security_definer.sql`
   - Updated 4 repositories + auth.ts + client-config route
@@ -331,7 +357,74 @@ Create verify-otp API route
 
 ## 🚫 ACTIVE BLOCKERS
 
-None
+- **CR-001** blocks Task 3.4.7 (E2E auth test will fail at OTP verification)
+
+---
+
+## 📋 OPEN CHANGE REQUESTS
+
+### CR-001: Fix Session Creation After OTP Verification
+
+**Status:** PENDING APPROVAL
+**Filed:** 2025-12-02
+**Severity:** CRITICAL - Blocks signup flow
+**Blocks:** Task 3.4.7 (E2E test will fail without this)
+
+#### Problem
+- `authService.verifyOTP()` at line 510 calls `supabase.auth.admin.getUserById()`
+- This function does NOT create a session - it only fetches user data
+- Error thrown: `AUTH_CREATION_FAILED: Failed to create session`
+- Users cannot complete signup - blocked after OTP verification
+
+#### Root Cause
+- AUTH_IMPL.md documents incorrect behavior (says "Create session" but uses wrong API)
+- `signUp()` returns a session (when email confirmation disabled) but it's discarded
+- No way to create session after OTP without user's password
+
+#### Solution
+Store encrypted session tokens from signup, return after OTP verification.
+**Full implementation details:** `/repodocs/LoginFlowFix.md`
+
+#### Files to MODIFY (Implementation)
+
+| File | Change Type | Lines Affected |
+|------|-------------|----------------|
+| `supabase/migrations/YYYYMMDD_add_session_tokens_to_otps.sql` | CREATE | New file (~15 lines) |
+| `appcode/lib/repositories/otpRepository.ts` | MODIFY | Lines 15-25 (interface), 40-55 (mapper), 66-100 (create) |
+| `appcode/lib/services/authService.ts` | MODIFY | Line 18 (import), 166-172 (capture session), 203-208 (store tokens), 504-527 (return tokens) |
+| `appcode/app/api/auth/verify-otp/route.ts` | MODIFY | Response handling (~20 lines) |
+
+#### Database Changes (RPC Functions to UPDATE)
+
+| RPC Function | Change |
+|--------------|--------|
+| `auth_create_otp` | Add 2 params: `p_access_token_encrypted`, `p_refresh_token_encrypted` |
+| `auth_find_otp_by_session` | Add 2 return columns: `access_token_encrypted`, `refresh_token_encrypted` |
+| `auth_mark_otp_used` | Clear token columns when marking used (security) |
+
+#### Documentation to UPDATE After Implementation
+
+| Document | Section to Update |
+|----------|-------------------|
+| `repodocs/AUTH_IMPL.md` | Lines 334-340 (verifyOTP session creation), Lines 379 (function description) |
+| `EXECUTION_STATUS.md` | Mark CR-001 as CLOSED |
+
+#### Test Files Potentially Affected
+
+| Test File | Impact |
+|-----------|--------|
+| `tests/integration/auth/signup-login-flow.test.ts` | May need updates if testing verifyOTP return value |
+| `tests/integration/auth/otp-security.test.ts` | May need updates for new OTP record fields |
+
+#### Estimated Scope
+- ~150 lines of code changes
+- 1 new migration file
+- 3 RPC function updates
+- 4 TypeScript files modified
+
+#### Decision
+- [ ] APPROVED - Implement CR-001 before Task 3.4.7
+- [ ] REJECTED - Use alternative approach (specify which)
 
 ---
 

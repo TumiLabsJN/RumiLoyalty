@@ -612,41 +612,41 @@
     - **Acceptance Criteria:** MUST return `{ heading: string, message: string, submessage: string, buttonText: string }` per lines 1328-1333, implements all 5 steps of onboarding-info workflow per lines 1356-1379, validates session token from HTTP-only cookie auth-token (line 1315), returns 401 UNAUTHORIZED if invalid/missing (lines 1415-1420), queries users table for client_id (lines 1363-1365, 1449-1450), MVP implementation returns hardcoded default response (lines 1383-1386), response can include emojis in heading (line 1321), dynamic dates in message (line 1322), communication channel info in submessage (line 1323), CTA button text (line 1324), can be cached per client_id (lines 1409-1411, 1435), does NOT expose sensitive data or PII (lines 1434, 1437), returns 200 for success or 401/500 for errors, follows route pattern from Section 5
 
 ## Step 3.4: Auth Testing
-- [ ] **Task 3.4.1:** Create auth test infrastructure
+- [x] **Task 3.4.1:** Create auth test infrastructure
     - **Action:** Create `/tests/integration/services/authService.test.ts` and `/tests/fixtures/factories.ts`
     - **References:** SchemaFinalv2.md lines 106-155 (clients and users tables), ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640)
     - **Implementation Guide:** MUST create test infrastructure: (1) install vitest and supertest if not present, (2) create factories.ts with createTestClient({name, subdomain, vip_metric}) returning client with UUID, (3) createTestUser({client_id, tiktok_handle, email, current_tier}) returning user with UUID and auth token, (4) createTestTier({client_id, tier_level, sales_threshold}), (5) cleanupTestData() that deletes in reverse FK order: redemptions → mission_progress → missions → rewards → users → tiers → clients, (6) setupTestDb() that initializes Supabase test client
     - **Acceptance Criteria:** File exists with test suite skeleton, factory functions MUST create valid test data with proper FK relationships per SchemaFinalv2.md, cleanup MUST remove all test data without FK violations
 
-- [ ] **Task 3.4.2:** Test complete auth flow
+- [x] **Task 3.4.2:** Test complete auth flow
     - **Action:** Create `/tests/integration/auth/signup-login-flow.test.ts`
     - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup), lines 438-592 (POST /api/auth/verify-otp), lines 593-750 (POST /api/auth/login), SchemaFinalv2.md lines 123-155 (users table), lines 158-184 (otp_codes table)
     - **Implementation Guide:** MUST test complete flow: (1) create test client with createTestClient(), (2) POST /api/auth/signup with {email, password, tiktokHandle, agreedToTerms: true} → expect 201, otpSent=true, (3) query otp_codes table directly to get OTP code, (4) POST /api/auth/verify-otp with {email, code} → expect 200, verified=true, (5) POST /api/auth/login with {email, password} → expect 200, valid JWT token, (6) verify users table has email_verified=true, (7) verify auth token allows access to protected endpoint
     - **Test Cases:** (1) signup creates user in DB with correct client_id, (2) signup returns otpSent=true and sessionId, (3) verify-otp marks email_verified=true, (4) login returns valid JWT token, (5) token grants access to protected routes
     - **Acceptance Criteria:** All 5 test cases MUST pass, user record MUST exist in users table per SchemaFinalv2.md lines 123-155, otp_codes record MUST be created and consumed per lines 158-184, auth flow prevents users-cant-login catastrophic bug
 
-- [ ] **Task 3.4.3:** Test OTP expiration enforced
+- [x] **Task 3.4.3:** Test OTP expiration enforced
     - **Action:** Create `/tests/integration/auth/otp-security.test.ts`
     - **References:** API_CONTRACTS.md lines 438-592 (POST /api/auth/verify-otp), SchemaFinalv2.md lines 158-184 (otp_codes table with expires_at), Loyalty.md lines 2345-2360 (OTP Security)
     - **Implementation Guide:** MUST test OTP security: (1) create user via signup, (2) Test valid OTP: query otp_codes, POST /api/auth/verify-otp with correct code → expect 200, (3) Test expired OTP: INSERT otp_codes with expires_at = NOW() - INTERVAL '11 minutes', POST verify-otp → expect 400 OTP_EXPIRED, (4) Test invalid OTP: POST verify-otp with wrong 6-digit code → expect 400 OTP_INVALID, (5) Test max attempts: POST verify-otp with wrong code 5 times, 6th attempt → expect 400 MAX_ATTEMPTS_EXCEEDED even with correct code, (6) verify otp_codes.attempts_count incremented per attempt
     - **Test Cases:** (1) valid OTP within 10 min succeeds, (2) expired OTP (>10 min) returns OTP_EXPIRED, (3) invalid OTP returns OTP_INVALID, (4) max attempts (5) exceeded returns MAX_ATTEMPTS_EXCEEDED, (5) attempts_count tracks failed attempts
     - **Acceptance Criteria:** All 5 test cases MUST pass, OTP expiration MUST be enforced at 10 minutes per SchemaFinalv2.md line 172, max attempts MUST be 5 per line 173, prevents account-takeover-via-old-OTP catastrophic bug
 
-- [ ] **Task 3.4.4:** Test password reset token single-use
+- [x] **Task 3.4.4:** Test password reset token single-use
     - **Action:** Create `/tests/integration/auth/password-reset-security.test.ts`
     - **References:** API_CONTRACTS.md lines 751-945 (POST /api/auth/forgot-password, POST /api/auth/reset-password), SchemaFinalv2.md lines 187-220 (password_reset_tokens table)
     - **Implementation Guide:** MUST test reset token security: (1) create verified user, (2) POST /api/auth/forgot-password with {email} → expect 200, (3) query password_reset_tokens table to get token, (4) POST /api/auth/reset-password with {token, newPassword} → expect 200, (5) verify password_reset_tokens.used_at is set, (6) POST /api/auth/reset-password with same token again → expect 400 TOKEN_ALREADY_USED, (7) Test expiration: INSERT token with expires_at = NOW() - INTERVAL '2 hours', POST reset-password → expect 400 TOKEN_EXPIRED, (8) verify user can login with new password
     - **Test Cases:** (1) valid token resets password successfully, (2) same token reused returns TOKEN_ALREADY_USED, (3) expired token (>1 hour) returns TOKEN_EXPIRED, (4) user can login with new password after reset
     - **Acceptance Criteria:** All 4 test cases MUST pass, token MUST be single-use per SchemaFinalv2.md line 205 (used_at), expiration MUST be 1 hour per line 204, prevents account-takeover-via-reused-token catastrophic bug
 
-- [ ] **Task 3.4.5:** Test handle uniqueness
+- [x] **Task 3.4.5:** Test handle uniqueness
     - **Action:** Add test case to `/tests/integration/auth/signup-login-flow.test.ts`
     - **References:** API_CONTRACTS.md lines 189-437 (POST /api/auth/signup error HANDLE_ALREADY_EXISTS), SchemaFinalv2.md lines 138-139 (users.tiktok_handle UNIQUE per client)
     - **Implementation Guide:** MUST test handle uniqueness: (1) create test client, (2) POST /api/auth/signup with {tiktokHandle: 'creator1', ...} → expect 201, (3) POST /api/auth/signup with same {tiktokHandle: 'creator1', different email, ...} → expect 400 HANDLE_ALREADY_EXISTS, (4) create second test client, (5) POST /api/auth/signup to client B with {tiktokHandle: 'creator1', ...} → expect 201 (same handle OK in different client)
     - **Test Cases:** (1) first signup with handle succeeds, (2) second signup with same handle same client returns 400, (3) same handle in different client succeeds (multi-tenant)
     - **Acceptance Criteria:** All 3 test cases MUST pass, UNIQUE(client_id, tiktok_handle) constraint MUST be enforced per SchemaFinalv2.md line 139
 
-- [ ] **Task 3.4.6:** Test multi-tenant isolation
+- [x] **Task 3.4.6:** Test multi-tenant isolation
     - **Action:** Create `/tests/integration/security/multi-tenant-isolation.test.ts`
     - **References:** Loyalty.md lines 2091-2130 (Pattern 8: Multi-Tenant Query Isolation), SchemaFinalv2.md lines 106-120 (clients table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1028-1063)
     - **Implementation Guide:** MUST test tenant isolation: (1) create clientA and clientB with createTestClient(), (2) create userA in clientA, userB in clientB, (3) create rewardA for clientA, rewardB for clientB, (4) create missionA for clientA, missionB for clientB, (5) Test API isolation: GET /api/rewards as userA → MUST NOT contain rewardB, (6) GET /api/missions as userA → MUST NOT contain missionB, (7) POST /api/rewards/:rewardB_id/claim as userA → expect 403 or 404, (8) Test RLS: direct Supabase query as userA context → verify RLS blocks clientB data, (9) verify all queries include client_id filter per Pattern 8

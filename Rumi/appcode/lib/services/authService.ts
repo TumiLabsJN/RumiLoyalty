@@ -17,12 +17,16 @@
 
 import { randomBytes, randomInt } from 'crypto';
 import bcrypt from 'bcrypt';
+import { Resend } from 'resend';
 import { createClient } from '@/lib/supabase/server-client';
 import { userRepository } from '@/lib/repositories/userRepository';
 import { otpRepository } from '@/lib/repositories/otpRepository';
 import { clientRepository } from '@/lib/repositories/clientRepository';
 import { passwordResetRepository } from '@/lib/repositories/passwordResetRepository';
 import { ValidationError, BusinessError } from '@/lib/utils/errors';
+
+// Initialize Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // OTP configuration
 const OTP_LENGTH = 6;
@@ -73,28 +77,57 @@ async function verifyOTPHash(otp: string, hash: string): Promise<boolean> {
 
 /**
  * Send OTP email via Resend
- * TODO: Implement actual email sending when Resend is configured
+ *
+ * References:
+ * - Loyalty.md lines 730-736 (OTP email template)
+ * - API_CONTRACTS.md lines 334, 414 (5-minute expiry)
  */
 async function sendOTPEmail(email: string, otp: string, clientName: string): Promise<void> {
-  // Placeholder for Resend integration
-  // In development, log the OTP for testing
+  // Always log OTP in development for debugging/testing
   if (process.env.NODE_ENV === 'development') {
     console.log(`[DEV] OTP for ${email}: ${otp}`);
   }
 
-  // TODO: Task for email utility - implement Resend integration
-  // const resend = new Resend(process.env.RESEND_API_KEY);
-  // await resend.emails.send({
-  //   from: `${clientName} <noreply@${process.env.RESEND_DOMAIN}>`,
-  //   to: email,
-  //   subject: `Your verification code: ${otp}`,
-  //   html: `<p>Your verification code is: <strong>${otp}</strong></p><p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
-  // });
+  // Send actual email via Resend
+  try {
+    const { data, error } = await resend.emails.send({
+      from: `${clientName} <onboarding@resend.dev>`, // Use Resend test domain (works without domain verification)
+      to: email,
+      subject: `Your verification code - ${clientName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Verify Your Email</h2>
+          <p>Your verification code is:</p>
+          <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #333;">${otp}</span>
+          </div>
+          <p style="color: #666;">This code expires in <strong>${OTP_EXPIRY_MINUTES} minutes</strong>.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            If you didn't request this code, please ignore this email.
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('[Resend] OTP email error:', error);
+      // Don't throw - allow auth flow to continue (user can resend OTP)
+      // In production, this should trigger monitoring/alerts
+    } else {
+      console.log(`[Resend] OTP email sent to ${email}, id: ${data?.id}`);
+    }
+  } catch (err) {
+    console.error('[Resend] OTP email exception:', err);
+    // Don't throw - allow auth flow to continue
+  }
 }
 
 /**
  * Send password reset email via Resend
- * TODO: Implement actual email sending when Resend is configured
+ *
+ * References:
+ * - Loyalty.md Flow 5 (Password Reset)
+ * - API_CONTRACTS.md lines 614-741 (forgotPassword endpoint)
  */
 async function sendPasswordResetEmail(
   email: string,
@@ -106,26 +139,51 @@ async function sendPasswordResetEmail(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const resetUrl = `${baseUrl}/login/resetpw?token=${resetToken}`;
 
-  // Placeholder for Resend integration
-  // In development, log the reset link for testing
+  // Always log reset link in development for debugging/testing
   if (process.env.NODE_ENV === 'development') {
     console.log(`[DEV] Password reset for ${email}: ${resetUrl}`);
   }
 
-  // TODO: Task for email utility - implement Resend integration
-  // const resend = new Resend(process.env.RESEND_API_KEY);
-  // await resend.emails.send({
-  //   from: `${clientName} <noreply@${process.env.RESEND_DOMAIN}>`,
-  //   to: email,
-  //   subject: `Reset Your Password - ${clientName}`,
-  //   html: `
-  //     <p>Hi @${handle},</p>
-  //     <p>Click the link below to reset your password:</p>
-  //     <p><a href="${resetUrl}">Reset Password</a></p>
-  //     <p>This link expires in ${RESET_TOKEN_EXPIRY_MINUTES} minutes.</p>
-  //     <p>If you didn't request this, ignore this email.</p>
-  //   `,
-  // });
+  // Send actual email via Resend
+  try {
+    const { data, error } = await resend.emails.send({
+      from: `${clientName} <onboarding@resend.dev>`, // Use Resend test domain (works without domain verification)
+      to: email,
+      subject: `Reset Your Password - ${clientName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Reset Your Password</h2>
+          <p>Hi @${handle},</p>
+          <p>We received a request to reset your password. Click the button below to create a new password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}"
+               style="background-color: #000; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color: #666;">This link expires in <strong>${RESET_TOKEN_EXPIRY_MINUTES} minutes</strong>.</p>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 11px;">
+            Or copy and paste this link into your browser:<br>
+            <span style="color: #666;">${resetUrl}</span>
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('[Resend] Password reset email error:', error);
+      // Don't throw - allow auth flow to continue (anti-enumeration requires success response)
+    } else {
+      console.log(`[Resend] Password reset email sent to ${email}, id: ${data?.id}`);
+    }
+  } catch (err) {
+    console.error('[Resend] Password reset email exception:', err);
+    // Don't throw - allow auth flow to continue
+  }
 }
 
 /**
