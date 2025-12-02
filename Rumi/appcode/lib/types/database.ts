@@ -413,31 +413,37 @@ export type Database = {
       }
       otp_codes: {
         Row: {
+          access_token_encrypted: string | null
           attempts: number | null
           code_hash: string
           created_at: string | null
           expires_at: string
           id: string
+          refresh_token_encrypted: string | null
           session_id: string
           used: boolean | null
           user_id: string | null
         }
         Insert: {
+          access_token_encrypted?: string | null
           attempts?: number | null
           code_hash: string
           created_at?: string | null
           expires_at: string
           id?: string
+          refresh_token_encrypted?: string | null
           session_id: string
           used?: boolean | null
           user_id?: string | null
         }
         Update: {
+          access_token_encrypted?: string | null
           attempts?: number | null
           code_hash?: string
           created_at?: string | null
           expires_at?: string
           id?: string
+          refresh_token_encrypted?: string | null
           session_id?: string
           used?: boolean | null
           user_id?: string | null
@@ -1312,15 +1318,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      auth_create_otp: {
-        Args: {
-          p_code_hash: string
-          p_expires_at: string
-          p_session_id: string
-          p_user_id: string
-        }
-        Returns: string
-      }
+      auth_create_otp:
+        | {
+            Args: {
+              p_access_token_encrypted?: string
+              p_code_hash: string
+              p_expires_at: string
+              p_refresh_token_encrypted?: string
+              p_session_id: string
+              p_user_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_code_hash: string
+              p_expires_at: string
+              p_session_id: string
+              p_user_id: string
+            }
+            Returns: string
+          }
       auth_create_reset_token: {
         Args: {
           p_expires_at: string
@@ -1359,11 +1377,13 @@ export type Database = {
       auth_find_otp_by_session: {
         Args: { p_session_id: string }
         Returns: {
+          access_token_encrypted: string
           attempts: number
           code_hash: string
           created_at: string
           expires_at: string
           id: string
+          refresh_token_encrypted: string
           session_id: string
           used: boolean
           user_id: string

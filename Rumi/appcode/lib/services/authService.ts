@@ -24,6 +24,7 @@ import { otpRepository } from '@/lib/repositories/otpRepository';
 import { clientRepository } from '@/lib/repositories/clientRepository';
 import { passwordResetRepository } from '@/lib/repositories/passwordResetRepository';
 import { ValidationError, BusinessError } from '@/lib/utils/errors';
+import { encrypt, decrypt } from '@/lib/utils/encryption'; // CR-001: For session token encryption
 
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -228,6 +229,8 @@ export interface VerifyOTPResult {
   tiktokHandle: string;
   isAdmin: boolean;
   message: string;
+  accessToken: string | null;  // CR-001: Supabase access_token for session
+  refreshToken: string | null; // CR-001: Supabase refresh_token for session
 }
 
 /**
@@ -382,6 +385,11 @@ export const authService = {
 
     const authUserId = authData.user.id;
 
+    // CR-001: Capture session tokens for auto-login after OTP verification
+    // When email confirmation is disabled in Supabase, signUp returns a session
+    const accessToken = authData.session?.access_token ?? null;
+    const refreshToken = authData.session?.refresh_token ?? null;
+
     // 5. Create user in our users table
     // Note: password_hash is stored by Supabase Auth, we store a placeholder
     try {
@@ -405,12 +413,18 @@ export const authService = {
     const sessionId = generateSessionId();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    // 7. Store OTP
+    // 7. Store OTP with encrypted session tokens (CR-001)
+    // Encrypt tokens before storage for security
+    const accessTokenEncrypted = accessToken ? encrypt(accessToken) : null;
+    const refreshTokenEncrypted = refreshToken ? encrypt(refreshToken) : null;
+
     await otpRepository.create({
       userId: authUserId,
       sessionId,
       codeHash: otpHash,
       expiresAt,
+      accessTokenEncrypted,  // CR-001
+      refreshTokenEncrypted, // CR-001
     });
 
     // 8. Send verification email
@@ -501,16 +515,26 @@ export const authService = {
     // 9. Update email_verified
     await userRepository.markEmailVerified(user.clientId, user.id);
 
-    // 10. Create Supabase session (sign in the user)
-    const supabase = await createClient();
+    // 10. CR-001: Decrypt stored session tokens for auto-login
+    // These were captured during signup and encrypted for secure storage
+    let accessToken: string | null = null;
+    let refreshToken: string | null = null;
 
-    // For Supabase Auth, we need to sign in with the user's credentials
-    // Since we've verified the OTP, we can use the admin API to create a session
-    // Note: This requires the service role key for admin operations
-    const { data: sessionData, error: sessionError } = await supabase.auth.admin.getUserById(user.id);
+    if (otpRecord.accessTokenEncrypted) {
+      try {
+        accessToken = decrypt(otpRecord.accessTokenEncrypted);
+      } catch (e) {
+        console.error('[verifyOTP] Failed to decrypt access token:', e);
+        // Don't throw - user can still login manually if decryption fails
+      }
+    }
 
-    if (sessionError || !sessionData.user) {
-      throw new BusinessError('AUTH_CREATION_FAILED', 'Failed to create session');
+    if (otpRecord.refreshTokenEncrypted) {
+      try {
+        refreshToken = decrypt(otpRecord.refreshTokenEncrypted);
+      } catch (e) {
+        console.error('[verifyOTP] Failed to decrypt refresh token:', e);
+      }
     }
 
     // 11. Update last_login_at
@@ -523,6 +547,8 @@ export const authService = {
       tiktokHandle: user.tiktokHandle,
       isAdmin: user.isAdmin,
       message: 'Email verified successfully',
+      accessToken,  // CR-001: Return for session creation in route
+      refreshToken, // CR-001: Return for session creation in route
     };
   },
 

@@ -331,12 +331,26 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
   // 9. Update email_verified
   await userRepository.markEmailVerified(user.clientId, user.id);
 
-  // 10. Create Supabase session
-  const supabase = await createClient();
-  const { data: sessionData, error: sessionError } = await supabase.auth.admin.getUserById(user.id);
+  // 10. CR-001: Decrypt stored session tokens for auto-login
+  // These were captured during signup and encrypted for secure storage
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
 
-  if (sessionError || !sessionData.user) {
-    throw new BusinessError('AUTH_CREATION_FAILED', 'Failed to create session');
+  if (otpRecord.accessTokenEncrypted) {
+    try {
+      accessToken = decrypt(otpRecord.accessTokenEncrypted);
+    } catch (e) {
+      console.error('[verifyOTP] Failed to decrypt access token:', e);
+      // Don't throw - user can still login manually if decryption fails
+    }
+  }
+
+  if (otpRecord.refreshTokenEncrypted) {
+    try {
+      refreshToken = decrypt(otpRecord.refreshTokenEncrypted);
+    } catch (e) {
+      console.error('[verifyOTP] Failed to decrypt refresh token:', e);
+    }
   }
 
   // 11. Update last_login_at
@@ -349,6 +363,8 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
     tiktokHandle: user.tiktokHandle,
     isAdmin: user.isAdmin,
     message: 'Email verified successfully',
+    accessToken,  // CR-001: Return for session creation in route
+    refreshToken, // CR-001: Return for session creation in route
   };
 }
 ```
@@ -365,7 +381,7 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
 9. **On success**: Mark OTP as used - line 431
 10. Get user details - line 438
 11. Mark email as verified - line 444
-12. Create Supabase session (admin API) - line 452
+12. Decrypt stored session tokens (CR-001) - line 518-538
 13. Update last_login_at - line 459
 
 **Calls:**
@@ -376,7 +392,7 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
 - `userRepository.markEmailVerified()` - Set email_verified=true
 - `userRepository.updateLastLogin()` - Update last_login_at timestamp
 - `verifyOTPHash()` (authService.ts:70-72) - bcrypt compare
-- `supabase.auth.admin.getUserById()` - Create session
+- `decrypt()` (encryption.ts) - Decrypt stored session tokens (CR-001)
 
 **Error Cases:**
 | Error | Line | Reason |
@@ -388,7 +404,6 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
 | `OTP_MAX_ATTEMPTS` | 418 | User failed 3 attempts |
 | `INVALID_OTP` (wrong code) | 427 | bcrypt compare failed |
 | `USER_NOT_FOUND` | 440 | User record missing |
-| `AUTH_CREATION_FAILED` | 455 | Supabase session creation failed |
 
 **Security Notes:**
 - Max 3 attempts before lockout (line 417)
@@ -1927,7 +1942,7 @@ async deleteExpired(): Promise<number> {
 | `HANDLE_EXISTS` | initiateSignup:294 | 400 | Handle already registered for client | Choose different handle |
 | `EMAIL_EXISTS` | initiateSignup:300 | 400 | Email already registered for client | Login or reset password |
 | `CLIENT_NOT_FOUND` | initiateSignup:306 | 500 | Invalid clientId (system error) | Contact support |
-| `AUTH_CREATION_FAILED` | initiateSignup:322, verifyOTP:455 | 500 | Supabase Auth operation failed | Retry or contact support |
+| `AUTH_CREATION_FAILED` | initiateSignup:322 | 500 | Supabase Auth operation failed | Retry or contact support |
 | `INVALID_OTP` (format) | verifyOTP:395 | 400 | Code not 6 digits | Enter valid 6-digit code |
 | `OTP_NOT_FOUND` | verifyOTP:403 | 400 | Session not found | Sign up again |
 | `OTP_ALREADY_USED` | verifyOTP:408 | 400 | Code already consumed | Request new code |

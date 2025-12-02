@@ -62,38 +62,31 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Call auth service to verify OTP
+    // CR-001: This now returns session tokens captured during signup
     const result = await authService.verifyOTP(sessionId, code);
 
-    // 5. Get Supabase session for the user
-    const supabase = await createClient();
+    // 5. CR-001: Set Supabase session using tokens from signup
+    // If tokens are available, set the session to auto-login the user
+    let sessionSet = false;
+    if (result.accessToken && result.refreshToken) {
+      try {
+        const supabase = await createClient();
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken,
+        });
 
-    // Generate a session token for the verified user
-    // Since we've verified their OTP, we create a session via admin API
-    const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: result.email,
-      options: {
-        redirectTo: '/',
-      },
-    });
-
-    if (sessionError) {
-      console.error('Session generation error:', sessionError);
-      // Still return success but without session token - user will need to login
-      return NextResponse.json(
-        {
-          success: true,
-          verified: true,
-          userId: result.userId,
-          message: 'Email verified. Please login to continue.',
-        },
-        { status: 200 }
-      );
+        if (setSessionError) {
+          console.error('[verify-otp] Failed to set session:', setSessionError);
+          // Don't throw - user can still login manually
+        } else {
+          sessionSet = true;
+          console.log('[verify-otp] Session set successfully for user:', result.userId);
+        }
+      } catch (e) {
+        console.error('[verify-otp] Exception setting session:', e);
+      }
     }
-
-    // Extract token from the magic link
-    // The token is in the URL hash fragment
-    const sessionToken = sessionData.properties?.hashed_token || '';
 
     // 6. Build response per API_CONTRACTS.md lines 466-473
     const response = NextResponse.json(
@@ -101,14 +94,18 @@ export async function POST(request: NextRequest) {
         success: true,
         verified: true,
         userId: result.userId,
-        sessionToken: sessionToken,
+        sessionSet, // CR-001: Indicates if auto-login succeeded
+        message: sessionSet
+          ? 'Email verified successfully'
+          : 'Email verified. Please login to continue.',
       },
       { status: 200 }
     );
 
-    // 7. Set auth-token cookie (30 days per API_CONTRACTS.md line 631)
-    if (sessionToken) {
-      response.cookies.set('auth-token', sessionToken, {
+    // 7. Set auth-token cookie if session was set (30 days per API_CONTRACTS.md line 631)
+    // CR-001: Use access_token as auth-token for session tracking
+    if (sessionSet && result.accessToken) {
+      response.cookies.set('auth-token', result.accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',

@@ -17,6 +17,8 @@ import { NotFoundError } from '@/lib/utils/errors';
 
 /**
  * OTP data returned from repository
+ *
+ * CR-001: Added accessTokenEncrypted, refreshTokenEncrypted for session storage
  */
 export interface OtpData {
   id: string;
@@ -27,10 +29,14 @@ export interface OtpData {
   attempts: number;
   used: boolean;
   createdAt: string;
+  accessTokenEncrypted: string | null;  // CR-001: Encrypted Supabase access_token
+  refreshTokenEncrypted: string | null; // CR-001: Encrypted Supabase refresh_token
 }
 
 /**
  * Map RPC result to domain object
+ *
+ * CR-001: Added mapping for accessTokenEncrypted, refreshTokenEncrypted
  */
 function mapRpcResultToOtpData(row: {
   id: string;
@@ -41,6 +47,8 @@ function mapRpcResultToOtpData(row: {
   attempts: number;
   used: boolean;
   created_at: string;
+  access_token_encrypted?: string | null;
+  refresh_token_encrypted?: string | null;
 }): OtpData {
   return {
     id: row.id,
@@ -51,6 +59,8 @@ function mapRpcResultToOtpData(row: {
     attempts: row.attempts ?? 0,
     used: row.used ?? false,
     createdAt: row.created_at ?? new Date().toISOString(),
+    accessTokenEncrypted: row.access_token_encrypted ?? null,
+    refreshTokenEncrypted: row.refresh_token_encrypted ?? null,
   };
 }
 
@@ -59,8 +69,9 @@ export const otpRepository = {
    * Create a new OTP code
    *
    * Uses RPC function to bypass USING(false) policy.
+   * CR-001: Now accepts optional encrypted session tokens for auto-login after OTP verification.
    *
-   * @param otpData - OTP data to insert
+   * @param otpData - OTP data to insert (including optional session tokens)
    * @returns Created OTP data (id only from RPC)
    */
   async create(otpData: {
@@ -68,6 +79,8 @@ export const otpRepository = {
     sessionId: string;
     codeHash: string;
     expiresAt: Date;
+    accessTokenEncrypted?: string | null;  // CR-001
+    refreshTokenEncrypted?: string | null; // CR-001
   }): Promise<OtpData> {
     const supabase = createAdminClient();
 
@@ -76,6 +89,8 @@ export const otpRepository = {
       p_session_id: otpData.sessionId,
       p_code_hash: otpData.codeHash,
       p_expires_at: otpData.expiresAt.toISOString(),
+      p_access_token_encrypted: otpData.accessTokenEncrypted ?? undefined,  // CR-001
+      p_refresh_token_encrypted: otpData.refreshTokenEncrypted ?? undefined, // CR-001
     });
 
     if (error) {
@@ -96,6 +111,8 @@ export const otpRepository = {
       attempts: 0,
       used: false,
       createdAt: new Date().toISOString(),
+      accessTokenEncrypted: otpData.accessTokenEncrypted ?? null,  // CR-001
+      refreshTokenEncrypted: otpData.refreshTokenEncrypted ?? null, // CR-001
     };
   },
 
