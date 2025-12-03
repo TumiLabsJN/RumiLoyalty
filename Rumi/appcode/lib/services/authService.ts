@@ -42,6 +42,12 @@ const RESET_TOKEN_RATE_LIMIT = 3; // Max requests per hour
  * Generate a cryptographically secure 6-digit OTP
  */
 function generateOTP(): string {
+  // E2E test mode: use fixed OTP (double-gated for safety)
+  // Only works when NOT in production AND E2E_TEST_OTP env var is set
+  if (process.env.NODE_ENV !== 'production' && process.env.E2E_TEST_OTP) {
+    return process.env.E2E_TEST_OTP;
+  }
+
   // Generate random number between 0-999999, pad with leading zeros
   const otp = randomInt(0, 1000000).toString().padStart(OTP_LENGTH, '0');
   return otp;

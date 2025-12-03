@@ -3,7 +3,7 @@
 **Purpose:** Complete authentication system including signup, OTP verification, login, and password reset
 **Phase:** Phase 3 - Authentication System
 **Target Audience:** LLM agents debugging or modifying authentication features
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-03
 
 ---
 
@@ -13,6 +13,8 @@
 - Step 3.1 - Authentication Repositories ✅
 - Step 3.2 - Authentication Services ✅
 - Step 3.3 - Authentication API Routes ✅
+- Step 3.4 - Authentication Tests ✅
+- Step 3.5 - Security Infrastructure ✅
 
 **Key Files:**
 | File | Lines | Purpose |
@@ -23,6 +25,15 @@
 | `appcode/lib/repositories/clientRepository.ts` | 134 | Client/tenant queries (RPC) |
 | `appcode/lib/repositories/passwordResetRepository.ts` | 262 | Password reset token management (RPC, USING(false)) |
 | `appcode/app/api/auth/*/route.ts` | ~75 each | 9 API route handlers |
+| `appcode/lib/utils/rateLimit.ts` | 154 | Upstash rate limiters (7 limiters) |
+| `appcode/lib/middleware/rateLimitMiddleware.ts` | 172 | withRateLimit wrapper |
+| `appcode/lib/middleware/validationMiddleware.ts` | 229 | withValidation wrapper |
+| `appcode/lib/utils/requireAdmin.ts` | 117 | Admin auth utility |
+| `appcode/lib/middleware/adminMiddleware.ts` | 164 | withAdmin wrapper |
+| `appcode/middleware.ts` | 151 | Next.js /admin/* page protection |
+| `appcode/lib/utils/fileValidation.ts` | 210 | Image upload validation |
+| `appcode/lib/middleware/uploadMiddleware.ts` | 254 | withFileUpload wrapper |
+| `appcode/lib/utils/cronAuth.ts` | 172 | withCronAuth wrapper |
 
 **Database Tables Used:**
 - `users` (SchemaFinalv2.md:131-170)
@@ -36,6 +47,7 @@
 - [API Endpoints](#api-endpoints) - All 9 auth routes
 - [Error Handling](#error-handling) - Error codes and flows
 - [Security Context](#security-context) - Auth patterns and RLS
+- [Security Infrastructure](#security-infrastructure-step-35) - Rate limiting, validation, admin auth, file upload, cron
 
 ---
 
@@ -2396,6 +2408,237 @@ curl -X POST http://localhost:3000/api/auth/login \
 - **Fix:** Check SchemaFinalv2.md:139 - UNIQUE(client_id, tiktok_handle)
 - **Test:** Try creating duplicate handle in same client, should fail
 
+**Issue 5: Request blocked with 429 (Rate Limited)**
+- **Symptom:** API returns 429 "Too Many Requests" with `RATE_LIMIT_EXCEEDED` code
+- **Response headers to check:**
+  - `Retry-After` - Seconds until limit resets
+  - `X-RateLimit-Limit` - Max requests allowed
+  - `X-RateLimit-Remaining` - Requests left in window
+  - `X-RateLimit-Reset` - Unix timestamp when limit resets
+- **Limits by route** (rateLimit.ts:34-105):
+  | Route | Limit | Identifier |
+  |-------|-------|------------|
+  | `/api/auth/login` | 5/min | IP |
+  | `/api/auth/signup` | 3/min | IP |
+  | `/api/auth/reset-password` | 3/min | IP |
+  | `/api/auth/forgot-password` | 3/hour | email |
+  | `/api/auth/resend-otp` | 1/60s | userId |
+- **Debug commands:**
+  ```bash
+  # Check rate limit keys in Upstash Redis (via Upstash console)
+  KEYS ratelimit:login:*
+  KEYS ratelimit:signup:*
+
+  # Clear specific limit (for testing only)
+  DEL ratelimit:login:127.0.0.1
+  ```
+- **Common causes:**
+  - Automated testing hitting endpoints repeatedly
+  - Multiple browser tabs submitting same form
+  - Bot traffic (legitimate rate limiting working as intended)
+- **Fix for testing:** Use different IP addresses or wait for `Retry-After` seconds
+
+---
+
+## Security Infrastructure (Step 3.5)
+
+**Purpose:** Reusable security utilities and middleware for rate limiting, validation, admin auth, file uploads, and cron job authentication.
+**Reference:** Loyalty.md lines 193-295 (API Security section)
+
+### Rate Limiting
+
+**Location:** `appcode/lib/utils/rateLimit.ts` (154 lines)
+
+**Available Limiters** (rateLimit.ts:34-105):
+| Limiter | Limit | Identifier | Used On |
+|---------|-------|------------|---------|
+| `loginLimiter` | 5/min | IP | `/api/auth/login` |
+| `signupLimiter` | 3/min | IP | `/api/auth/signup` |
+| `resetPasswordLimiter` | 3/min | IP | `/api/auth/reset-password` |
+| `forgotPasswordLimiter` | 3/hour | email | `/api/auth/forgot-password` |
+| `claimLimiter` | 10/hour | userId | `/api/rewards/claim` |
+| `cronLimiter` | 1/day | route | `/api/cron/*` |
+| `otpResendLimiter` | 1/60s | userId | `/api/auth/resend-otp` |
+
+**Implementation** (rateLimit.ts:34-50):
+```typescript
+export const loginLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, '1 m'),
+  prefix: 'ratelimit:login',
+  analytics: true,
+});
+
+export const signupLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(3, '1 m'),
+  prefix: 'ratelimit:signup',
+  analytics: true,
+});
+```
+
+### Rate Limit Middleware
+
+**Location:** `appcode/lib/middleware/rateLimitMiddleware.ts` (172 lines)
+
+**Exports:**
+- `withRateLimit(limiter, handler, getIdentifier)` - HOF wrapper (line 69)
+- `checkRouteRateLimit(limiter, request, getIdentifier)` - Standalone check (line 142)
+- `ipIdentifier` - IP-based identifier (line 35)
+- `userIdentifier(userId)` - User-based identifier (line 43)
+
+**withRateLimit Implementation** (rateLimitMiddleware.ts:69-102):
+```typescript
+export function withRateLimit<T extends NextRequest>(
+  limiter: Ratelimit,
+  handler: (request: T) => Promise<NextResponse>,
+  getIdentifier: IdentifierExtractor = ipIdentifier
+): (request: T) => Promise<NextResponse> {
+  return async (request: T): Promise<NextResponse> => {
+    const identifier = await getIdentifier(request);
+    const result = await checkRateLimit(limiter, identifier);
+
+    if (!result.success) {
+      const retryAfter = Math.ceil((result.reset - Date.now()) / 1000);
+      return NextResponse.json({
+        error: 'Too Many Requests',
+        code: 'RATE_LIMIT_EXCEEDED',
+        retryAfter,
+        message: `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+      }, {
+        status: 429,
+        headers: { 'Retry-After': String(retryAfter) },
+      });
+    }
+    return handler(request);
+  };
+}
+```
+
+**Usage Example:**
+```typescript
+import { loginLimiter } from '@/lib/utils/rateLimit';
+import { withRateLimit } from '@/lib/middleware/rateLimitMiddleware';
+
+export const POST = withRateLimit(loginLimiter, async (request) => {
+  // Handler logic - only called if rate limit passes
+});
+```
+
+### Validation Middleware
+
+**Location:** `appcode/lib/middleware/validationMiddleware.ts` (229 lines)
+
+**Exports:**
+- `withValidation(schema, handler)` - HOF wrapper (line 53)
+- `validateBody(request, schema)` - Standalone body validation (line 170)
+- `validateQuery(request, schema)` - Query param validation (line 105)
+- `validateParams(params, schema)` - Path param validation (line 128)
+
+**Error Response Format** (per ARCHITECTURE.md Section 10.3):
+```typescript
+{
+  error: 'Validation Error',
+  code: 'VALIDATION_ERROR',
+  fields: { fieldName: ['error message'] }
+}
+```
+
+### Admin Authorization
+
+**Location:** `appcode/lib/utils/requireAdmin.ts` (117 lines)
+
+**Function:** `requireAdmin(request)` (line 51)
+- Returns 401 if not logged in
+- Returns 403 with "Admin access required" if not admin (per Loyalty.md line 2348)
+- Returns `AdminUser` object with `id`, `clientId`, `email`, `tiktokHandle`, `isAdmin`
+
+**Admin Middleware Location:** `appcode/lib/middleware/adminMiddleware.ts` (164 lines)
+
+**Exports:**
+- `withAdmin(handler)` - HOF wrapper (line 47)
+- `checkAdminAccess()` - Standalone check (line 100)
+
+**Usage Example:**
+```typescript
+import { withAdmin } from '@/lib/middleware/adminMiddleware';
+
+export const GET = withAdmin(async (request, adminUser) => {
+  // adminUser.clientId, adminUser.id verified
+});
+```
+
+### Next.js Admin Page Protection
+
+**Location:** `appcode/middleware.ts` (151 lines)
+
+**Matcher:** `/admin/:path*` only (line 147)
+
+**Flow:**
+1. Intercepts all `/admin/*` page requests
+2. Checks auth-token cookie
+3. Verifies session via Supabase Auth
+4. Checks `is_admin` flag via RPC
+5. Redirects non-admins to `/dashboard` with "Admin access required"
+
+### File Upload Security
+
+**Location:** `appcode/lib/utils/fileValidation.ts` (210 lines)
+
+**3-Layer Validation Model** (per Loyalty.md lines 262-293):
+
+**Exports:**
+- `validateFileType(file)` - Extension + MIME check (line 83)
+- `validateFileSize(file)` - 2MB max check (line 139)
+- `validateImageFile(file)` - Combined validation (line 160)
+- `generateStoragePath(clientId, filename)` - Safe path (line 183)
+
+**Allowed Types** (fileValidation.ts:21-24):
+```typescript
+const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg'] as const;
+const ALLOWED_MIME_TYPES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+};
+```
+
+**Security Checks:**
+- Extension whitelist (rejects .svg, .gif, .webp)
+- MIME type whitelist
+- Extension-MIME mismatch detection (prevents disguised executables)
+- 2MB max file size
+
+**Upload Middleware Location:** `appcode/lib/middleware/uploadMiddleware.ts` (254 lines)
+
+**Storage Path Pattern:** `logos/client-{clientId}.{ext}` (line 97)
+- Includes client_id to prevent cross-tenant overwrites
+
+### Cron Job Authentication
+
+**Location:** `appcode/lib/utils/cronAuth.ts` (172 lines)
+
+**Exports:**
+- `validateCronSecret(request)` - Constant-time comparison (line 37)
+- `withCronAuth(handler)` - HOF wrapper (line 89)
+- `checkCronAuth(request)` - Standalone check (line 137)
+
+**Security:**
+- Uses `crypto.timingSafeEqual` to prevent timing attacks (line 60)
+- Extracts secret from `Authorization: Bearer {secret}` header
+- Throws error if `CRON_SECRET` not set (deployment failure)
+
+**Usage Example:**
+```typescript
+import { withCronAuth } from '@/lib/utils/cronAuth';
+
+export const POST = withCronAuth(async (request) => {
+  // Only called if CRON_SECRET matches
+});
+```
+
+**Environment Variable:** `CRON_SECRET` (64 hex chars, generated with `crypto.randomBytes(32).toString('hex')`)
+
 ---
 
 ## Related Documentation
@@ -2411,7 +2654,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ---
 
-**Document Version:** 1.1
-**Steps Completed:** 3 / 3 (Steps 3.1, 3.2, 3.3 complete)
-**Last Updated:** 2025-11-30
-**Completeness:** Repositories ✅, Services ✅, API Routes ✅ - Next: Step 3.4 (Testing)
+**Document Version:** 1.2
+**Steps Completed:** 5 / 5 (Steps 3.1, 3.2, 3.3, 3.4, 3.5 complete)
+**Last Updated:** 2025-12-03
+**Completeness:** Repositories ✅, Services ✅, API Routes ✅, Tests ✅, Security Infrastructure ✅ - Phase 3 COMPLETE

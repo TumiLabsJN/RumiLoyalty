@@ -360,6 +360,36 @@ export function normalizeHandle(handle: string): string | null {
   return result.success ? result.data : null;
 }
 
+/**
+ * Validation result type per EXECUTION_PLAN.md Task 3.5.6
+ */
+export interface ValidationResult<T> {
+  success: boolean;
+  data?: T;
+  errors?: z.ZodError;
+}
+
+/**
+ * Validate request data against a schema
+ *
+ * Per EXECUTION_PLAN.md Task 3.5.6 acceptance criteria:
+ * Returns `{ success: boolean, data?: T, errors?: ZodError }`
+ *
+ * @param schema - Zod schema to validate against
+ * @param data - Data to validate
+ * @returns Validation result with success flag, parsed data, and errors
+ */
+export function validateRequest<T extends z.ZodSchema>(
+  schema: T,
+  data: unknown
+): ValidationResult<z.infer<T>> {
+  const result = schema.safeParse(data);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+  return { success: false, errors: result.error };
+}
+
 // =============================================================================
 // SECTION 5: Type Exports
 // =============================================================================

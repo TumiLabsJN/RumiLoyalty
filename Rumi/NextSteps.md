@@ -19,12 +19,19 @@ Template for the
 ### Documetn Crosscheck
 1. Run RPCImpactRevision.md ✅ (This maps what potential changes you need to do)
 2. Check the changes for each Document. After deciding, ask if we are sure there are no other changes.
+  EXECUTION_PLAN.md  ✅
+  ARCHITECUTRE.md ✅
+  API_CONTRACTS.md ✅
+  SchemaFinalv2.md ✅
+  Loyalty.md ✅
+
+
 3. If not, continue to each document
 
-### Congruency Test
-- Check if Frontend Page code needs updates, based on the previous review 
-  - Ask: Now that we finished RPCImpactRevision.md, should we revise our frontend page code that this impacts to ensure we dont need to update anything ?
-with Frontend page code.
+### Congruency Test ✅
+- Check if Frontend Page code needs updates, based on the previous review ✅
+- Ask: Now that we finished RPCImpactRevision.md, should we revise our frontend page code that this impacts to ensure we dont need to update anything ? ✅
+with Frontend page code.✅
 
 ## Technical Document Creation
 Apply the new Technical Documents methodology to our current repo. 

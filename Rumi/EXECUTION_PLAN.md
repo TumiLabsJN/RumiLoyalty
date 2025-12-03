@@ -654,107 +654,107 @@
     - **Acceptance Criteria:** All 4 test cases MUST pass, every query MUST filter by client_id per Loyalty.md Pattern 8, RLS policies MUST enforce isolation per ARCHITECTURE.md Section 9, prevents data-leakage-lawsuit catastrophic bug
     - **Note:** otp_codes and password_reset_tokens tables use `USING(false)` RLS policies - all access goes through RPC functions only. Direct queries to these tables will return 0 rows by design.
 
-- [ ] **Task 3.4.7:** Create E2E auth test
+- [x] **Task 3.4.7:** Create E2E auth test
     - **Action:** Create `/tests/e2e/auth/signup-flow.spec.ts` using Playwright
     - **References:** API_CONTRACTS.md lines 67-188 (POST /api/auth/check-handle), lines 189-437 (signup), lines 438-592 (verify-otp)
     - **Implementation Guide:** MUST test browser flow: (1) navigate to /login/start, (2) enter tiktok handle in input, click Continue, (3) if new user: fill email, password, check terms, click Sign Up, (4) intercept OTP from test DB or mock email, (5) enter OTP digits, click Verify, (6) assert redirect to /home, (7) assert dashboard shows user handle
     - **Acceptance Criteria:** Playwright test MUST automate form fill, OTP entry, verify redirect to authenticated dashboard
 
 ## Step 3.5: Security Infrastructure
-- [ ] **Task 3.5.1:** Install Upstash Rate Limit package
+- [x] **Task 3.5.1:** Install Upstash Rate Limit package
     - **Command:** `npm install @upstash/ratelimit @upstash/redis`
     - **References:** Loyalty.md lines 193-295 (API Security section), Loyalty.md lines 231-238 (Rate Limiting Implementation)
     - **Acceptance Criteria:** Packages appear in `package.json` dependencies, MUST install both @upstash/ratelimit and @upstash/redis
 
-- [ ] **Task 3.5.2:** Configure Upstash Redis connection
+- [x] **Task 3.5.2:** Configure Upstash Redis connection
     - **Action:** Add Upstash environment variables to `.env.local`
     - **References:** Loyalty.md lines 257-260 (Environment variables for Upstash)
     - **Acceptance Criteria:** MUST add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to environment file, values obtained from Upstash dashboard
 
-- [ ] **Task 3.5.3:** Create rate limit utility file
+- [x] **Task 3.5.3:** Create rate limit utility file
     - **Action:** Create `/lib/utils/rateLimit.ts` with Upstash Redis client initialization
     - **References:** Loyalty.md lines 231-238 (Rate limiting technology: Upstash Redis, 10,000 requests/day free tier), ARCHITECTURE.md Section 7 (Naming Conventions, lines 932-938 for file naming)
     - **Implementation Guide:** MUST initialize Upstash Redis client using environment variables (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from lines 259-260). Create reusable rate limiter instances for different limits: loginLimiter (5/min per IP, line 205), signupLimiter (3/min per IP, line 206), claimLimiter (10/hour per user, line 214), cronLimiter (1/day, lines 228-229). Use sliding window algorithm for accurate rate limiting.
     - **Acceptance Criteria:** File exists at `/lib/utils/rateLimit.ts`, MUST export Redis client instance, MUST export 4 pre-configured rate limiter functions (loginLimiter, signupLimiter, claimLimiter, cronLimiter) with limits matching Loyalty.md lines 205-229, uses sliding window algorithm for fairness
 
-- [ ] **Task 3.5.4:** Implement rate limit middleware
+- [x] **Task 3.5.4:** Implement rate limit middleware
     - **Action:** Create `/lib/middleware/rateLimitMiddleware.ts` with Next.js API route wrapper
     - **References:** Loyalty.md lines 202-230 (API Route Inventory with rate limits), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
     - **Implementation Guide:** MUST create wrapper function `withRateLimit(limiter, handler)` that: (1) extracts identifier (IP for auth routes, userId for creator routes), (2) calls limiter.limit(identifier), (3) if limit exceeded return 429 with Retry-After header, (4) if limit OK call handler and return response. Support both IP-based (lines 205-206) and user-based (line 214) rate limiting.
     - **Acceptance Criteria:** File exists at `/lib/middleware/rateLimitMiddleware.ts`, MUST export `withRateLimit` wrapper function, returns 429 status code with `Retry-After` header when limit exceeded, supports both IP-based and user-based identification, integrates with Upstash rate limiters from Task 3.5.3
 
-- [ ] **Task 3.5.5:** Install Zod package (if not already installed)
+- [x] **Task 3.5.5:** Install Zod package (if not already installed)
     - **Command:** `npm list zod || npm install zod`
     - **References:** Loyalty.md lines 240-242 (Input Validation with Zod schemas on all routes)
     - **Acceptance Criteria:** Zod package present in `package.json`, version 3.x or higher
 
-- [ ] **Task 3.5.6:** Create validation utility file
+- [x] **Task 3.5.6:** Create validation utility file
     - **Action:** Create `/lib/utils/validation.ts` with reusable Zod schemas
     - **References:** Loyalty.md lines 240-242 (Zod validation requirement), API_CONTRACTS.md (request schemas for all endpoints), ARCHITECTURE.md Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST create common Zod schemas for reuse across routes: emailSchema (RFC 5322 format), passwordSchema (8-128 chars), handleSchema (alphanumeric + underscore/period, 1-30 chars matching line 168 in API_CONTRACTS), uuidSchema (valid UUID v4), paginationSchema (limit/offset with defaults). Export helper function `validateRequest(schema, data)` that returns `{ success: boolean, data?: T, errors?: ZodError }`.
     - **Acceptance Criteria:** File exists at `/lib/utils/validation.ts`, MUST export 5+ common Zod schemas (email, password, handle, uuid, pagination), MUST export `validateRequest` helper function, schemas match validation rules from API_CONTRACTS.md and Section 10.3
 
-- [ ] **Task 3.5.7:** Implement request validation middleware
+- [x] **Task 3.5.7:** Implement request validation middleware
     - **Action:** Create `/lib/middleware/validationMiddleware.ts` with Next.js API route wrapper
     - **References:** Loyalty.md lines 240-242 (Zod validation on all routes), ARCHITECTURE.md Section 10.3 (Server-Side Validation Pattern, lines 1347-1367)
     - **Implementation Guide:** MUST create wrapper function `withValidation(schema, handler)` that: (1) parses request body/query/params, (2) validates against Zod schema, (3) if validation fails return 400 with field-level errors, (4) if validation passes attach validated data to request and call handler. Return errors in format: `{ error: "VALIDATION_ERROR", fields: { fieldName: ["error message"] } }` per Section 10.3.
     - **Acceptance Criteria:** File exists at `/lib/middleware/validationMiddleware.ts`, MUST export `withValidation` wrapper function, returns 400 status code with field-level errors on validation failure (format matches Section 10.3), attaches validated data to request object, supports body/query/params validation
 
-- [ ] **Task 3.5.8:** Create requireAdmin utility file
+- [x] **Task 3.5.8:** Create requireAdmin utility file
     - **Action:** Create `/lib/utils/requireAdmin.ts` with admin authorization function
     - **References:** Loyalty.md lines 218-226 (Admin Routes requiring requireAdmin()), Loyalty.md lines 2345-2360 (Admin Authentication Strategy), ARCHITECTURE.md Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Implementation Guide:** MUST implement function `requireAdmin(request)` that: (1) extracts session from request (Supabase Auth), (2) if no session return 401 Unauthorized, (3) query users table for `is_admin` flag with client_id filter, (4) if `is_admin = false` return 403 Forbidden with message "Admin access required" (line 2348), (5) if `is_admin = true` return user object with client_id. MUST follow defense-in-depth strategy from lines 2357-2360 (middleware + utility + RLS).
     - **Acceptance Criteria:** File exists at `/lib/utils/requireAdmin.ts`, MUST export `requireAdmin` function, returns 401 if not logged in, returns 403 with "Admin access required" message if logged in but not admin (line 2348), returns user object with client_id if admin, MUST filter users query by client_id (multi-tenant isolation per Section 9), follows defense-in-depth pattern from Loyalty.md lines 2357-2360
 
-- [ ] **Task 3.5.9:** Implement requireAdmin middleware function
+- [x] **Task 3.5.9:** Implement requireAdmin middleware function
     - **Action:** Create `/lib/middleware/adminMiddleware.ts` with Next.js API route wrapper
     - **References:** Loyalty.md lines 218-226 (Admin Routes), Loyalty.md lines 2346-2352 (Route Protection and API Protection), ARCHITECTURE.md Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Implementation Guide:** MUST create wrapper function `withAdmin(handler)` that: (1) calls requireAdmin(request) from Task 3.5.8, (2) if returns error (401/403) immediately return error response, (3) if returns user object attach admin user to request context, (4) call handler with admin-verified request. Used on all routes in lines 219-225.
     - **Acceptance Criteria:** File exists at `/lib/middleware/adminMiddleware.ts`, MUST export `withAdmin` wrapper function, calls requireAdmin utility from Task 3.5.8, returns 401/403 errors without calling handler, attaches admin user to request context on success, ready to wrap admin API routes from lines 219-225
 
-- [ ] **Task 3.5.10:** Create admin middleware for Next.js routes
+- [x] **Task 3.5.10:** Create admin middleware for Next.js routes
     - **Action:** Create `/middleware.ts` (Next.js middleware) with admin page protection
     - **References:** Loyalty.md lines 2346-2349 (Route Protection via Next.js middleware), ARCHITECTURE.md Section 10 (Authorization & Security Checklists, lines 1142-1415)
     - **Implementation Guide:** MUST create Next.js middleware that: (1) intercepts all `/admin/*` page requests (not API routes), (2) checks session via Supabase Auth, (3) checks `is_admin` flag from users table, (4) if not admin redirects to `/dashboard` with toast message "Admin access required" (line 2348), (5) if admin allows request to proceed. Runs on page navigation (defense layer 1 from lines 2357-2360).
     - **Acceptance Criteria:** File exists at `/middleware.ts` (Next.js middleware), MUST protect all `/admin/*` page routes (not API routes), checks `is_admin` flag from users table, redirects unauthorized users to `/dashboard` with "Admin access required" toast (line 2348), allows admin users to access admin pages, follows Route Protection pattern from lines 2346-2349
 
-- [ ] **Task 3.5.11:** Create file validation utility file
+- [x] **Task 3.5.11:** Create file validation utility file
     - **Action:** Create `/lib/utils/fileValidation.ts` with image upload validation functions
     - **References:** Loyalty.md lines 262-293 (File Upload Security 3-Layer Validation), Loyalty.md lines 269-274 (Allowed file types and size limits)
     - **Implementation Guide:** MUST create 3 validation functions: (1) `validateFileType(file)` - checks extension is .png, .jpg, .jpeg only (line 270), rejects .svg, .gif, .webp (lines 271-272), checks MIME type matches extension (prevents executable disguise, line 288), (2) `validateFileSize(file)` - enforces 2 MB max (line 274), (3) `validateImageFile(file)` - combines both checks and returns `{ valid: boolean, error?: string }`. No SVG to prevent XSS attacks (line 271).
     - **Acceptance Criteria:** File exists at `/lib/utils/fileValidation.ts`, MUST export 3 functions (validateFileType, validateFileSize, validateImageFile), MUST only allow .png, .jpg, .jpeg extensions (line 270), MUST reject .svg, .gif, .webp (lines 271-272), MUST enforce 2 MB max size (line 274), MUST check MIME type matches extension to prevent executables disguised as images (line 288), follows 3-Layer Validation Model from lines 264-268
 
-- [ ] **Task 3.5.12:** Implement file type validation
+- [x] **Task 3.5.12:** Implement file type validation
     - **Action:** Add extension and MIME type checking logic to `validateFileType` function
     - **References:** Loyalty.md lines 269-272 (Allowed file types), Loyalty.md line 288 (Executable disguised as image attack prevention)
     - **Implementation Guide:** MUST check file extension against whitelist ['.png', '.jpg', '.jpeg'] (line 270). MUST check MIME type against whitelist ['image/png', 'image/jpeg'] using file.type property. MUST verify extension matches MIME type (e.g., .png file MUST have image/png MIME type). Reject if: (1) extension not in whitelist, (2) MIME type not in whitelist, (3) extension/MIME mismatch. Return descriptive error messages.
     - **Acceptance Criteria:** `validateFileType` function MUST check both extension and MIME type, MUST use whitelist approach (only .png, .jpg, .jpeg allowed per line 270), MUST prevent extension/MIME mismatch to block executables disguised as images (line 288), returns descriptive error for invalid type or mismatch
 
-- [ ] **Task 3.5.13:** Implement file size validation
+- [x] **Task 3.5.13:** Implement file size validation
     - **Action:** Add size checking logic to `validateFileSize` function
     - **References:** Loyalty.md line 274 (Size Limit: Max 2 MB enforced at all 3 layers), Loyalty.md line 289 (Oversized file attack prevention)
     - **Implementation Guide:** MUST check file.size property against 2 MB limit (2 * 1024 * 1024 bytes = 2097152 bytes per line 274). Reject if file.size > 2097152. Return error message with actual size and limit in human-readable format (e.g., "File size 3.5 MB exceeds maximum of 2 MB"). This is Layer 2 (API Route) of 3-layer validation (lines 264-268).
     - **Acceptance Criteria:** `validateFileSize` function MUST enforce 2 MB maximum (line 274), rejects files larger than 2097152 bytes, returns human-readable error message with actual size and limit, implements Layer 2 of 3-Layer Validation Model (lines 264-268)
 
-- [ ] **Task 3.5.14:** Create upload handler middleware
+- [x] **Task 3.5.14:** Create upload handler middleware
     - **Action:** Create `/lib/middleware/uploadMiddleware.ts` with file upload wrapper
     - **References:** Loyalty.md lines 262-293 (File Upload Security), Loyalty.md lines 276-282 (Storage structure: supabase-storage/logos/client-{uuid}.ext)
     - **Implementation Guide:** MUST create wrapper function `withFileUpload(handler, options)` that: (1) extracts file from multipart/form-data request, (2) calls validateImageFile from Task 3.5.11, (3) if validation fails return 400 with error, (4) generates storage path using pattern `logos/client-{clientId}.{ext}` (lines 278-281), (5) calls Supabase Storage API to upload file, (6) attaches file URL to request and calls handler. Path MUST include client_id to prevent overwriting other clients' logos (line 292).
     - **Acceptance Criteria:** File exists at `/lib/middleware/uploadMiddleware.ts`, MUST export `withFileUpload` wrapper function, validates files using Task 3.5.11 utilities, returns 400 on validation failure, generates storage path with pattern `logos/client-{clientId}.{ext}` (lines 278-281), uploads to Supabase Storage, MUST include client_id in path to prevent cross-client overwrites (line 292)
 
-- [ ] **Task 3.5.15:** Create cron auth utility file
+- [x] **Task 3.5.15:** Create cron auth utility file
     - **Action:** Create `/lib/utils/cronAuth.ts` with cron secret validation function
     - **References:** Loyalty.md lines 252-260 (Cron Job Security with Vercel cron secret validation), Loyalty.md line 258 (CRON_SECRET environment variable)
     - **Implementation Guide:** MUST create function `validateCronSecret(request)` that: (1) extracts secret from request headers (Authorization: Bearer {secret}), (2) compares against CRON_SECRET environment variable using constant-time comparison (prevents timing attacks), (3) if mismatch return 401 Unauthorized, (4) if match return true. MUST use constant-time comparison library (e.g., crypto.timingSafeEqual) to prevent timing attacks.
     - **Acceptance Criteria:** File exists at `/lib/utils/cronAuth.ts`, MUST export `validateCronSecret` function, extracts secret from Authorization header, compares against CRON_SECRET environment variable (line 258), MUST use constant-time comparison to prevent timing attacks, returns 401 if secret invalid, returns true if secret valid
 
-- [ ] **Task 3.5.16:** Implement CRON_SECRET validation
+- [x] **Task 3.5.16:** Implement CRON_SECRET validation
     - **Action:** Add constant-time comparison logic to `validateCronSecret` function
     - **References:** Loyalty.md lines 253-260 (Vercel cron secret validation), Loyalty.md lines 227-229 (System Routes requiring cron secret)
     - **Implementation Guide:** MUST use Node.js crypto.timingSafeEqual for comparison. Convert both secrets to Buffer before comparison. Handle edge cases: (1) missing Authorization header → 401, (2) malformed Authorization header (not "Bearer {secret}") → 401, (3) CRON_SECRET not set in environment → throw error (deployment failure, not runtime 401), (4) secrets match → return true. Used on routes /api/cron/data-sync and /api/cron/checkpoint-eval (lines 228-229).
     - **Acceptance Criteria:** `validateCronSecret` MUST use crypto.timingSafeEqual for constant-time comparison, handles missing/malformed Authorization header with 401, throws error if CRON_SECRET environment variable not set (prevents deployment without secret), returns true on valid secret, ready to protect cron routes from lines 228-229
 
-- [ ] **Task 3.5.17:** Add CRON_SECRET to environment variables
+- [x] **Task 3.5.17:** Add CRON_SECRET to environment variables
     - **Action:** Generate random secret and add to `.env.local` and Vercel environment
     - **References:** Loyalty.md line 258 (CRON_SECRET environment variable), Loyalty.md lines 253-260 (Cron Job Security)
     - **Implementation Guide:** MUST generate cryptographically secure random secret (minimum 32 characters, use crypto.randomBytes(32).toString('hex')). Add to `.env.local` as `CRON_SECRET=<generated-secret>`. Add same secret to Vercel project environment variables for production deployment. Document in .env.example with placeholder value. Used by cron routes to authenticate Vercel cron scheduler (lines 253-260).
@@ -767,81 +767,81 @@
 **Objective:** Implement dashboard overview and featured mission.
 
 ## Step 4.1: Dashboard Repositories
-- [ ] **Task 4.1.1:** Create dashboard repository file
+- [x] **Task 4.1.1:** Create dashboard repository file
     - **Action:** Create `/lib/repositories/dashboardRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 4.1.2:** Implement getUserDashboard function
+- [x] **Task 4.1.2:** Implement getUserDashboard function
     - **Action:** Add function querying user, client, current tier, next tier with VIP metric-aware data selection
     - **References:** API_CONTRACTS.md lines 2063-2948 (GET /api/dashboard sections 1-3: User & Tier Info, Client config, Tier Progress), SchemaFinalv2.md (users, clients, vip_tiers tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** MUST execute query with JOINs: users JOIN clients JOIN tiers (current tier) LEFT JOIN tiers (next tier WHERE tier_order = current_tier.tier_order + 1). Return 3 sections (lines 2079-2125): (1) user (id, handle, email, clientName from clients.company_name), (2) client (id, vipMetric from clients.vip_metric enum 'sales'|'units', vipMetricLabel), (3) currentTier (id, name, color, order, checkpointExempt camelCase transformed from checkpoint_exempt snake_case per lines 2099, 2386-2424), (4) nextTier (id, name, color, minSalesThreshold camelCase from sales_threshold) or null if highest tier (lines 2102-2108, 2412-2424). Return raw checkpoint values (checkpoint_sales_current or checkpoint_units_current + manual_adjustments) for service layer VIP metric-aware formatting
     - **Acceptance Criteria:** MUST filter by client_id for vip_tiers JOIN (Section 9 Critical Rule #1), executes single query with JOINs to users/clients/tiers, returns user section with id/handle/email/clientName, returns client section with vipMetric enum and vipMetricLabel, returns currentTier with checkpointExempt camelCase (lines 2094-2100), returns nextTier with minSalesThreshold camelCase or null (lines 2102-2108), returns raw checkpoint values for VIP metric-aware formatting by service layer
 
-- [ ] **Task 4.1.3:** Implement getCurrentTierRewards function
+- [x] **Task 4.1.3:** Implement getCurrentTierRewards function
     - **Action:** Add function querying rewards for user's current tier with LIMIT 4
     - **References:** API_CONTRACTS.md lines 2172-2192 (Current Tier Rewards section), SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** Query rewards WHERE client_id=$clientId AND tier_eligibility=$currentTier AND enabled=true AND reward_source='vip_tier', ORDER BY display_order ASC, LIMIT 4 (lines 2173-2176). Also get total count for "And more!" logic (line 2192). Return fields: id, type, name, displayText (backend-generated), description, valueData (camelCase transformed), rewardSource, redemptionQuantity, displayOrder (lines 2177-2190)
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), filters by tier_eligibility=$currentTier AND enabled=true AND reward_source='vip_tier' (excludes mission rewards), sorted by display_order ASC, LIMIT 4 rewards for showcase card (lines 2174-2176), includes totalRewardsCount for full tier reward count (line 2192), returns fields matching lines 2177-2190 with valueData camelCase transformed, includes rewardSource in response
 
-- [ ] **Task 4.1.4:** Create mission repository file
+- [x] **Task 4.1.4:** Create mission repository file
     - **Action:** Create `/lib/repositories/missionRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 4.1.5:** Implement findFeaturedMission function
+- [x] **Task 4.1.5:** Implement findFeaturedMission function
     - **Action:** Add function querying missions with priority order and raffle filtering
     - **References:** API_CONTRACTS.md lines 1775-2060 (GET /api/dashboard/featured-mission with priority selection lines 1963-1970) and lines 3656-3705 (alternative spec with selection priority order lines 3690-3697), SchemaFinalv2.md (missions, mission_progress, raffle_participations tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** MUST use single optimized query (~80ms, lines 1943-1975) with IN clause for mission types (raffle, sales_dollars, sales_units, videos, likes, views). Filter: client_id + tier_eligibility=$currentTier + enabled=true. Raffle ONLY if activated=true AND no existing raffle_participation for user (lines 1954-1960, 3687, 3698). Exclude claimed missions (lines 1959, 1981-1984). Order by priority (lines 1963-1970, 3685-3692): raffle=0 (if activated + not participated), sales_dollars=1 (if vip_metric='sales'), sales_units=2 (if vip_metric='units'), videos=3, likes=4, views=5. LIMIT 1. Return mission with mission_progress data, reward details, VIP metric for backend formatting
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), uses single query with mission types IN clause, filters by tier_eligibility + enabled=true (lines 3700-3701), includes raffle ONLY if activated=true AND no raffle_participation (lines 3692-3693, 3698), excludes claimed missions, orders by 6-priority ranking (raffle > sales_dollars > sales_units > videos > likes > views per lines 3690-3697), considers VIP metric for sales type priority, LIMIT 1, includes mission_progress.status IN ('active', 'completed') per line 3702, returns null if no missions match
 
 ## Step 4.2: Dashboard Services
-- [ ] **Task 4.2.1:** Create dashboard service file
+- [x] **Task 4.2.1:** Create dashboard service file
     - **Action:** Create `/lib/services/dashboardService.ts`
     - **References:** ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943)
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
 
-- [ ] **Task 4.2.2:** Implement getDashboardOverview function
+- [x] **Task 4.2.2:** Implement getDashboardOverview function
     - **Action:** Add function that aggregates 5 sections with VIP metric-aware formatting and tier progression calculations
     - **References:** API_CONTRACTS.md lines 2063-2948 (GET /api/dashboard complete unified endpoint with 5 major sections)
     - **Implementation Guide:** MUST aggregate 5 sections (lines 2075-2193): (1) call dashboardRepository.getUserDashboard for user/client/currentTier/nextTier sections, (2) calculate tierProgress: read precomputed checkpoint_sales_current or checkpoint_units_current + manual_adjustments_total (lines 2428-2450), compute progressPercentage = (currentValue / targetValue) * 100, format display strings based on client.vipMetric (sales mode: "$4,200" vs units mode: "4,200 units") (lines 2456-2471), include checkpointExpiresAt/checkpointExpiresFormatted/checkpointMonths (lines 2122-2125), (3) call getFeaturedMission for featuredMission section with SAME data structure as GET /api/dashboard/featured-mission including isRaffle flag, raffleEndDate, formatted progress text (lines 2132-2168, 2486-2641), (4) call getCurrentTierRewards for currentTierRewards LIMIT 4 with backend displayText generation, (5) return totalRewardsCount. Backend handles ALL formatting per vipMetric setting (lines 2473-2484). Tier expiration logic based on checkpointExempt boolean (lines 2642-2667)
     - **Acceptance Criteria:** Returns complete DashboardResponse matching lines 2075-2193, aggregates user/client/currentTier/nextTier from repository, calculates tierProgress with VIP metric-aware formatting (sales: "$4,200" vs units: "4,200 units"), reads from precomputed checkpoint fields (lines 2428-2450), computes progressPercentage in backend, includes featuredMission with SAME logic as Task 4.3.2 (lines 2132-2168), queries currentTierRewards filtered by tier + enabled LIMIT 4 sorted by display_order (lines 2172-2192), includes totalRewardsCount, backend handles ALL display string formatting based on vipMetric (lines 2473-2484), follows service layer patterns
 
-- [ ] **Task 4.2.3:** Implement shouldShowCongratsModal logic
+- [x] **Task 4.2.3:** Implement shouldShowCongratsModal logic
     - **Action:** Add function checking if mission was fulfilled AFTER user's last login
     - **References:** API_CONTRACTS.md lines 1998-2037 (Congratulations modal logic in featured-mission), Loyalty.md Flow 1 (Congrats Modal)
     - **Implementation Guide:** MUST compare mission_progress.fulfilled_at > users.last_login_at to detect newly completed missions (lines 1998-2037). Query finds missions WHERE fulfilled_at IS NOT NULL AND fulfilled_at > last_login_at (lines 2004-2017). If found, set showCongratsModal=true and provide congratsMessage with mission details (lines 2020-2023). CRITICAL: update users.last_login_at=NOW() AFTER checking comparison but before returning response (lines 2025-2030) to prevent modal from showing again on refresh (line 2037)
     - **Acceptance Criteria:** Returns boolean showCongratsModal by comparing mission_progress.fulfilled_at > users.last_login_at per lines 1998-2037, queries missions WHERE fulfilled_at > last_login_at (lines 2004-2017), generates congratsMessage if found (lines 2020-2023), updates users.last_login_at=NOW() AFTER checking but before returning (lines 2025-2030), prevents duplicate modals on refresh (line 2037)
 
-- [ ] **Task 4.2.4:** Implement getFeaturedMission function
+- [x] **Task 4.2.4:** Implement getFeaturedMission function
     - **Action:** Add function that formats mission with status computation, displayName mapping, and congrats modal logic
     - **References:** API_CONTRACTS.md lines 1775-2060 (GET /api/dashboard/featured-mission complete response) and lines 3656-3705 (alternative spec with emptyStateMessage line 3684)
     - **Implementation Guide:** Call repository for highest-priority mission, then: (1) use static displayName mapping per type (lines 1903-1929): sales_dollars/sales_units→"Sales Sprint", videos→"Lights, Camera, Go!", likes→"Fan Favorite", views→"Road to Viral", raffle→"VIP Raffle", (2) compute status: 'active' if mission_progress.status='active', 'completed' if status='completed', 'no_missions' if null (lines 1978-1986), (3) calculate progressPercentage = (currentProgress / targetValue) * 100 in backend (lines 1988-1994), (4) check congrats modal: compare mission_progress.fulfilled_at > users.last_login_at, set showCongratsModal=true if found, generate congratsMessage, update last_login_at AFTER checking to prevent re-showing (lines 1998-2037, 2037), (5) return emptyStateMessage "No active missions. Check back soon!" if null (line 3684), (6) include tier info (name, color), supportEmail from client
     - **Acceptance Criteria:** Returns FeaturedMissionResponse matching lines 1789-1826 and 3665-3680, calls repository for priority-ordered mission, uses static displayName mapping (lines 1903-1929), computes status: active/completed/no_missions (lines 1978-1986), calculates progressPercentage in backend (lines 1988-1994), checks congrats modal by comparing fulfilled_at > last_login_at (lines 1998-2037), updates last_login_at AFTER checking (lines 2025-2030), returns emptyStateMessage if no missions (line 3684), includes tier and supportEmail, follows service layer patterns
 
 ## Step 4.3: Dashboard API Routes
-- [ ] **Task 4.3.1:** Create dashboard overview route
+- [x] **Task 4.3.1:** Create dashboard overview route
     - **Action:** Create `/app/api/dashboard/route.ts` with GET handler
     - **References:** API_CONTRACTS.md lines 2063-2948 (GET /api/dashboard unified endpoint), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.1 (Rewards Authorization, lines 1160-1198)
     - **Implementation Guide:** MUST return unified dashboard response with 5 major sections (lines 2075-2193): (1) User & Tier Info: query users JOIN clients JOIN tiers, return id/handle/email/clientName and currentTier (id/name/color/order/checkpointExempt camelCase) and nextTier (id/name/color/minSalesThreshold) or null if highest tier (lines 2079-2108, 2386-2424), (2) Client config: vipMetric (sales|units) and vipMetricLabel (lines 2086-2091), (3) Tier Progress: read from precomputed users.checkpoint_sales_current or checkpoint_units_current + manual_adjustments, compute progressPercentage, format display strings based on vipMetric (sales mode: "$4,200" | units mode: "4,200 units"), include checkpointExpiresFormatted (lines 2113-2125, 2428-2471), (4) Featured Mission: SAME data structure as GET /api/dashboard/featured-mission with isRaffle flag, raffleEndDate, formatted progress text (currentFormatted/targetFormatted/targetText/progressText), backend handles ALL formatting (lines 2132-2168, 2486-2641), (5) Current Tier Rewards: query rewards WHERE tier_eligibility + enabled=true + client_id per Section 10.1, sort by display_order ASC, LIMIT 4 rewards, include displayText (backend-generated), totalRewardsCount for "And more!" logic (lines 2172-2192). Backend formats ALL display strings per vipMetric setting (lines 2473-2484). Tier expiration logic: show if checkpointExempt=false, hide if true (lines 2642-2667)
     - **Acceptance Criteria:** MUST return `{ user: {id, handle, email, clientName}, client: {id, vipMetric, vipMetricLabel}, currentTier: {id, name, color, order, checkpointExempt}, nextTier: {id, name, color, minSalesThreshold} | null, tierProgress: {currentValue, targetValue, progressPercentage, currentFormatted, targetFormatted, checkpointExpiresAt, checkpointExpiresFormatted, checkpointMonths}, featuredMission: {...same as GET /api/dashboard/featured-mission...}, currentTierRewards: [{id, type, name, displayText, description, valueData, redemptionQuantity, displayOrder}], totalRewardsCount: number }` per lines 2075-2193, queries users JOIN clients JOIN tiers (lines 2389-2405), queries next tier by tier_order+1 or returns null (lines 2412-2424), reads tier progress from precomputed checkpoint_sales_current or checkpoint_units_current + manual_adjustments (lines 2431-2450), formats display strings based on vipMetric (sales: "$4,200" vs units: "4,200 units") (lines 2456-2471), includes featuredMission with SAME logic as Task 4.3.2 plus isRaffle/raffleEndDate/formatted progress text (lines 2486-2591), queries rewards filtered by tier + enabled + client_id per Section 10.1 sorted by display_order LIMIT 4 (lines 2172-2192), backend handles ALL formatting (lines 2636-2641), includes checkpointExempt camelCase for tier expiration UI logic (lines 2642-2667), returns 200 or 401/500, follows route pattern from Section 5
 
-- [ ] **Task 4.3.2:** Create featured mission route
+- [x] **Task 4.3.2:** Create featured mission route
     - **Action:** Create `/app/api/dashboard/featured-mission/route.ts` with GET handler
     - **References:** API_CONTRACTS.md lines 1775-2060 (GET /api/dashboard/featured-mission), ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461), Section 10.2 (Missions Authorization, lines 1299-1309)
     - **Implementation Guide:** MUST use single optimized query (lines 1943-1972, ~80ms performance): query missions with IN clause for types (raffle, sales_dollars, sales_units, videos, likes, views), filter by client_id + tier_eligibility + enabled=true per Section 10.2, raffle ONLY if activated=true (surprise feature lines 1954-1955), exclude if user participated in raffle (lines 1954-1958), exclude claimed missions (lines 1959, 1981-1984), order by priority: raffle=0 > sales_dollars=1 > sales_units=2 > videos=3 > likes=4 > views=5 (lines 1963-1970), LIMIT 1. Display name mapping static per type (lines 1903-1929): sales_dollars/sales_units→"Sales Sprint", likes→"Fan Favorite", views→"Road to Viral", videos→"Lights, Camera, Go!", raffle→"VIP Raffle". Compute progressPercentage in backend (currentProgress/targetValue)*100 (lines 1988-1994). Congratulations modal: compare mission_progress.fulfilled_at > users.last_login_at (lines 1998-2037), set showCongratsModal=true if found, update last_login_at AFTER checking (lines 2025-2030, 2037). Status: active/completed/no_missions (lines 1978-1986). Return errors: 401, 500 (lines 2041-2055)
     - **Acceptance Criteria:** MUST return `{ status: 'active'|'completed'|'claimed'|'fulfilled'|'no_missions', mission: {id, type, displayName, currentProgress, targetValue, progressPercentage, rewardType, rewardAmount, rewardCustomText, unitText} | null, tier: {name, color}, showCongratsModal: boolean, congratsMessage: string | null, supportEmail: string, emptyStateMessage: string | null }` per lines 1789-1826, uses single optimized query ~80ms (lines 1943-1975), filters by client_id + tier_eligibility + enabled=true per Section 10.2, includes raffle ONLY if activated=true (lines 1954-1955), excludes claimed missions from home page (lines 1959, 1981-1984), orders by priority raffle > sales_dollars > sales_units > videos > likes > views (lines 1963-1970), uses static display name mapping per type (lines 1903-1929), calculates progressPercentage in backend (lines 1800, 1987-1992), checks congrats modal by comparing fulfilled_at > last_login_at (lines 2000-2037), updates last_login_at AFTER checking to prevent re-showing (lines 2025-2030, 2037), returns 200 with status='no_missions' if none found (not 404) (lines 1885-1898), follows route pattern from Section 5
 
 ## Step 4.4: Dashboard Testing
-- [ ] **Task 4.4.1:** Create dashboard integration tests
+- [x] **Task 4.4.1:** Create dashboard integration tests
     - **Action:** Create `/tests/integration/api/dashboard.test.ts`
     - **Acceptance Criteria:** Tests for overview and featured mission endpoints
 
-- [ ] **Task 4.4.2:** Test multi-tenant isolation
+- [x] **Task 4.4.2:** Test multi-tenant isolation
     - **Action:** Write test verifying client_id boundary
     - **Acceptance Criteria:** User cannot see dashboard of different client
 
-- [ ] **Task 4.4.3:** Test congrats modal logic
+- [x] **Task 4.4.3:** Test congrats modal logic
     - **Action:** Write test for first login and 24h threshold
     - **Acceptance Criteria:** showCongratsModal true/false correctly
 
