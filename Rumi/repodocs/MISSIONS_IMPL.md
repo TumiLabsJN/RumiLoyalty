@@ -1,222 +1,309 @@
-# MISSIONS_IMPL.md - Phase 5 Implementation Documentation
+# Missions - Implementation Guide
 
+**Purpose:** Enable creators to view missions, track progress, claim rewards, and participate in raffles
+**Phase:** Phase 5 - Missions System
+**Target Audience:** LLM agents debugging or modifying this feature
 **Last Updated:** 2025-12-03
-**Phase:** 5 - Missions APIs
-**Status:** Steps 5.1-5.2 Complete
 
 ---
 
-## Overview
+## Quick Reference
 
-Phase 5 implements the Missions feature for the Rumi Loyalty Platform, enabling creators to view missions, track progress, claim rewards, participate in raffles, and view mission history.
+**Steps Documented:**
+- Step 5.1 - Mission Repositories ✅
+- Step 5.2 - Mission Services ✅
+- Step 5.3 - Mission API Routes 📋 Pending
+- Step 5.4 - Mission Testing 📋 Pending
 
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `lib/repositories/missionRepository.ts` | 1,252 | Data access for missions, progress, redemptions |
-| `lib/repositories/raffleRepository.ts` | 316 | Raffle participation and winner tracking |
-| `lib/services/missionService.ts` | 1,295 | Business logic: 14 statuses, 12-priority sorting, 8 flippable cards |
+| `appcode/lib/repositories/missionRepository.ts` | 1,252 | Database queries with tenant isolation |
+| `appcode/lib/repositories/raffleRepository.ts` | 316 | Raffle participation queries |
+| `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 14 statuses, sorting, flippable cards |
+
+**Database Tables Used:**
+- `missions` (SchemaFinalv2.md:362-423)
+- `mission_progress` (SchemaFinalv2.md:425-460)
+- `rewards` (SchemaFinalv2.md:462-592)
+- `redemptions` (SchemaFinalv2.md:594-664)
+- `commission_boost_redemptions` (SchemaFinalv2.md:666-748)
+- `physical_gift_redemptions` (SchemaFinalv2.md:824-890)
+- `raffle_participations` (SchemaFinalv2.md:892-957)
+
+**Quick Navigation:**
+- [Core Functions](#core-functions) - Repositories and services
+- [Database Queries](#database-queries) - All queries with filters
+- [Status Computation](#status-computation) - 14 statuses logic
+- [Error Handling](#error-handling) - Error codes and scenarios
+- [Debugging](#debugging-checklist) - Common issues and fixes
 
 ---
 
-## Step 5.1: Mission Repositories
+## Core Functions
 
-### missionRepository.ts (lines 1-1252)
+### Repository Layer
 
-**Location:** `appcode/lib/repositories/missionRepository.ts`
+#### missionRepository.listAvailable()
 
-#### Key Interfaces
+**Location:** `appcode/lib/repositories/missionRepository.ts:484-743`
 
+**Signature:**
 ```typescript
-// Line 17-47: AvailableMissionData - Raw data from repository
-export interface AvailableMissionData {
-  mission: {
-    id: string;
-    type: string;
-    displayName: string;
-    title: string;
-    description: string | null;
-    targetValue: number;
-    targetUnit: string;
-    raffleEndDate: string | null;
-    activated: boolean;
-    tierEligibility: string;
-    previewFromTier: string | null;
-    enabled: boolean;
-  };
-  reward: {
-    id: string;
-    type: string;
-    name: string | null;
-    description: string | null;
-    valueData: Record<string, unknown> | null;
-    redemptionType: string;
-    rewardSource: string;
-  };
-  // ... progress, redemption, commissionBoost, physicalGift, raffleParticipation
-  isLocked: boolean;
-}
-```
-
-#### listAvailable() - Lines 180-450
-
-Retrieves all missions for a user with JOINs to progress, redemptions, and sub-state tables.
-
-```typescript
-// Line 180-200: Query missions with tier eligibility
 async listAvailable(
   userId: string,
   clientId: string,
   currentTierId: string
-): Promise<AvailableMissionData[]> {
-  const supabase = await createClient();
-
-  // 1. Get eligible missions (user's tier + locked previews)
-  const { data: missions } = await supabase
-    .from('missions')
-    .select(`
-      id, mission_type, display_name, title, description,
-      target_value, target_unit, raffle_end_date, activated,
-      tier_eligibility, preview_from_tier, enabled, reward_id,
-      rewards!inner (...)
-    `)
-    .eq('client_id', clientId)  // Multi-tenant isolation
-    .eq('enabled', true);
+): Promise<AvailableMissionData[]>
 ```
 
-**Multi-tenant Isolation:** ALL queries filter by `client_id` (24+ occurrences).
+**Purpose:** Retrieves all missions for a user with JOINs to progress, redemptions, and sub-state tables.
 
-#### claimReward() - Lines 1050-1180
-
-Updates redemption status and creates sub-state records based on reward type.
-
+**Query Implementation (lines 493-538):**
 ```typescript
-// Line 1050-1070: Claim reward with validation
+const { data: missions, error: missionsError } = await supabase
+  .from('missions')
+  .select(`
+    id,
+    mission_type,
+    display_name,
+    title,
+    description,
+    target_value,
+    target_unit,
+    raffle_end_date,
+    activated,
+    tier_eligibility,
+    preview_from_tier,
+    enabled,
+    display_order,
+    reward_id,
+    rewards!inner (
+      id, type, name, description, value_data, redemption_type, reward_source
+    ),
+    tiers!inner (
+      id, tier_id, tier_name, tier_color, tier_order
+    ),
+    mission_progress (
+      id, user_id, current_value, status, completed_at, checkpoint_start, checkpoint_end
+    )
+  `)
+  .eq('client_id', clientId)  // ⚠️ Multi-tenant filter (line 536)
+  .eq('enabled', true)
+  .or(`tier_eligibility.eq.${currentTierId},preview_from_tier.eq.${currentTierId}`);
+```
+
+**Multi-Tenant Filter:** ✅ Present (line 536) - `.eq('client_id', clientId)`
+
+**Database Tables:**
+- Primary: `missions` (SchemaFinalv2.md:362-423)
+- Joined: `rewards` (SchemaFinalv2.md:462-592)
+- Joined: `tiers` (SchemaFinalv2.md:254-273)
+- Joined: `mission_progress` (SchemaFinalv2.md:425-460)
+
+**Returns:** Array of `AvailableMissionData` with mission, reward, tier, progress, redemption, and sub-state data
+
+---
+
+#### missionRepository.claimReward()
+
+**Location:** `appcode/lib/repositories/missionRepository.ts:1100-1252`
+
+**Signature:**
+```typescript
 async claimReward(
   redemptionId: string,
   userId: string,
   clientId: string,
+  currentTierId: string,
+  rewardType: string,
   claimData: ClaimRequestData
-): Promise<ClaimResult> {
-  const supabase = await createClient();
-
-  // 1. Get redemption with reward info
-  const { data: redemption } = await supabase
-    .from('redemptions')
-    .select('*, rewards!inner(*)')
-    .eq('id', redemptionId)
-    .eq('user_id', userId)
-    .eq('client_id', clientId)  // Multi-tenant isolation
-    .single();
+): Promise<ClaimResult>
 ```
 
-### raffleRepository.ts (lines 1-316)
+**Purpose:** Updates redemption status from 'claimable' to 'claimed' and creates sub-state records based on reward type.
 
-**Location:** `appcode/lib/repositories/raffleRepository.ts`
-
-#### participate() - Lines 58-234
-
-Creates mission_progress, redemption, and raffle_participation records in a transaction.
-
+**Query Implementation (lines 1111-1118):**
 ```typescript
-// Line 58-70: Participate in raffle
+// 1. Verify redemption exists and is claimable
+const { data: redemption, error: redemptionError } = await supabase
+  .from('redemptions')
+  .select('id, status, reward_id, mission_progress_id')
+  .eq('id', redemptionId)
+  .eq('user_id', userId)
+  .eq('client_id', clientId)  // ⚠️ Multi-tenant filter (line 1116)
+  .is('deleted_at', null)
+  .single();
+```
+
+**Multi-Tenant Filter:** ✅ Present (line 1116) - `.eq('client_id', clientId)`
+
+**Error Cases:**
+- Returns `{ success: false, error: 'Redemption not found' }` if query returns null (line 1120-1126)
+- Returns `{ success: false, error: 'Cannot claim: reward is ${status}' }` if status !== 'claimable' (line 1129-1135)
+
+---
+
+#### raffleRepository.participate()
+
+**Location:** `appcode/lib/repositories/raffleRepository.ts:58-234`
+
+**Signature:**
+```typescript
 async participate(
   missionId: string,
   userId: string,
   clientId: string,
   currentTierId: string
-): Promise<ParticipationResult> {
-  const supabase = await createClient();
+): Promise<ParticipationResult>
+```
 
-  // 1. Verify mission exists and is a raffle
-  const { data: mission } = await supabase
-    .from('missions')
-    .select(`id, mission_type, activated, tier_eligibility, ...`)
-    .eq('id', missionId)
-    .eq('client_id', clientId)  // Multi-tenant isolation
-    .single();
+**Purpose:** Creates mission_progress, redemption, and raffle_participation records for raffle entry.
+
+**Query Implementation (lines 67-87):**
+```typescript
+// 1. Verify mission exists and is a raffle
+const { data: mission, error: missionError } = await supabase
+  .from('missions')
+  .select(`
+    id,
+    mission_type,
+    activated,
+    tier_eligibility,
+    raffle_end_date,
+    reward_id,
+    rewards!inner (
+      id, type, name, description, value_data
+    )
+  `)
+  .eq('id', missionId)
+  .eq('client_id', clientId)  // ⚠️ Multi-tenant filter (line 85)
+  .eq('enabled', true)
+  .single();
+```
+
+**Multi-Tenant Filter:** ✅ Present (line 85) - `.eq('client_id', clientId)`
+
+**Validation Checks (lines 89-118):**
+```typescript
+// 2. Verify it's a raffle type
+if (mission.mission_type !== 'raffle') {
+  return { success: false, error: 'This mission is not a raffle' };
+}
+
+// 3. Verify raffle is activated
+if (!mission.activated) {
+  return { success: false, error: 'This raffle is not currently accepting entries' };
+}
+
+// 4. Verify tier eligibility
+if (mission.tier_eligibility !== 'all' && mission.tier_eligibility !== currentTierId) {
+  return { success: false, error: 'You are not eligible for this raffle' };
+}
 ```
 
 ---
 
-## Step 5.2: Mission Services
+### Service Layer
 
-### missionService.ts (lines 1-1295)
+#### missionService.listAvailableMissions()
 
-**Location:** `appcode/lib/services/missionService.ts`
+**Location:** `appcode/lib/services/missionService.ts:942-989`
 
-#### Constants
-
+**Signature:**
 ```typescript
-// Lines 32-39: Mission display names per API_CONTRACTS.md lines 3077-3086
-const MISSION_DISPLAY_NAMES: Record<string, string> = {
-  sales_dollars: 'Sales Sprint',
-  sales_units: 'Sales Sprint',
-  likes: 'Fan Favorite',
-  views: 'Road to Viral',
-  videos: 'Lights, Camera, Go!',
-  raffle: 'VIP Raffle',
-};
+export async function listAvailableMissions(
+  userId: string,
+  clientId: string,
+  userInfo: {
+    handle: string;
+    currentTier: string;
+    currentTierName: string;
+    currentTierColor: string;
+  },
+  vipMetric: 'sales' | 'units',
+  tierLookup: Map<string, { name: string; color: string }>
+): Promise<MissionsPageResponse>
+```
 
-// Lines 45-73: 12-priority status sorting per API_CONTRACTS.md lines 3243-3311
-const STATUS_PRIORITY: Record<string, number> = {
-  raffle_available: 2,
-  raffle_claim: 2,
-  default_claim: 3,
-  default_schedule: 3,
-  pending_info: 4,
-  clearing: 5,
-  sending: 6,
-  active: 7,
-  scheduled: 8,
-  redeeming: 9,
-  redeeming_physical: 9,
-  in_progress: 10,
-  raffle_won: 11,
-  raffle_processing: 11,
-  dormant: 11,
-  locked: 12,
+**Purpose:** Orchestrates mission retrieval, status computation, and sorting.
+
+**Implementation (lines 954-988):**
+```typescript
+// 1. Get raw mission data from repository
+const rawMissions = await missionRepository.listAvailable(userId, clientId, userInfo.currentTier);
+
+// 2. Compute status and transform each mission
+const missionsWithData = rawMissions.map((data) => {
+  const status = computeStatus(data);  // Calls computeStatus() at line 490
+  const item = transformMission(data, status, tierLookup);  // Calls transformMission() at line 750
+  return { item, data };
+});
+
+// 3. Determine featured mission (first non-locked, non-dormant)
+let featuredMissionId: string | null = null;
+for (const { item } of missionsWithData) {
+  if (item.status !== 'locked' && item.status !== 'dormant') {
+    featuredMissionId = item.id;
+    break;
+  }
+}
+
+// 4. Sort missions by priority
+const sortedMissions = sortMissions(missionsWithData, vipMetric, featuredMissionId);
+
+// 5. Return response
+return {
+  user: { id: userId, handle: userInfo.handle, currentTier: userInfo.currentTier, ... },
+  featuredMissionId,
+  missions: sortedMissions,
 };
 ```
 
-#### MissionStatus Type (lines 96-112)
+**Calls:**
+- `missionRepository.listAvailable()` (missionRepository.ts:484) - Get raw data
+- `computeStatus()` (missionService.ts:490) - Derive 14 statuses
+- `transformMission()` (missionService.ts:750) - Format for API response
+- `sortMissions()` (missionService.ts:887) - Apply 12-priority sorting
 
+---
+
+## Status Computation
+
+#### computeStatus()
+
+**Location:** `appcode/lib/services/missionService.ts:490-600`
+
+**14 Possible Statuses (lines 96-112):**
 ```typescript
-// 14 statuses per API_CONTRACTS.md lines 2996-3001
 export type MissionStatus =
-  | 'in_progress'
-  | 'default_claim'
-  | 'default_schedule'
-  | 'scheduled'
-  | 'active'
-  | 'redeeming'
-  | 'redeeming_physical'
-  | 'sending'
-  | 'pending_info'
-  | 'clearing'
-  | 'dormant'
-  | 'raffle_available'
-  | 'raffle_processing'
-  | 'raffle_claim'
-  | 'raffle_won'
-  | 'locked';
+  | 'in_progress'        // Active mission, user working on it
+  | 'default_claim'      // Completed, instant reward claimable
+  | 'default_schedule'   // Completed, scheduled reward claimable
+  | 'scheduled'          // Claimed, awaiting activation date
+  | 'active'             // Commission boost or discount currently active
+  | 'redeeming'          // Instant reward processing (gift_card, spark_ads, experience)
+  | 'redeeming_physical' // Physical gift processing (address received)
+  | 'sending'            // Physical gift shipped
+  | 'pending_info'       // Commission boost needs payout info
+  | 'clearing'           // Commission boost in 20-day clearing period
+  | 'dormant'            // Raffle not accepting entries
+  | 'raffle_available'   // Raffle open for participation
+  | 'raffle_processing'  // User entered, awaiting draw
+  | 'raffle_claim'       // User won, prize claimable
+  | 'raffle_won'         // User won, prize claimed
+  | 'locked';            // User tier too low
 ```
 
-#### computeStatus() - Lines 490-600
-
-Derives mission status from multiple tables per API_CONTRACTS.md lines 3482-3571.
-
+**Status Priority (lines 490-600):**
 ```typescript
-// Lines 490-527: Status computation for raffles
 function computeStatus(data: AvailableMissionData): MissionStatus {
   const { mission, progress, redemption, commissionBoost, physicalGift, raffleParticipation, isLocked } = data;
 
-  // Priority 4 - Locked Missions
-  if (isLocked) {
-    return 'locked';
-  }
+  // Priority 1 - Locked (line 494)
+  if (isLocked) return 'locked';
 
-  // Priority 3 - Raffle States
+  // Priority 2 - Raffle States (lines 498-527)
   if (mission.type === 'raffle') {
     if (!mission.activated) return 'dormant';
     if (!raffleParticipation) return 'raffle_available';
@@ -228,188 +315,132 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
     return 'raffle_processing';
   }
 
-  // Priority 1 - Completed Missions with redemptions
+  // Priority 3 - Completed with redemption (lines 529-590)
   if (redemption) {
     if (redemption.status === 'claimable') {
       return data.reward.redemptionType === 'scheduled' ? 'default_schedule' : 'default_claim';
     }
     if (redemption.status === 'claimed') {
-      // Commission boost sub-states
+      // Commission boost sub-states (lines 542-555)
       if (data.reward.type === 'commission_boost' && commissionBoost) {
         switch (commissionBoost.boostStatus) {
           case 'scheduled': return 'scheduled';
           case 'active': return 'active';
           case 'pending_info': return 'pending_info';
           case 'pending_payout': return 'clearing';
+          default: return 'redeeming';
         }
       }
-      // ... discount, physical_gift, instant rewards
+      // Physical gift states (lines 573-581)
+      if (data.reward.type === 'physical_gift' && physicalGift) {
+        if (physicalGift.shippedAt) return 'sending';
+        if (physicalGift.shippingCity) return 'redeeming_physical';
+      }
+      // Instant rewards (line 584-586)
+      if (['gift_card', 'spark_ads', 'experience'].includes(data.reward.type)) {
+        return 'redeeming';
+      }
     }
   }
 
-  // Priority 2 - Active Missions
-  if (progress?.status === 'active') return 'in_progress';
+  // Priority 4 - Active mission (line 594)
   return 'in_progress';
 }
 ```
 
-#### generateFlippableCard() - Lines 610-741
+---
 
-Generates flippable card content for 8 status+reward type combinations per API_CONTRACTS.md lines 3315-3478.
+## Database Queries
 
-```typescript
-// Lines 610-656: Flippable card generation
-function generateFlippableCard(
-  status: MissionStatus,
-  data: AvailableMissionData
-): MissionItem['flippableCard'] {
-  const { reward, redemption, commissionBoost } = data;
+### Summary of All Queries
 
-  // Card 1 - Redeeming (Instant Rewards)
-  if (status === 'redeeming' && ['gift_card', 'spark_ads', 'experience'].includes(reward.type)) {
-    return {
-      backContentType: 'message',
-      message: 'We will deliver your reward in up to 72 hours',
-      dates: null,
-    };
-  }
+| Function | File:Line | Table(s) | Multi-Tenant | Operation |
+|----------|-----------|----------|--------------|-----------|
+| `listAvailable()` | missionRepository.ts:493 | missions, rewards, tiers, mission_progress | ✅ line 536 | SELECT multiple |
+| `getHistory()` | missionRepository.ts:747 | missions, redemptions, raffle_participations | ✅ line 784 | SELECT multiple |
+| `findById()` | missionRepository.ts:873 | missions, mission_progress, redemptions | ✅ line 924 | SELECT single |
+| `claimReward()` | missionRepository.ts:1111 | redemptions | ✅ line 1116 | SELECT + UPDATE |
+| `participate()` | raffleRepository.ts:67 | missions | ✅ line 85 | SELECT + INSERT |
+| `getRaffleMissionInfo()` | raffleRepository.ts:248 | missions, rewards | ✅ line 261 | SELECT single |
+| `hasParticipated()` | raffleRepository.ts:306 | raffle_participations | ✅ line 311 | SELECT single |
 
-  // Card 2 - Sending (Physical Gifts)
-  if (status === 'sending' && reward.type === 'physical_gift') {
-    return {
-      backContentType: 'message',
-      message: 'Your gift is on its way 🚚',
-      dates: null,
-    };
-  }
+### Multi-Tenant Filter Verification
 
-  // Card 3 - Scheduled (Commission Boost)
-  if (status === 'scheduled' && reward.type === 'commission_boost' && commissionBoost) {
-    return {
-      backContentType: 'dates',
-      message: null,
-      dates: [
-        { label: 'Scheduled', value: formatDateTimeEST(commissionBoost.scheduledActivationDate, '18:00:00') },
-        { label: 'Duration', value: `Will be active for ${commissionBoost.durationDays ?? 30} days` },
-      ],
-    };
-  }
+**missionRepository.ts client_id occurrences:**
+- Line 283: `.eq('client_id', clientId)` - tier lookup
+- Line 302: `.eq('client_id', clientId)` - tier lookup
+- Line 446: `.eq('client_id', clientId)` - progress query
+- Line 536: `.eq('client_id', clientId)` - missions query
+- Line 568: `.eq('client_id', clientId)` - redemptions query
+- Line 583: `.eq('client_id', clientId)` - boost redemptions
+- Line 595: `.eq('client_id', clientId)` - physical redemptions
+- Line 608: `.eq('client_id', clientId)` - raffle participations
+- Line 784: `.eq('client_id', clientId)` - history query
+- Line 924: `.eq('client_id', clientId)` - findById
+- Line 1004: `.eq('client_id', clientId)` - findById progress
+- Line 1116: `.eq('client_id', clientId)` - claimReward
 
-  // Cards 4-8: active (boost), pending_info, clearing, scheduled (discount), active (discount)
-  // ... (see full implementation)
-
-  return null; // All other statuses have no flippable card
-}
-```
-
-#### sortMissions() - Lines 887-924
-
-Sorts missions by 12-priority ranking per API_CONTRACTS.md lines 3243-3311.
-
-```typescript
-// Lines 887-924: Mission sorting
-function sortMissions(
-  missions: Array<{ item: MissionItem; data: AvailableMissionData }>,
-  vipMetric: 'sales' | 'units',
-  featuredMissionId: string | null
-): MissionItem[] {
-  return missions
-    .sort((a, b) => {
-      // Priority 1 - Featured mission ALWAYS first
-      if (featuredMissionId) {
-        if (a.item.id === featuredMissionId) return -1;
-        if (b.item.id === featuredMissionId) return 1;
-      }
-
-      // Sort by status priority (STATUS_PRIORITY constant)
-      const priorityA = STATUS_PRIORITY[a.item.status] ?? 99;
-      const priorityB = STATUS_PRIORITY[b.item.status] ?? 99;
-      if (priorityA !== priorityB) return priorityA - priorityB;
-
-      // Secondary sort by mission type (VIP metric aware)
-      let typeA = MISSION_TYPE_PRIORITY[a.item.missionType] ?? 99;
-      let typeB = MISSION_TYPE_PRIORITY[b.item.missionType] ?? 99;
-      if (vipMetric === 'sales') {
-        if (a.item.missionType === 'sales_dollars') typeA = 0.5;
-        if (b.item.missionType === 'sales_dollars') typeB = 0.5;
-      }
-      return typeA - typeB;
-    })
-    .map((m) => m.item);
-}
-```
-
-#### Service Functions
-
-**listAvailableMissions()** - Lines 942-989
-```typescript
-export async function listAvailableMissions(
-  userId: string,
-  clientId: string,
-  userInfo: { handle, currentTier, currentTierName, currentTierColor },
-  vipMetric: 'sales' | 'units',
-  tierLookup: Map<string, { name: string; color: string }>
-): Promise<MissionsPageResponse> {
-  const rawMissions = await missionRepository.listAvailable(userId, clientId, userInfo.currentTier);
-  const missionsWithData = rawMissions.map((data) => ({
-    item: transformMission(data, computeStatus(data), tierLookup),
-    data
-  }));
-  const featuredMissionId = missionsWithData.find(m => m.item.status !== 'locked')?.item.id ?? null;
-  return {
-    user: { id: userId, ...userInfo },
-    featuredMissionId,
-    missions: sortMissions(missionsWithData, vipMetric, featuredMissionId),
-  };
-}
-```
-
-**claimMissionReward()** - Lines 1001-1173
-- 7-step validation per API_CONTRACTS.md lines 3770-3778
-- Handles varying request body based on reward type
-
-**participateInRaffle()** - Lines 1179-1212
-- Delegates to raffleRepository.participate()
-- Formats response with draw date and prize name
-
-**getMissionHistory()** - Lines 1221-1295
-- Formats concluded missions with reward-focused names
-- Determines status: 'concluded' or 'rejected_raffle'
+**raffleRepository.ts client_id occurrences:**
+- Line 85: `.eq('client_id', clientId)` - mission verification
+- Line 126: `.eq('client_id', clientId)` - existing participation check
+- Line 144: `.eq('client_id', clientId)` - progress check
+- Line 189: `.eq('client_id', clientId)` - redemption insert
+- Line 261: `.eq('client_id', clientId)` - getRaffleMissionInfo
+- Line 311: `.eq('client_id', clientId)` - hasParticipated
 
 ---
 
-## Multi-Tenant Isolation Verification
+## Error Handling
 
-| Repository | Filter Location | Verified |
-|------------|----------------|----------|
-| missionRepository.listAvailable | Line 200 `.eq('client_id', clientId)` | ✅ |
-| missionRepository.getHistory | Line 890 `.eq('client_id', clientId)` | ✅ |
-| missionRepository.findById | Line 970 `.eq('client_id', clientId)` | ✅ |
-| missionRepository.claimReward | Line 1065 `.eq('client_id', clientId)` | ✅ |
-| raffleRepository.participate | Line 85 `.eq('client_id', clientId)` | ✅ |
-| raffleRepository.getRaffleMissionInfo | Line 261 `.eq('client_id', clientId)` | ✅ |
-| raffleRepository.hasParticipated | Line 311 `.eq('client_id', clientId)` | ✅ |
+### Error Codes
 
----
-
-## API Reference Cross-Check
-
-| Feature | API_CONTRACTS.md Lines | Implementation |
-|---------|----------------------|----------------|
-| 14 statuses | 2996-3001 | MissionStatus type (lines 96-112) |
-| Status computation | 3482-3571 | computeStatus() (lines 490-600) |
-| 12-priority sorting | 3243-3311 | STATUS_PRIORITY + sortMissions() |
-| 8 flippable cards | 3315-3478 | generateFlippableCard() (lines 610-741) |
-| Display names | 3077-3086 | MISSION_DISPLAY_NAMES (lines 32-39) |
-| Progress text | 3609-3655 | generateProgressText() (lines 390-452) |
-| Reward descriptions | 3088-3097 | generateRewardDescription() (lines 310-344) |
-| Claim 7-step validation | 3770-3778 | claimMissionReward() (lines 1001-1173) |
-| Participate 8-step | 3814-3823 | raffleRepository.participate() |
-| History formatting | 3889-3908 | generateRewardName() (lines 458-480) |
+| Error | Returned From | Condition | HTTP Status |
+|-------|---------------|-----------|-------------|
+| `'Mission not found'` | missionRepository.findById:931 | Query returns null | 404 |
+| `'Redemption not found'` | missionRepository.claimReward:1125 | Redemption query returns null | 404 |
+| `'Cannot claim: reward is ${status}'` | missionRepository.claimReward:1134 | status !== 'claimable' | 409 |
+| `'This mission is not a raffle'` | raffleRepository.participate:100 | mission_type !== 'raffle' | 400 |
+| `'This raffle is not currently accepting entries'` | raffleRepository.participate:107 | activated === false | 400 |
+| `'You are not eligible for this raffle'` | raffleRepository.participate:113 | Tier check fails | 403 |
+| `'You have already entered this raffle'` | raffleRepository.participate:131 | Existing participation found | 409 |
 
 ---
 
-## Next Steps
+## Debugging Checklist
 
-- **Step 5.3:** Mission API Routes (GET /api/missions, POST /claim, POST /participate, GET /history)
-- **Step 5.4:** Mission Integration Tests
+**If mission status computed incorrectly:**
+- [ ] Check `computeStatus()` at missionService.ts:490
+- [ ] Verify redemption.status value from database
+- [ ] Check commissionBoost.boostStatus for commission_boost rewards
+- [ ] Verify raffleParticipation.isWinner for raffle missions
+
+**If missions not appearing:**
+- [ ] Verify `client_id` filter at missionRepository.ts:536
+- [ ] Check `enabled = true` filter
+- [ ] Verify tier eligibility: `tier_eligibility.eq.${currentTierId}` OR `preview_from_tier.eq.${currentTierId}`
+
+**If multi-tenant isolation broken:**
+- [ ] **CRITICAL:** Audit ALL queries for `.eq('client_id', clientId)`
+- [ ] Check 12 locations in missionRepository.ts
+- [ ] Check 6 locations in raffleRepository.ts
+
+**If raffle participation fails:**
+- [ ] Check `mission.activated === true` at raffleRepository.ts:105
+- [ ] Verify tier eligibility at raffleRepository.ts:113
+- [ ] Check for existing participation at raffleRepository.ts:121
+
+---
+
+## Related Documentation
+
+- **EXECUTION_PLAN.md:** Phase 5 Tasks (lines 820-1000)
+- **API_CONTRACTS.md:** Missions Endpoints (lines 2951-4055)
+- **SchemaFinalv2.md:** Tables (missions:362, mission_progress:425, rewards:462, redemptions:594)
+- **ARCHITECTURE.md:** Multi-Tenant Pattern (Section 9, lines 1104-1137)
+
+---
+
+**Document Version:** 2.0
+**Steps Completed:** 2 / 4 (5.1 Repositories, 5.2 Services)
+**Last Updated:** 2025-12-03
+**Completeness:** Repositories ✅, Services ✅, Routes 📋, Tests 📋
