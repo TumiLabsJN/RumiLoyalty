@@ -86,8 +86,13 @@ export interface TestUser {
 export interface TestTier {
   id: string;
   clientId: string;
-  tierLevel: string;
-  salesThreshold: number;
+  tierId: string;
+  tierOrder: number;
+  tierName: string;
+  tierColor: string;
+  salesThreshold: number | null;
+  unitsThreshold: number | null;
+  commissionRate: number;
 }
 
 export interface TestOtp {
@@ -96,6 +101,73 @@ export interface TestOtp {
   sessionId: string;
   codeHash: string;
   expiresAt: string;
+}
+
+export interface TestReward {
+  id: string;
+  clientId: string;
+  type: string;
+  name: string | null;
+  description: string | null;
+  valueData: Record<string, unknown> | null;
+  rewardSource: string;
+  tierEligibility: string;
+  redemptionType: string;
+  enabled: boolean;
+}
+
+export interface TestMission {
+  id: string;
+  clientId: string;
+  title: string;
+  displayName: string;
+  description: string | null;
+  missionType: string;
+  targetValue: number;
+  targetUnit: string;
+  rewardId: string;
+  tierEligibility: string;
+  previewFromTier: string | null;
+  displayOrder: number;
+  raffleEndDate: string | null;
+  enabled: boolean;
+  activated: boolean;
+}
+
+export interface TestMissionProgress {
+  id: string;
+  userId: string;
+  missionId: string;
+  clientId: string;
+  currentValue: number;
+  status: string;
+  completedAt: string | null;
+  checkpointStart: string | null;
+  checkpointEnd: string | null;
+}
+
+export interface TestRedemption {
+  id: string;
+  userId: string;
+  rewardId: string;
+  missionProgressId: string | null;
+  clientId: string;
+  status: string;
+  tierAtClaim: string;
+  redemptionType: string;
+  claimedAt: string | null;
+}
+
+export interface TestRaffleParticipation {
+  id: string;
+  missionId: string;
+  userId: string;
+  missionProgressId: string;
+  redemptionId: string;
+  clientId: string;
+  participatedAt: string;
+  isWinner: boolean | null;
+  winnerSelectedAt: string | null;
 }
 
 // ============================================================================
@@ -218,12 +290,22 @@ export async function createTestUser(options: {
  */
 export async function createTestTier(options: {
   clientId: string;
-  tierLevel?: string;
-  salesThreshold?: number;
+  tierId?: string;
+  tierOrder?: number;
+  tierName?: string;
+  tierColor?: string;
+  salesThreshold?: number | null;
+  unitsThreshold?: number | null;
+  commissionRate?: number;
 }): Promise<{ tier: TestTier; cleanup: () => Promise<void> }> {
   const id = randomUUID();
-  const tierLevel = options.tierLevel ?? 'tier_1';
-  const salesThreshold = options.salesThreshold ?? 0;
+  const tierId = options.tierId ?? 'tier_1';
+  const tierOrder = options.tierOrder ?? 1;
+  const tierName = options.tierName ?? 'Bronze';
+  const tierColor = options.tierColor ?? '#CD7F32';
+  const salesThreshold = options.salesThreshold ?? null;
+  const unitsThreshold = options.unitsThreshold ?? 0;
+  const commissionRate = options.commissionRate ?? 5.0;
 
   const db = getSupabaseClient();
   const { data, error } = await db
@@ -231,8 +313,13 @@ export async function createTestTier(options: {
     .insert({
       id,
       client_id: options.clientId,
-      tier_level: tierLevel,
+      tier_id: tierId,
+      tier_order: tierOrder,
+      tier_name: tierName,
+      tier_color: tierColor,
       sales_threshold: salesThreshold,
+      units_threshold: unitsThreshold,
+      commission_rate: commissionRate,
     })
     .select()
     .single();
@@ -244,8 +331,13 @@ export async function createTestTier(options: {
   const tier: TestTier = {
     id: data.id,
     clientId: data.client_id,
-    tierLevel: data.tier_level,
+    tierId: data.tier_id,
+    tierOrder: data.tier_order,
+    tierName: data.tier_name,
+    tierColor: data.tier_color,
     salesThreshold: data.sales_threshold,
+    unitsThreshold: data.units_threshold,
+    commissionRate: data.commission_rate,
   };
 
   const cleanup = async () => {
@@ -302,6 +394,359 @@ export async function createTestOtp(options: {
   return { otp, cleanup };
 }
 
+/**
+ * Create a test reward
+ *
+ * @param options - Reward configuration (clientId required)
+ * @returns Created reward and cleanup function
+ */
+export async function createTestReward(options: {
+  clientId: string;
+  type?: string;
+  name?: string | null;
+  description?: string | null;
+  valueData?: Record<string, unknown> | null;
+  rewardSource?: string;
+  tierEligibility?: string;
+  redemptionType?: string;
+  redemptionFrequency?: string;
+  redemptionQuantity?: number | null;
+  enabled?: boolean;
+}): Promise<{ reward: TestReward; cleanup: () => Promise<void> }> {
+  const id = randomUUID();
+  const type = options.type ?? 'gift_card';
+  const name = options.name ?? null;
+  const description = options.description ?? null;
+  const valueData = options.valueData ?? { amount: 50 };
+  const rewardSource = options.rewardSource ?? 'mission';
+  // rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
+  const tierEligibility = options.tierEligibility ?? 'tier_1';
+  const redemptionType = options.redemptionType ?? 'instant';
+  const redemptionFrequency = options.redemptionFrequency ?? 'unlimited';
+  // Per constraint: unlimited = null quantity, otherwise 1-10
+  const redemptionQuantity = redemptionFrequency === 'unlimited' ? null : (options.redemptionQuantity ?? 1);
+  const enabled = options.enabled ?? true;
+
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('rewards')
+    .insert({
+      id,
+      client_id: options.clientId,
+      type,
+      name,
+      description,
+      value_data: valueData,
+      reward_source: rewardSource,
+      tier_eligibility: tierEligibility,
+      redemption_type: redemptionType,
+      redemption_frequency: redemptionFrequency,
+      redemption_quantity: redemptionQuantity,
+      enabled,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create test reward: ${error.message}`);
+  }
+
+  const reward: TestReward = {
+    id: data.id,
+    clientId: data.client_id,
+    type: data.type,
+    name: data.name,
+    description: data.description,
+    valueData: data.value_data,
+    rewardSource: data.reward_source,
+    tierEligibility: data.tier_eligibility,
+    redemptionType: data.redemption_type,
+    enabled: data.enabled,
+  };
+
+  const cleanup = async () => {
+    await getSupabaseClient().from('rewards').delete().eq('id', id);
+  };
+
+  return { reward, cleanup };
+}
+
+/**
+ * Create a test mission
+ *
+ * @param options - Mission configuration (clientId, rewardId required)
+ * @returns Created mission and cleanup function
+ */
+export async function createTestMission(options: {
+  clientId: string;
+  rewardId: string;
+  title?: string;
+  displayName?: string;
+  description?: string | null;
+  missionType?: string;
+  targetValue?: number;
+  targetUnit?: string;
+  tierEligibility?: string;
+  previewFromTier?: string | null;
+  displayOrder?: number;
+  raffleEndDate?: Date | null;
+  enabled?: boolean;
+  activated?: boolean;
+}): Promise<{ mission: TestMission; cleanup: () => Promise<void> }> {
+  const id = randomUUID();
+  const missionType = options.missionType ?? 'sales_units';
+  const title = options.title ?? `Test Mission ${id.slice(0, 8)}`;
+  const displayName = options.displayName ?? 'Sales Sprint';
+  const description = options.description ?? null;
+  const targetValue = options.targetValue ?? (missionType === 'raffle' ? 0 : 100);
+  const targetUnit = options.targetUnit ?? 'units';
+  const tierEligibility = options.tierEligibility ?? 'all';
+  const previewFromTier = options.previewFromTier ?? null;
+  const displayOrder = options.displayOrder ?? 1;
+  const raffleEndDate = missionType === 'raffle'
+    ? (options.raffleEndDate ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+    : null;
+  const enabled = options.enabled ?? true;
+  const activated = options.activated ?? (missionType === 'raffle' ? true : false);
+
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('missions')
+    .insert({
+      id,
+      client_id: options.clientId,
+      title,
+      display_name: displayName,
+      description,
+      mission_type: missionType,
+      target_value: targetValue,
+      target_unit: targetUnit,
+      reward_id: options.rewardId,
+      tier_eligibility: tierEligibility,
+      preview_from_tier: previewFromTier,
+      display_order: displayOrder,
+      raffle_end_date: raffleEndDate?.toISOString() ?? null,
+      enabled,
+      activated,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create test mission: ${error.message}`);
+  }
+
+  const mission: TestMission = {
+    id: data.id,
+    clientId: data.client_id,
+    title: data.title,
+    displayName: data.display_name,
+    description: data.description,
+    missionType: data.mission_type,
+    targetValue: data.target_value,
+    targetUnit: data.target_unit,
+    rewardId: data.reward_id,
+    tierEligibility: data.tier_eligibility,
+    previewFromTier: data.preview_from_tier,
+    displayOrder: data.display_order,
+    raffleEndDate: data.raffle_end_date,
+    enabled: data.enabled,
+    activated: data.activated,
+  };
+
+  const cleanup = async () => {
+    await getSupabaseClient().from('missions').delete().eq('id', id);
+  };
+
+  return { mission, cleanup };
+}
+
+/**
+ * Create a test mission progress record
+ *
+ * @param options - Progress configuration (userId, missionId, clientId required)
+ * @returns Created progress and cleanup function
+ */
+export async function createTestMissionProgress(options: {
+  userId: string;
+  missionId: string;
+  clientId: string;
+  currentValue?: number;
+  status?: string;
+  completedAt?: Date | null;
+  checkpointStart?: Date | null;
+  checkpointEnd?: Date | null;
+}): Promise<{ progress: TestMissionProgress; cleanup: () => Promise<void> }> {
+  const id = randomUUID();
+  const currentValue = options.currentValue ?? 0;
+  const status = options.status ?? 'active';
+  const completedAt = options.completedAt ?? null;
+  const checkpointStart = options.checkpointStart ?? new Date();
+  const checkpointEnd = options.checkpointEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('mission_progress')
+    .insert({
+      id,
+      user_id: options.userId,
+      mission_id: options.missionId,
+      client_id: options.clientId,
+      current_value: currentValue,
+      status,
+      completed_at: completedAt?.toISOString() ?? null,
+      checkpoint_start: checkpointStart?.toISOString() ?? null,
+      checkpoint_end: checkpointEnd?.toISOString() ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create test mission progress: ${error.message}`);
+  }
+
+  const progress: TestMissionProgress = {
+    id: data.id,
+    userId: data.user_id,
+    missionId: data.mission_id,
+    clientId: data.client_id,
+    currentValue: data.current_value,
+    status: data.status,
+    completedAt: data.completed_at,
+    checkpointStart: data.checkpoint_start,
+    checkpointEnd: data.checkpoint_end,
+  };
+
+  const cleanup = async () => {
+    await getSupabaseClient().from('mission_progress').delete().eq('id', id);
+  };
+
+  return { progress, cleanup };
+}
+
+/**
+ * Create a test redemption record
+ *
+ * @param options - Redemption configuration (userId, rewardId, clientId, tierAtClaim required)
+ * @returns Created redemption and cleanup function
+ */
+export async function createTestRedemption(options: {
+  userId: string;
+  rewardId: string;
+  clientId: string;
+  tierAtClaim: string;
+  missionProgressId?: string | null;
+  status?: string;
+  redemptionType?: string;
+  claimedAt?: Date | null;
+}): Promise<{ redemption: TestRedemption; cleanup: () => Promise<void> }> {
+  const id = randomUUID();
+  const missionProgressId = options.missionProgressId ?? null;
+  const status = options.status ?? 'claimable';
+  const redemptionType = options.redemptionType ?? 'instant';
+  const claimedAt = options.claimedAt ?? null;
+
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('redemptions')
+    .insert({
+      id,
+      user_id: options.userId,
+      reward_id: options.rewardId,
+      mission_progress_id: missionProgressId,
+      client_id: options.clientId,
+      status,
+      tier_at_claim: options.tierAtClaim,
+      redemption_type: redemptionType,
+      claimed_at: claimedAt?.toISOString() ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create test redemption: ${error.message}`);
+  }
+
+  const redemption: TestRedemption = {
+    id: data.id,
+    userId: data.user_id,
+    rewardId: data.reward_id,
+    missionProgressId: data.mission_progress_id,
+    clientId: data.client_id,
+    status: data.status,
+    tierAtClaim: data.tier_at_claim,
+    redemptionType: data.redemption_type,
+    claimedAt: data.claimed_at,
+  };
+
+  const cleanup = async () => {
+    await getSupabaseClient().from('redemptions').delete().eq('id', id);
+  };
+
+  return { redemption, cleanup };
+}
+
+/**
+ * Create a test raffle participation record
+ *
+ * @param options - Raffle participation configuration (all FKs required)
+ * @returns Created participation and cleanup function
+ */
+export async function createTestRaffleParticipation(options: {
+  missionId: string;
+  userId: string;
+  missionProgressId: string;
+  redemptionId: string;
+  clientId: string;
+  participatedAt?: Date;
+  isWinner?: boolean | null;
+  winnerSelectedAt?: Date | null;
+}): Promise<{ participation: TestRaffleParticipation; cleanup: () => Promise<void> }> {
+  const id = randomUUID();
+  const participatedAt = options.participatedAt ?? new Date();
+  const isWinner = options.isWinner ?? null;
+  const winnerSelectedAt = options.winnerSelectedAt ?? null;
+
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('raffle_participations')
+    .insert({
+      id,
+      mission_id: options.missionId,
+      user_id: options.userId,
+      mission_progress_id: options.missionProgressId,
+      redemption_id: options.redemptionId,
+      client_id: options.clientId,
+      participated_at: participatedAt.toISOString(),
+      is_winner: isWinner,
+      winner_selected_at: winnerSelectedAt?.toISOString() ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create test raffle participation: ${error.message}`);
+  }
+
+  const participation: TestRaffleParticipation = {
+    id: data.id,
+    missionId: data.mission_id,
+    userId: data.user_id,
+    missionProgressId: data.mission_progress_id,
+    redemptionId: data.redemption_id,
+    clientId: data.client_id,
+    participatedAt: data.participated_at,
+    isWinner: data.is_winner,
+    winnerSelectedAt: data.winner_selected_at,
+  };
+
+  const cleanup = async () => {
+    await getSupabaseClient().from('raffle_participations').delete().eq('id', id);
+  };
+
+  return { participation, cleanup };
+}
+
 // ============================================================================
 // Cleanup Utilities
 // ============================================================================
@@ -309,26 +754,35 @@ export async function createTestOtp(options: {
 /**
  * Clean up all test data in correct FK order
  *
- * Deletes: redemptions → mission_progress → missions → rewards → users → tiers → clients
+ * Deletes: sub-states → redemptions → mission_progress → missions → rewards → users → tiers → clients
  *
  * @param clientId - Client ID to clean up (deletes all related data)
  */
 export async function cleanupTestData(clientId: string): Promise<void> {
   // Delete in reverse FK order to avoid constraint violations
 
-  // 1. Delete redemptions (references rewards, users)
+  // 1. Delete raffle_participations (references redemptions, mission_progress)
+  await getSupabaseClient().from('raffle_participations').delete().eq('client_id', clientId);
+
+  // 2. Delete commission_boost_redemptions (references redemptions)
+  await getSupabaseClient().from('commission_boost_redemptions').delete().eq('client_id', clientId);
+
+  // 3. Delete physical_gift_redemptions (references redemptions)
+  await getSupabaseClient().from('physical_gift_redemptions').delete().eq('client_id', clientId);
+
+  // 4. Delete redemptions (references rewards, users, mission_progress)
   await getSupabaseClient().from('redemptions').delete().eq('client_id', clientId);
 
-  // 2. Delete mission_progress (references missions, users)
+  // 5. Delete mission_progress (references missions, users)
   await getSupabaseClient().from('mission_progress').delete().eq('client_id', clientId);
 
-  // 3. Delete missions (references clients)
+  // 6. Delete missions (references rewards, clients)
   await getSupabaseClient().from('missions').delete().eq('client_id', clientId);
 
-  // 4. Delete rewards (references tiers, clients)
+  // 7. Delete rewards (references clients)
   await getSupabaseClient().from('rewards').delete().eq('client_id', clientId);
 
-  // 5. Delete OTP codes (references users)
+  // 8. Delete OTP codes (references users)
   const { data: users } = await getSupabaseClient()
     .from('users')
     .select('id')
@@ -340,13 +794,13 @@ export async function cleanupTestData(clientId: string): Promise<void> {
     await getSupabaseClient().from('password_reset_tokens').delete().in('user_id', userIds);
   }
 
-  // 6. Delete users (references clients, tiers)
+  // 9. Delete users (references clients, tiers)
   await getSupabaseClient().from('users').delete().eq('client_id', clientId);
 
-  // 7. Delete tiers (references clients)
+  // 10. Delete tiers (references clients)
   await getSupabaseClient().from('tiers').delete().eq('client_id', clientId);
 
-  // 8. Delete client
+  // 11. Delete client
   await getSupabaseClient().from('clients').delete().eq('id', clientId);
 }
 

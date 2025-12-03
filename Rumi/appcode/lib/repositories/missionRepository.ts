@@ -8,6 +8,7 @@
  * - ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640)
  * - ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
  * - API_CONTRACTS.md lines 1775-2060 (GET /api/dashboard/featured-mission)
+ * - API_CONTRACTS.md lines 2955-3820 (GET /api/missions)
  */
 
 import { createClient } from '@/lib/supabase/server-client';
@@ -16,6 +17,11 @@ import type { Database } from '@/lib/types/database';
 type MissionRow = Database['public']['Tables']['missions']['Row'];
 type MissionProgressRow = Database['public']['Tables']['mission_progress']['Row'];
 type RewardRow = Database['public']['Tables']['rewards']['Row'];
+type RedemptionRow = Database['public']['Tables']['redemptions']['Row'];
+type CommissionBoostRedemptionRow = Database['public']['Tables']['commission_boost_redemptions']['Row'];
+type PhysicalGiftRedemptionRow = Database['public']['Tables']['physical_gift_redemptions']['Row'];
+type RaffleParticipationRow = Database['public']['Tables']['raffle_participations']['Row'];
+type TierRow = Database['public']['Tables']['tiers']['Row'];
 
 /**
  * Mission type priority order per API_CONTRACTS.md lines 1963-1970
@@ -74,6 +80,146 @@ export interface CongratsModalData {
   rewardType: string;
   rewardName: string | null;
   rewardAmount: number | null;
+}
+
+/**
+ * Raw mission data for Missions page (service layer transforms)
+ * Per API_CONTRACTS.md lines 2955-3820
+ */
+export interface AvailableMissionData {
+  mission: {
+    id: string;
+    type: string;
+    displayName: string;
+    title: string;
+    description: string | null;
+    targetValue: number;
+    targetUnit: string;
+    raffleEndDate: string | null;
+    activated: boolean;
+    tierEligibility: string;
+    previewFromTier: string | null;
+    enabled: boolean;
+  };
+  reward: {
+    id: string;
+    type: string;
+    name: string | null;
+    description: string | null;
+    valueData: Record<string, unknown> | null;
+    redemptionType: string;
+    rewardSource: string;
+  };
+  tier: {
+    id: string;
+    name: string;
+    color: string;
+    order: number;
+  };
+  progress: {
+    id: string;
+    currentValue: number;
+    status: string;
+    completedAt: string | null;
+    checkpointStart: string | null;
+    checkpointEnd: string | null;
+  } | null;
+  redemption: {
+    id: string;
+    status: string;
+    claimedAt: string | null;
+    fulfilledAt: string | null;
+    concludedAt: string | null;
+    rejectedAt: string | null;
+    scheduledActivationDate: string | null;
+    scheduledActivationTime: string | null;
+    activationDate: string | null;
+    expirationDate: string | null;
+  } | null;
+  commissionBoost: {
+    boostStatus: string;
+    scheduledActivationDate: string;
+    activatedAt: string | null;
+    expiresAt: string | null;
+    durationDays: number;
+  } | null;
+  physicalGift: {
+    shippedAt: string | null;
+    shippingCity: string | null;
+    requiresSize: boolean | null;
+  } | null;
+  raffleParticipation: {
+    isWinner: boolean | null;
+    participatedAt: string;
+    winnerSelectedAt: string | null;
+  } | null;
+  isLocked: boolean;
+}
+
+/**
+ * Claim request data for different reward types
+ * Per API_CONTRACTS.md lines 3723-3752
+ */
+export interface ClaimRequestData {
+  scheduledActivationDate?: string; // YYYY-MM-DD for commission_boost, discount
+  scheduledActivationTime?: string; // HH:MM:SS for commission_boost, discount
+  size?: string; // For physical_gift with requiresSize
+  shippingAddress?: {
+    firstName: string;
+    lastName: string;
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country?: string;
+    phone?: string;
+  };
+}
+
+/**
+ * Claim result after processing
+ */
+export interface ClaimResult {
+  success: boolean;
+  redemptionId: string;
+  newStatus: string;
+  error?: string;
+}
+
+/**
+ * Mission history entry for history page
+ * Per API_CONTRACTS.md lines 3827-4047
+ */
+export interface MissionHistoryData {
+  mission: {
+    id: string;
+    type: string;
+    displayName: string;
+  };
+  reward: {
+    id: string;
+    type: string;
+    name: string | null;
+    description: string | null;
+    valueData: Record<string, unknown> | null;
+    rewardSource: string;
+  };
+  progress: {
+    completedAt: string | null;
+  };
+  redemption: {
+    status: string;
+    claimedAt: string | null;
+    fulfilledAt: string | null;
+    concludedAt: string | null;
+    rejectedAt: string | null;
+  };
+  raffleParticipation: {
+    isWinner: boolean | null;
+    participatedAt: string;
+    winnerSelectedAt: string | null;
+  } | null;
 }
 
 export const missionRepository = {
@@ -321,6 +467,786 @@ export const missionRepository = {
       rewardType: reward.type,
       rewardName: reward.name,
       rewardAmount,
+    };
+  },
+
+  /**
+   * List all available missions for the Missions page.
+   * Returns raw data for the service layer to compute statuses and format.
+   *
+   * Per API_CONTRACTS.md lines 2955-3820:
+   * - Returns missions for user's tier + locked previews from higher tiers
+   * - Joins with progress, redemptions, and sub-state tables
+   * - Service layer computes 14 statuses from this data
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async listAvailable(
+    userId: string,
+    clientId: string,
+    currentTierId: string
+  ): Promise<AvailableMissionData[]> {
+    const supabase = await createClient();
+
+    // Query 1: Get all missions (user's tier + locked previews)
+    // Per API_CONTRACTS.md lines 3304-3306
+    const { data: missions, error: missionsError } = await supabase
+      .from('missions')
+      .select(`
+        id,
+        mission_type,
+        display_name,
+        title,
+        description,
+        target_value,
+        target_unit,
+        raffle_end_date,
+        activated,
+        tier_eligibility,
+        preview_from_tier,
+        enabled,
+        display_order,
+        reward_id,
+        rewards!inner (
+          id,
+          type,
+          name,
+          description,
+          value_data,
+          redemption_type,
+          reward_source
+        ),
+        tiers!inner (
+          id,
+          tier_id,
+          tier_name,
+          tier_color,
+          tier_order
+        ),
+        mission_progress (
+          id,
+          user_id,
+          current_value,
+          status,
+          completed_at,
+          checkpoint_start,
+          checkpoint_end
+        )
+      `)
+      .eq('client_id', clientId)
+      .eq('enabled', true)
+      .or(`tier_eligibility.eq.${currentTierId},preview_from_tier.eq.${currentTierId}`);
+
+    if (missionsError) {
+      console.error('[MissionRepository] Error fetching missions:', missionsError);
+      return [];
+    }
+
+    if (!missions || missions.length === 0) {
+      return [];
+    }
+
+    // Query 2: Get user's redemptions for these missions
+    const missionIds = missions.map((m) => m.id);
+    const { data: redemptions } = await supabase
+      .from('redemptions')
+      .select(`
+        id,
+        mission_progress_id,
+        reward_id,
+        status,
+        claimed_at,
+        fulfilled_at,
+        concluded_at,
+        rejected_at,
+        scheduled_activation_date,
+        scheduled_activation_time,
+        activation_date,
+        expiration_date
+      `)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null);
+
+    // Query 3: Get commission boost sub-states
+    const redemptionIds = (redemptions ?? []).map((r) => r.id);
+    const { data: commissionBoosts } = await supabase
+      .from('commission_boost_redemptions')
+      .select(`
+        redemption_id,
+        boost_status,
+        scheduled_activation_date,
+        activated_at,
+        expires_at,
+        duration_days
+      `)
+      .eq('client_id', clientId)
+      .in('redemption_id', redemptionIds.length > 0 ? redemptionIds : ['']);
+
+    // Query 4: Get physical gift sub-states
+    const { data: physicalGifts } = await supabase
+      .from('physical_gift_redemptions')
+      .select(`
+        redemption_id,
+        shipped_at,
+        shipping_city,
+        requires_size
+      `)
+      .eq('client_id', clientId)
+      .in('redemption_id', redemptionIds.length > 0 ? redemptionIds : ['']);
+
+    // Query 5: Get raffle participations
+    const { data: raffleParticipations } = await supabase
+      .from('raffle_participations')
+      .select(`
+        mission_id,
+        is_winner,
+        participated_at,
+        winner_selected_at
+      `)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .in('mission_id', missionIds);
+
+    // Build lookup maps for O(1) access
+    const redemptionsByProgressId = new Map(
+      (redemptions ?? [])
+        .filter((r) => r.mission_progress_id)
+        .map((r) => [r.mission_progress_id, r])
+    );
+    const boostByRedemptionId = new Map(
+      (commissionBoosts ?? []).map((b) => [b.redemption_id, b])
+    );
+    const physicalGiftByRedemptionId = new Map(
+      (physicalGifts ?? []).map((p) => [p.redemption_id, p])
+    );
+    const raffleByMissionId = new Map(
+      (raffleParticipations ?? []).map((r) => [r.mission_id, r])
+    );
+
+    // Transform to AvailableMissionData
+    const results: AvailableMissionData[] = [];
+
+    for (const mission of missions) {
+      // Get user's progress for this mission
+      const userProgress = (mission.mission_progress as MissionProgressRow[])
+        ?.find((p) => p.user_id === userId);
+
+      // Get redemption linked to this progress
+      const redemption = userProgress
+        ? redemptionsByProgressId.get(userProgress.id)
+        : null;
+
+      // Get sub-state data
+      const commissionBoost = redemption
+        ? boostByRedemptionId.get(redemption.id)
+        : null;
+      const physicalGift = redemption
+        ? physicalGiftByRedemptionId.get(redemption.id)
+        : null;
+      const raffleParticipation = raffleByMissionId.get(mission.id);
+
+      // Type assertions for joined data
+      const reward = mission.rewards as unknown as RewardRow;
+      const tier = mission.tiers as unknown as TierRow;
+
+      // Determine if this is a locked mission (from higher tier)
+      const isLocked = mission.tier_eligibility !== currentTierId &&
+        mission.preview_from_tier === currentTierId;
+
+      results.push({
+        mission: {
+          id: mission.id,
+          type: mission.mission_type,
+          displayName: mission.display_name,
+          title: mission.title,
+          description: mission.description,
+          targetValue: mission.target_value,
+          targetUnit: mission.target_unit,
+          raffleEndDate: mission.raffle_end_date,
+          activated: mission.activated ?? false,
+          tierEligibility: mission.tier_eligibility,
+          previewFromTier: mission.preview_from_tier,
+          enabled: mission.enabled ?? true,
+        },
+        reward: {
+          id: reward.id,
+          type: reward.type,
+          name: reward.name,
+          description: reward.description,
+          valueData: reward.value_data as Record<string, unknown> | null,
+          redemptionType: reward.redemption_type ?? 'instant',
+          rewardSource: reward.reward_source ?? 'mission',
+        },
+        tier: {
+          id: tier.id,
+          name: tier.tier_name,
+          color: tier.tier_color,
+          order: tier.tier_order,
+        },
+        progress: userProgress
+          ? {
+              id: userProgress.id,
+              currentValue: userProgress.current_value ?? 0,
+              status: userProgress.status ?? 'active',
+              completedAt: userProgress.completed_at,
+              checkpointStart: userProgress.checkpoint_start,
+              checkpointEnd: userProgress.checkpoint_end,
+            }
+          : null,
+        redemption: redemption
+          ? {
+              id: redemption.id,
+              status: redemption.status ?? 'claimable',
+              claimedAt: redemption.claimed_at,
+              fulfilledAt: redemption.fulfilled_at,
+              concludedAt: redemption.concluded_at,
+              rejectedAt: redemption.rejected_at,
+              scheduledActivationDate: redemption.scheduled_activation_date,
+              scheduledActivationTime: redemption.scheduled_activation_time,
+              activationDate: redemption.activation_date,
+              expirationDate: redemption.expiration_date,
+            }
+          : null,
+        commissionBoost: commissionBoost
+          ? {
+              boostStatus: commissionBoost.boost_status,
+              scheduledActivationDate: commissionBoost.scheduled_activation_date,
+              activatedAt: commissionBoost.activated_at,
+              expiresAt: commissionBoost.expires_at,
+              durationDays: commissionBoost.duration_days,
+            }
+          : null,
+        physicalGift: physicalGift
+          ? {
+              shippedAt: physicalGift.shipped_at,
+              shippingCity: physicalGift.shipping_city,
+              requiresSize: physicalGift.requires_size,
+            }
+          : null,
+        raffleParticipation: raffleParticipation
+          ? {
+              isWinner: raffleParticipation.is_winner,
+              participatedAt: raffleParticipation.participated_at,
+              winnerSelectedAt: raffleParticipation.winner_selected_at,
+            }
+          : null,
+        isLocked,
+      });
+    }
+
+    return results;
+  },
+
+  /**
+   * Get mission history (concluded + rejected missions).
+   * Per API_CONTRACTS.md lines 3827-4047
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async getHistory(
+    userId: string,
+    clientId: string
+  ): Promise<MissionHistoryData[]> {
+    const supabase = await createClient();
+
+    // Query per API_CONTRACTS.md lines 3985-4016
+    const { data: history, error } = await supabase
+      .from('redemptions')
+      .select(`
+        id,
+        status,
+        claimed_at,
+        fulfilled_at,
+        concluded_at,
+        rejected_at,
+        mission_progress_id,
+        mission_progress!inner (
+          id,
+          completed_at,
+          status,
+          missions!inner (
+            id,
+            mission_type,
+            display_name,
+            rewards!inner (
+              id,
+              type,
+              name,
+              description,
+              value_data,
+              reward_source
+            )
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .in('status', ['concluded', 'rejected'])
+      .is('deleted_at', null)
+      .not('mission_progress_id', 'is', null)
+      .order('concluded_at', { ascending: false, nullsFirst: false });
+
+    if (error) {
+      console.error('[MissionRepository] Error fetching history:', error);
+      return [];
+    }
+
+    if (!history || history.length === 0) {
+      return [];
+    }
+
+    // Get raffle participations for rejected raffles
+    const missionProgressIds = history
+      .map((h) => h.mission_progress_id)
+      .filter((id): id is string => id !== null);
+    const { data: raffleParticipations } = await supabase
+      .from('raffle_participations')
+      .select(`
+        mission_progress_id,
+        is_winner,
+        participated_at,
+        winner_selected_at
+      `)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .in('mission_progress_id', missionProgressIds.length > 0 ? missionProgressIds : ['']);
+
+    const raffleByProgressId = new Map(
+      (raffleParticipations ?? []).map((r) => [r.mission_progress_id, r])
+    );
+
+    // Transform to MissionHistoryData
+    return history.map((redemption) => {
+      const progress = redemption.mission_progress as unknown as {
+        id: string;
+        completed_at: string | null;
+        status: string;
+        missions: MissionRow & { rewards: RewardRow };
+      };
+      const mission = progress.missions;
+      const reward = mission.rewards;
+      const progressId = redemption.mission_progress_id;
+      const raffle = progressId ? raffleByProgressId.get(progressId) : null;
+
+      return {
+        mission: {
+          id: mission.id,
+          type: mission.mission_type,
+          displayName: mission.display_name,
+        },
+        reward: {
+          id: reward.id,
+          type: reward.type,
+          name: reward.name,
+          description: reward.description,
+          valueData: reward.value_data as Record<string, unknown> | null,
+          rewardSource: reward.reward_source ?? 'mission',
+        },
+        progress: {
+          completedAt: progress.completed_at,
+        },
+        redemption: {
+          status: redemption.status ?? 'concluded',
+          claimedAt: redemption.claimed_at,
+          fulfilledAt: redemption.fulfilled_at,
+          concludedAt: redemption.concluded_at,
+          rejectedAt: redemption.rejected_at,
+        },
+        raffleParticipation: raffle
+          ? {
+              isWinner: raffle.is_winner,
+              participatedAt: raffle.participated_at,
+              winnerSelectedAt: raffle.winner_selected_at,
+            }
+          : null,
+      };
+    });
+  },
+
+  /**
+   * Find a mission by ID with all related data for claim/participate.
+   * Used by service layer for validation before claim/participate actions.
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async findById(
+    missionId: string,
+    userId: string,
+    clientId: string
+  ): Promise<AvailableMissionData | null> {
+    const supabase = await createClient();
+
+    const { data: mission, error } = await supabase
+      .from('missions')
+      .select(`
+        id,
+        mission_type,
+        display_name,
+        title,
+        description,
+        target_value,
+        target_unit,
+        raffle_end_date,
+        activated,
+        tier_eligibility,
+        preview_from_tier,
+        enabled,
+        display_order,
+        reward_id,
+        rewards!inner (
+          id,
+          type,
+          name,
+          description,
+          value_data,
+          redemption_type,
+          reward_source
+        ),
+        tiers!inner (
+          id,
+          tier_id,
+          tier_name,
+          tier_color,
+          tier_order
+        ),
+        mission_progress (
+          id,
+          user_id,
+          current_value,
+          status,
+          completed_at,
+          checkpoint_start,
+          checkpoint_end
+        )
+      `)
+      .eq('id', missionId)
+      .eq('client_id', clientId)
+      .single();
+
+    if (error || !mission) {
+      return null;
+    }
+
+    // Get user's progress
+    const userProgress = (mission.mission_progress as MissionProgressRow[])
+      ?.find((p) => p.user_id === userId);
+
+    // Get redemption if exists
+    let redemption = null;
+    if (userProgress) {
+      const { data: redemptionData } = await supabase
+        .from('redemptions')
+        .select(`
+          id,
+          status,
+          claimed_at,
+          fulfilled_at,
+          concluded_at,
+          rejected_at,
+          scheduled_activation_date,
+          scheduled_activation_time,
+          activation_date,
+          expiration_date
+        `)
+        .eq('mission_progress_id', userProgress.id)
+        .eq('user_id', userId)
+        .eq('client_id', clientId)
+        .is('deleted_at', null)
+        .single();
+      redemption = redemptionData;
+    }
+
+    // Get sub-state data
+    let commissionBoost = null;
+    let physicalGift = null;
+    if (redemption) {
+      const { data: boostData } = await supabase
+        .from('commission_boost_redemptions')
+        .select(`
+          redemption_id,
+          boost_status,
+          scheduled_activation_date,
+          activated_at,
+          expires_at,
+          duration_days
+        `)
+        .eq('redemption_id', redemption.id)
+        .eq('client_id', clientId)
+        .single();
+      commissionBoost = boostData;
+
+      const { data: giftData } = await supabase
+        .from('physical_gift_redemptions')
+        .select(`
+          redemption_id,
+          shipped_at,
+          shipping_city,
+          requires_size
+        `)
+        .eq('redemption_id', redemption.id)
+        .eq('client_id', clientId)
+        .single();
+      physicalGift = giftData;
+    }
+
+    // Get raffle participation
+    const { data: raffleData } = await supabase
+      .from('raffle_participations')
+      .select(`
+        mission_id,
+        is_winner,
+        participated_at,
+        winner_selected_at
+      `)
+      .eq('mission_id', missionId)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .single();
+
+    const reward = mission.rewards as unknown as RewardRow;
+    const tier = mission.tiers as unknown as TierRow;
+
+    return {
+      mission: {
+        id: mission.id,
+        type: mission.mission_type,
+        displayName: mission.display_name,
+        title: mission.title,
+        description: mission.description,
+        targetValue: mission.target_value,
+        targetUnit: mission.target_unit,
+        raffleEndDate: mission.raffle_end_date,
+        activated: mission.activated ?? false,
+        tierEligibility: mission.tier_eligibility,
+        previewFromTier: mission.preview_from_tier,
+        enabled: mission.enabled ?? true,
+      },
+      reward: {
+        id: reward.id,
+        type: reward.type,
+        name: reward.name,
+        description: reward.description,
+        valueData: reward.value_data as Record<string, unknown> | null,
+        redemptionType: reward.redemption_type ?? 'instant',
+        rewardSource: reward.reward_source ?? 'mission',
+      },
+      tier: {
+        id: tier.id,
+        name: tier.tier_name,
+        color: tier.tier_color,
+        order: tier.tier_order,
+      },
+      progress: userProgress
+        ? {
+            id: userProgress.id,
+            currentValue: userProgress.current_value ?? 0,
+            status: userProgress.status ?? 'active',
+            completedAt: userProgress.completed_at,
+            checkpointStart: userProgress.checkpoint_start,
+            checkpointEnd: userProgress.checkpoint_end,
+          }
+        : null,
+      redemption: redemption
+        ? {
+            id: redemption.id,
+            status: redemption.status ?? 'claimable',
+            claimedAt: redemption.claimed_at,
+            fulfilledAt: redemption.fulfilled_at,
+            concludedAt: redemption.concluded_at,
+            rejectedAt: redemption.rejected_at,
+            scheduledActivationDate: redemption.scheduled_activation_date,
+            scheduledActivationTime: redemption.scheduled_activation_time,
+            activationDate: redemption.activation_date,
+            expirationDate: redemption.expiration_date,
+          }
+        : null,
+      commissionBoost: commissionBoost
+        ? {
+            boostStatus: commissionBoost.boost_status,
+            scheduledActivationDate: commissionBoost.scheduled_activation_date,
+            activatedAt: commissionBoost.activated_at,
+            expiresAt: commissionBoost.expires_at,
+            durationDays: commissionBoost.duration_days,
+          }
+        : null,
+      physicalGift: physicalGift
+        ? {
+            shippedAt: physicalGift.shipped_at,
+            shippingCity: physicalGift.shipping_city,
+            requiresSize: physicalGift.requires_size,
+          }
+        : null,
+      raffleParticipation: raffleData
+        ? {
+            isWinner: raffleData.is_winner,
+            participatedAt: raffleData.participated_at,
+            winnerSelectedAt: raffleData.winner_selected_at,
+          }
+        : null,
+      isLocked: false, // When fetching by ID, it's for the user's own tier
+    };
+  },
+
+  /**
+   * Claim a mission reward.
+   * Updates redemptions.status from 'claimable' → 'claimed'
+   * Creates sub-state records as needed.
+   *
+   * Per API_CONTRACTS.md lines 3711-3779
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async claimReward(
+    redemptionId: string,
+    userId: string,
+    clientId: string,
+    currentTierId: string,
+    rewardType: string,
+    claimData: ClaimRequestData
+  ): Promise<ClaimResult> {
+    const supabase = await createClient();
+
+    // 1. Verify redemption exists and is claimable
+    const { data: redemption, error: redemptionError } = await supabase
+      .from('redemptions')
+      .select('id, status, reward_id, mission_progress_id')
+      .eq('id', redemptionId)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .single();
+
+    if (redemptionError || !redemption) {
+      return {
+        success: false,
+        redemptionId,
+        newStatus: 'claimable',
+        error: 'Redemption not found',
+      };
+    }
+
+    if (redemption.status !== 'claimable') {
+      return {
+        success: false,
+        redemptionId,
+        newStatus: redemption.status ?? 'unknown',
+        error: `Cannot claim: reward is ${redemption.status}`,
+      };
+    }
+
+    // 2. Get reward details for sub-state creation
+    if (!redemption.reward_id) {
+      return {
+        success: false,
+        redemptionId,
+        newStatus: 'claimable',
+        error: 'Reward not linked to redemption',
+      };
+    }
+
+    const { data: reward } = await supabase
+      .from('rewards')
+      .select('id, type, value_data, redemption_type')
+      .eq('id', redemption.reward_id)
+      .single();
+
+    if (!reward) {
+      return {
+        success: false,
+        redemptionId,
+        newStatus: 'claimable',
+        error: 'Reward configuration not found',
+      };
+    }
+
+    const valueData = reward.value_data as Record<string, unknown> | null;
+    const now = new Date().toISOString();
+
+    // 3. Update redemption to 'claimed'
+    const updateData: Record<string, unknown> = {
+      status: 'claimed',
+      claimed_at: now,
+      updated_at: now,
+    };
+
+    // Add scheduling data for scheduled rewards
+    if (reward.redemption_type === 'scheduled' && claimData.scheduledActivationDate) {
+      updateData.scheduled_activation_date = claimData.scheduledActivationDate;
+      updateData.scheduled_activation_time = claimData.scheduledActivationTime ?? '18:00:00';
+    }
+
+    const { error: updateError } = await supabase
+      .from('redemptions')
+      .update(updateData)
+      .eq('id', redemptionId);
+
+    if (updateError) {
+      console.error('[MissionRepository] Error claiming reward:', updateError);
+      return {
+        success: false,
+        redemptionId,
+        newStatus: 'claimable',
+        error: 'Failed to update redemption',
+      };
+    }
+
+    // 4. Create sub-state records based on reward type
+    if (reward.type === 'commission_boost') {
+      const durationDays = (valueData?.duration_days as number) ?? 30;
+      const boostPercent = (valueData?.percent as number) ?? 0;
+
+      const { error: boostError } = await supabase
+        .from('commission_boost_redemptions')
+        .insert({
+          redemption_id: redemptionId,
+          client_id: clientId,
+          boost_status: 'scheduled',
+          scheduled_activation_date: claimData.scheduledActivationDate!,
+          duration_days: durationDays,
+          boost_rate: boostPercent,
+        });
+
+      if (boostError) {
+        console.error('[MissionRepository] Error creating boost record:', boostError);
+        // Note: Main redemption is already claimed, sub-state can be recovered
+      }
+    }
+
+    if (reward.type === 'physical_gift' && claimData.shippingAddress) {
+      const addr = claimData.shippingAddress;
+      const requiresSize = (valueData?.requires_size as boolean) ?? false;
+
+      const { error: giftError } = await supabase
+        .from('physical_gift_redemptions')
+        .insert({
+          redemption_id: redemptionId,
+          client_id: clientId,
+          requires_size: requiresSize,
+          size_category: (valueData?.size_category as string) ?? null,
+          size_value: claimData.size ?? null,
+          size_submitted_at: claimData.size ? now : null,
+          shipping_recipient_first_name: addr.firstName,
+          shipping_recipient_last_name: addr.lastName,
+          shipping_address_line1: addr.line1,
+          shipping_address_line2: addr.line2 ?? null,
+          shipping_city: addr.city,
+          shipping_state: addr.state,
+          shipping_postal_code: addr.postalCode,
+          shipping_country: addr.country ?? 'USA',
+          shipping_phone: addr.phone ?? null,
+          shipping_info_submitted_at: now,
+        });
+
+      if (giftError) {
+        console.error('[MissionRepository] Error creating gift record:', giftError);
+      }
+    }
+
+    return {
+      success: true,
+      redemptionId,
+      newStatus: 'claimed',
     };
   },
 };

@@ -282,15 +282,15 @@ const MISSION_PRIORITY: Record<string, number> = {
 
 #### findFeaturedMission()
 
-**Lines:** 93-266
+**Lines:** 239-406
 
 **Purpose:** Find highest-priority featured mission for circular progress display
 
-**Multi-Tenant Filter:** ✅ Lines 137, 156
+**Multi-Tenant Filter:** ✅ Lines 283, 302
 
-**Query Implementation (lines 125-145):**
+**Query Implementation (lines 249-286):**
 ```typescript
-// missionRepository.ts:125-145
+// missionRepository.ts:249-286
 const { data: missions, error: missionsError } = await supabase
   .from('missions')
   .select(`
@@ -315,25 +315,25 @@ const { data: missions, error: missionsError } = await supabase
       id, current_value, status, completed_at, user_id
     )
   `)
-  .eq('client_id', clientId) // Line 137: CRITICAL: Multitenancy enforcement
+  .eq('client_id', clientId) // Line 283: CRITICAL: Multitenancy enforcement
   .eq('tier_eligibility', currentTierId)
   .eq('enabled', true)
   .in('mission_type', ['raffle', 'sales_dollars', 'sales_units', 'videos', 'likes', 'views']);
 ```
 
-**Raffle Participations Query (lines 150-156):**
+**Raffle Participations Query (lines 298-302):**
 ```typescript
-// missionRepository.ts:150-156
+// missionRepository.ts:298-302
 const { data: raffleParticipations } = await supabase
   .from('raffle_participations')
   .select('mission_id')
   .eq('user_id', userId)
-  .eq('client_id', clientId); // Line 156
+  .eq('client_id', clientId); // Line 302
 ```
 
-**Priority Filtering Logic (lines 163-212):**
+**Priority Filtering Logic (lines 309-357):**
 ```typescript
-// missionRepository.ts:163-212
+// missionRepository.ts:309-357
 const eligibleMissions = missions
   .filter((mission) => {
     const userProgress = (mission.mission_progress as MissionProgressRow[])
@@ -393,15 +393,15 @@ const eligibleMissions = missions
 
 #### findRecentFulfillment()
 
-**Lines:** 268-326
+**Lines:** 414-471
 
 **Purpose:** Check for recently fulfilled missions (for congrats modal)
 
-**Multi-Tenant Filter:** ✅ Line 300
+**Multi-Tenant Filter:** ✅ Line 446
 
-**Query Implementation (lines 285-305):**
+**Query Implementation (lines 428-450):**
 ```typescript
-// missionRepository.ts:285-305
+// missionRepository.ts:428-450
 const { data: fulfillments, error } = await supabase
   .from('mission_progress')
   .select(`
@@ -417,7 +417,7 @@ const { data: fulfillments, error } = await supabase
     )
   `)
   .eq('user_id', userId)
-  .eq('client_id', clientId) // Line 300: CRITICAL: Multitenancy enforcement
+  .eq('client_id', clientId) // Line 446: CRITICAL: Multitenancy enforcement
   .eq('status', 'fulfilled')
   .gt('completed_at', lastLoginAt)
   .order('completed_at', { ascending: false })
@@ -464,8 +464,8 @@ getDashboardOverview(userId, clientId) [dashboardService.ts:234]
   ├─→ dashboardRepository.getUserDashboard() [dashboardRepository.ts:97]
   ├─→ getFeaturedMission() [dashboardService.ts:350]
   │   ├─→ checkCongratsModal() [dashboardService.ts:488]
-  │   │   └─→ missionRepository.findRecentFulfillment() [missionRepository.ts:268]
-  │   └─→ missionRepository.findFeaturedMission() [missionRepository.ts:93]
+  │   │   └─→ missionRepository.findRecentFulfillment() [missionRepository.ts:414]
+  │   └─→ missionRepository.findFeaturedMission() [missionRepository.ts:239]
   ├─→ dashboardRepository.getCurrentTierRewards() [dashboardRepository.ts:215]
   ├─→ Calculate tier progress [dashboardService.ts:259-271]
   ├─→ Format rewards with displayText [dashboardService.ts:273-285]
@@ -698,9 +698,9 @@ export interface FeaturedMissionResponse {
 | getCurrentTierRewards | dashboardRepository.ts:234 | ✅ `.eq('client_id', clientId)` |
 | getCurrentTierRewards (count) | dashboardRepository.ts:250 | ✅ `.eq('client_id', clientId)` |
 | updateLastLoginAt | dashboardRepository.ts:287 | ✅ `.eq('client_id', clientId)` |
-| findFeaturedMission (missions) | missionRepository.ts:137 | ✅ `.eq('client_id', clientId)` |
-| findFeaturedMission (raffle) | missionRepository.ts:156 | ✅ `.eq('client_id', clientId)` |
-| findRecentFulfillment | missionRepository.ts:300 | ✅ `.eq('client_id', clientId)` |
+| findFeaturedMission (missions) | missionRepository.ts:283 | ✅ `.eq('client_id', clientId)` |
+| findFeaturedMission (raffle) | missionRepository.ts:302 | ✅ `.eq('client_id', clientId)` |
+| findRecentFulfillment | missionRepository.ts:446 | ✅ `.eq('client_id', clientId)` |
 
 ---
 

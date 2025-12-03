@@ -12,7 +12,7 @@
 **Steps Documented:**
 - Step 5.1 - Mission Repositories ✅
 - Step 5.2 - Mission Services ✅
-- Step 5.3 - Mission API Routes 📋 Pending
+- Step 5.3 - Mission API Routes ✅
 - Step 5.4 - Mission Testing 📋 Pending
 
 **Key Files:**
@@ -21,6 +21,10 @@
 | `appcode/lib/repositories/missionRepository.ts` | 1,252 | Database queries with tenant isolation |
 | `appcode/lib/repositories/raffleRepository.ts` | 316 | Raffle participation queries |
 | `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 14 statuses, sorting, flippable cards |
+| `appcode/app/api/missions/route.ts` | 130 | GET /api/missions endpoint |
+| `appcode/app/api/missions/[missionId]/claim/route.ts` | 167 | POST /api/missions/:id/claim endpoint |
+| `appcode/app/api/missions/[missionId]/participate/route.ts` | 140 | POST /api/missions/:id/participate endpoint |
+| `appcode/app/api/missions/history/route.ts` | 116 | GET /api/missions/history endpoint |
 
 **Database Tables Used:**
 - `missions` (SchemaFinalv2.md:362-423)
@@ -37,6 +41,347 @@
 - [Status Computation](#status-computation) - 14 statuses logic
 - [Error Handling](#error-handling) - Error codes and scenarios
 - [Debugging](#debugging-checklist) - Common issues and fixes
+
+---
+
+## API Endpoints (Step 5.3)
+
+### GET /api/missions
+
+**Location:** `appcode/app/api/missions/route.ts:24-130`
+
+**Purpose:** Returns all missions for the Missions page with pre-computed status, progress tracking, and formatted display text.
+
+**References:**
+- API_CONTRACTS.md lines 2955-3238
+- ARCHITECTURE.md Section 5 (lines 408-461)
+
+**Implementation (lines 24-117):**
+```typescript
+export async function GET(request: NextRequest) {
+  try {
+    // Step 1: Validate session token
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authUser) {
+      return NextResponse.json(
+        { error: 'UNAUTHORIZED', code: 'UNAUTHORIZED', message: 'Please log in to continue.' },
+        { status: 401 }
+      );
+    }
+
+    // Step 2: Get client ID from environment (MVP: single tenant)
+    const clientId = process.env.CLIENT_ID;
+    if (!clientId) {
+      console.error('[Missions] CLIENT_ID not configured');
+      return NextResponse.json(
+        { error: 'INTERNAL_ERROR', code: 'INTERNAL_ERROR', message: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
+    // Step 3: Get user from our users table
+    const user = await userRepository.findByAuthId(authUser.id);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'UNAUTHORIZED', code: 'USER_NOT_FOUND', message: 'User profile not found. Please sign up.' },
+        { status: 401 }
+      );
+    }
+
+    // ⚠️ Multi-tenant filter (line 69)
+    if (user.clientId !== clientId) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', code: 'TENANT_MISMATCH', message: 'Access denied.' },
+        { status: 403 }
+      );
+    }
+
+    // Step 4-6: Get dashboard data, build tier lookup, get missions
+    const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId);
+    const tierLookup = new Map<string, { name: string; color: string }>();
+    if (dashboardData.allTiers) {
+      for (const tier of dashboardData.allTiers) {
+        tierLookup.set(tier.id, { name: tier.name, color: tier.color });
+      }
+    }
+
+    // Step 6: Get missions from service (line 102-113)
+    const missionsResponse = await listAvailableMissions(
+      user.id,
+      clientId,
+      { handle: user.tiktokHandle ?? '', currentTier: dashboardData.currentTier.id, ... },
+      dashboardData.client.vipMetric as 'sales' | 'units',
+      tierLookup
+    );
+
+    return NextResponse.json(missionsResponse, { status: 200 });
+  } catch (error) {
+    console.error('[Missions] Unexpected error:', error);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+**Multi-Tenant Filter:** ✅ Line 69 - `user.clientId !== clientId`
+
+**Call Chain:**
+```
+GET /api/missions (route.ts:24)
+  ├─→ userRepository.findByAuthId() (userRepository.ts)
+  ├─→ dashboardRepository.getUserDashboard() (dashboardRepository.ts)
+  └─→ listAvailableMissions() (missionService.ts:942)
+      ├─→ missionRepository.listAvailable() (missionRepository.ts:484)
+      ├─→ computeStatus() (missionService.ts:490)
+      ├─→ transformMission() (missionService.ts:750)
+      └─→ sortMissions() (missionService.ts:887)
+```
+
+---
+
+### POST /api/missions/:id/claim
+
+**Location:** `appcode/app/api/missions/[missionId]/claim/route.ts:41-167`
+
+**Purpose:** Creator claims a completed mission reward.
+
+**References:**
+- API_CONTRACTS.md lines 3711-3779
+- ARCHITECTURE.md Section 10.2 (lines 1312-1323)
+
+**Request Body (varies by reward type):**
+```typescript
+interface ClaimRequestBody {
+  scheduledActivationDate?: string;  // For scheduled rewards
+  scheduledActivationTime?: string;
+  size?: string;                     // For physical gifts
+  shippingAddress?: {                // For physical gifts
+    firstName?: string;
+    lastName?: string;
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country?: string;
+    phone?: string;
+  };
+}
+```
+
+**Implementation (lines 41-154):**
+```typescript
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ missionId: string }> }
+) {
+  try {
+    const { missionId } = await params;
+
+    // Steps 1-3: Auth validation (same pattern as GET /api/missions)
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    // ... auth checks ...
+
+    const clientId = process.env.CLIENT_ID;
+    const user = await userRepository.findByAuthId(authUser.id);
+
+    // ⚠️ Multi-tenant filter (line 91)
+    if (user.clientId !== clientId) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', code: 'TENANT_MISMATCH', message: 'Access denied.' },
+        { status: 403 }
+      );
+    }
+
+    // Step 4: Parse request body (line 103-111)
+    let body: ClaimRequestBody = {};
+    try {
+      const text = await request.text();
+      if (text) body = JSON.parse(text);
+    } catch { /* Empty body valid for instant rewards */ }
+
+    // Step 5: Call service to claim reward (line 115-126)
+    const result = await claimMissionReward(
+      missionId,
+      user.id,
+      clientId,
+      user.currentTier ?? '',
+      {
+        scheduledActivationDate: body.scheduledActivationDate,
+        scheduledActivationTime: body.scheduledActivationTime,
+        size: body.size,
+        shippingAddress: body.shippingAddress,
+      }
+    );
+
+    // Step 6: Return response based on result (line 129-154)
+    if (!result.success) {
+      let status = 400;
+      if (result.message.includes('not found')) status = 404;
+      else if (result.message.includes('not eligible')) status = 403;
+      else if (result.message.includes('already claimed')) status = 409;
+      return NextResponse.json({ success: false, error: 'CLAIM_FAILED', ... }, { status });
+    }
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) { ... }
+}
+```
+
+**Multi-Tenant Filter:** ✅ Line 91 - `user.clientId !== clientId`
+
+**Call Chain:**
+```
+POST /api/missions/:id/claim (route.ts:41)
+  ├─→ userRepository.findByAuthId() (userRepository.ts)
+  └─→ claimMissionReward() (missionService.ts:1001)
+      ├─→ missionRepository.findById() (missionRepository.ts:873)
+      └─→ missionRepository.claimReward() (missionRepository.ts:1100)
+```
+
+---
+
+### POST /api/missions/:id/participate
+
+**Location:** `appcode/app/api/missions/[missionId]/participate/route.ts:31-140`
+
+**Purpose:** Creator participates in a raffle mission.
+
+**References:**
+- API_CONTRACTS.md lines 3782-3824
+- ARCHITECTURE.md Section 10.3 (lines 1347-1367)
+
+**Backend Processing (8 steps per API_CONTRACTS.md):**
+1. Verify mission.mission_type='raffle'
+2. Check mission.activated=true
+3. Verify user hasn't already participated
+4. Verify tier eligibility
+5. Update mission_progress.status → 'completed'
+6. Create redemptions row (status='claimable')
+7. Create raffle_participations row (is_winner=NULL)
+8. Log audit trail
+
+**Implementation (lines 31-127):**
+```typescript
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ missionId: string }> }
+) {
+  try {
+    const { missionId } = await params;
+
+    // Steps 1-3: Auth validation (same pattern)
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    // ... auth checks ...
+
+    // ⚠️ Multi-tenant filter (line 81)
+    if (user.clientId !== clientId) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', code: 'TENANT_MISMATCH', message: 'Access denied.' },
+        { status: 403 }
+      );
+    }
+
+    // Step 4: Call service to participate in raffle (line 94-99)
+    const result = await participateInRaffle(
+      missionId,
+      user.id,
+      clientId,
+      user.currentTier ?? ''
+    );
+
+    // Step 5: Return response based on result (line 102-127)
+    if (!result.success) {
+      let status = 400;
+      if (result.message.includes('not found')) status = 404;
+      else if (result.message.includes('not eligible')) status = 403;
+      else if (result.message.includes('already entered')) status = 409;
+      return NextResponse.json({ success: false, error: 'PARTICIPATION_FAILED', ... }, { status });
+    }
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) { ... }
+}
+```
+
+**Multi-Tenant Filter:** ✅ Line 81 - `user.clientId !== clientId`
+
+**Call Chain:**
+```
+POST /api/missions/:id/participate (route.ts:31)
+  ├─→ userRepository.findByAuthId() (userRepository.ts)
+  └─→ participateInRaffle() (missionService.ts:1179)
+      └─→ raffleRepository.participate() (raffleRepository.ts:58)
+```
+
+---
+
+### GET /api/missions/history
+
+**Location:** `appcode/app/api/missions/history/route.ts:21-116`
+
+**Purpose:** Returns concluded missions for mission history page (completed rewards + lost raffles).
+
+**References:**
+- API_CONTRACTS.md lines 3827-4047
+- ARCHITECTURE.md Section 10.2 (lines 1299-1309)
+
+**Implementation (lines 21-103):**
+```typescript
+export async function GET(request: NextRequest) {
+  try {
+    // Steps 1-3: Auth validation (same pattern)
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    // ... auth checks ...
+
+    // ⚠️ Multi-tenant filter (line 66)
+    if (user.clientId !== clientId) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', code: 'TENANT_MISMATCH', message: 'Access denied.' },
+        { status: 403 }
+      );
+    }
+
+    // Step 4: Get tier info for response (line 78-88)
+    const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId);
+    if (!dashboardData) {
+      return NextResponse.json(
+        { error: 'INTERNAL_ERROR', code: 'USER_DATA_ERROR', message: 'Failed to load user data.' },
+        { status: 500 }
+      );
+    }
+
+    // Step 5: Get mission history from service (line 91-99)
+    const historyResponse = await getMissionHistory(
+      user.id,
+      clientId,
+      {
+        currentTier: dashboardData.currentTier.id,
+        currentTierName: dashboardData.currentTier.name,
+        currentTierColor: dashboardData.currentTier.color,
+      }
+    );
+
+    return NextResponse.json(historyResponse, { status: 200 });
+  } catch (error) { ... }
+}
+```
+
+**Multi-Tenant Filter:** ✅ Line 66 - `user.clientId !== clientId`
+
+**Call Chain:**
+```
+GET /api/missions/history (route.ts:21)
+  ├─→ userRepository.findByAuthId() (userRepository.ts)
+  ├─→ dashboardRepository.getUserDashboard() (dashboardRepository.ts)
+  └─→ getMissionHistory() (missionService.ts:1221)
+      └─→ missionRepository.getHistory() (missionRepository.ts:747)
+```
 
 ---
 
@@ -388,6 +733,14 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
 - Line 261: `.eq('client_id', clientId)` - getRaffleMissionInfo
 - Line 311: `.eq('client_id', clientId)` - hasParticipated
 
+**API Routes client_id verification (Step 5.3):**
+| Route | File:Line | Check | HTTP Status |
+|-------|-----------|-------|-------------|
+| GET /api/missions | route.ts:69 | `user.clientId !== clientId` | 403 TENANT_MISMATCH |
+| POST /api/missions/:id/claim | claim/route.ts:91 | `user.clientId !== clientId` | 403 TENANT_MISMATCH |
+| POST /api/missions/:id/participate | participate/route.ts:81 | `user.clientId !== clientId` | 403 TENANT_MISMATCH |
+| GET /api/missions/history | history/route.ts:66 | `user.clientId !== clientId` | 403 TENANT_MISMATCH |
+
 ---
 
 ## Error Handling
@@ -440,7 +793,7 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
 
 ---
 
-**Document Version:** 2.0
-**Steps Completed:** 2 / 4 (5.1 Repositories, 5.2 Services)
+**Document Version:** 3.0
+**Steps Completed:** 3 / 4 (5.1 Repositories, 5.2 Services, 5.3 API Routes)
 **Last Updated:** 2025-12-03
-**Completeness:** Repositories ✅, Services ✅, Routes 📋, Tests 📋
+**Completeness:** Repositories ✅, Services ✅, Routes ✅, Tests 📋
