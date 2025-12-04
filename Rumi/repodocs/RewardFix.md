@@ -283,12 +283,12 @@ interface ClaimRewardRequest {
 // Step 2: Create sub-state record based on reward type
 if (params.rewardType === 'commission_boost') {
   // NEW: Validate required field before database insert
-  if (!params.scheduledActivationDate) {
-    console.error('[RewardRepository] scheduled_activation_date is required for commission_boost');
+  if (!params.scheduledActivationDate?.trim()) {
+    console.error('[RewardRepository] scheduled_activation_date is required for commission_boost but was not provided or is empty');
     throw new Error('scheduled_activation_date is required for commission_boost rewards');
   }
 
-  // Now TypeScript knows params.scheduledActivationDate is defined
+  // Now TypeScript knows params.scheduledActivationDate is defined and non-empty
   const { data: boostState, error: boostError } = await supabase
     .from('commission_boost_redemptions')
     .insert({
@@ -309,7 +309,8 @@ if (params.rewardType === 'commission_boost') {
 
 **Fix Explanation:**
 - Add runtime validation before database insert
-- Throw descriptive error if `scheduledActivationDate` is missing
+- Throw descriptive error if `scheduledActivationDate` is missing, null, or empty string
+- Uses `.trim()` to catch whitespace-only strings (edge case prevention)
 - TypeScript control flow analysis understands value is non-undefined after the check
 - Aligns repository validation with API contract requirements (API_CONTRACTS.md:4969)
 - Prevents database constraint violation error with unclear message
@@ -528,9 +529,9 @@ return {
 ```typescript
 // Step 2: Create sub-state record based on reward type
 if (params.rewardType === 'commission_boost') {
-  // VALIDATION: Ensure scheduled_activation_date is provided
-  if (!params.scheduledActivationDate) {
-    console.error('[RewardRepository] scheduled_activation_date is required for commission_boost');
+  // VALIDATION: Ensure scheduled_activation_date is provided and not empty
+  if (!params.scheduledActivationDate?.trim()) {
+    console.error('[RewardRepository] scheduled_activation_date is required for commission_boost but was not provided or is empty');
     throw new Error('scheduled_activation_date is required for commission_boost rewards');
   }
 

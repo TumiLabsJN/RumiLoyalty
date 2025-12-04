@@ -193,12 +193,12 @@ If either check fails, FIX before proceeding with task.
 
 ## 🎯 CURRENT TASK
 
-**Task:** Step 6.2 - Reward Services (Task 6.2.1 DONE)
-**Next Step:** Continue with Task 6.2.2 (listAvailableRewards)
+**Task:** Step 6.2 - Reward Services (Tasks 6.2.1-6.2.2 DONE)
+**Next Step:** Continue with Task 6.2.3 (claimReward)
 
 **What's Left:**
 - [x] Task 6.2.1: Create rewardService.ts file
-- [ ] Task 6.2.2: listAvailableRewards - status computation, formatting, sorting
+- [x] Task 6.2.2: listAvailableRewards - status computation, formatting, sorting (677 lines)
 - [ ] Task 6.2.3: claimReward - 11 pre-claim validation rules, type routing
 - [ ] Task 6.2.4-6.2.7a: Claim functions by type + Google Calendar
 - [ ] Task 6.2.8: getRewardHistory

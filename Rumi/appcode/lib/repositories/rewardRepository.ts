@@ -301,6 +301,84 @@ export const rewardRepository = {
   },
 
   /**
+   * Get usage counts for multiple rewards in a single query.
+   * Per API_CONTRACTS.md lines 4565-4582 (Usage Count Calculation)
+   *
+   * Batch version of getUsageCount() to avoid N+1 queries in listAvailableRewards.
+   *
+   * Counts WHERE:
+   * - mission_progress_id IS NULL (VIP tier rewards only)
+   * - tier_at_claim = currentTier (current tier only)
+   * - status IN ('claimed', 'fulfilled', 'concluded')
+   * - deleted_at IS NULL
+   * - created_at >= tier_achieved_at (resets on tier change)
+   *
+   * SECURITY: Validates client_id match (multitenancy)
+   *
+   * @param userId - User ID
+   * @param rewardIds - Array of reward IDs to count
+   * @param clientId - Tenant ID for multi-tenant isolation
+   * @param currentTier - User's current tier (e.g., 'tier_3')
+   * @param tierAchievedAt - When user achieved current tier (for reset logic)
+   * @returns Map of rewardId → usedCount
+   */
+  async getUsageCountBatch(
+    userId: string,
+    rewardIds: string[],
+    clientId: string,
+    currentTier: string,
+    tierAchievedAt: string | null
+  ): Promise<Map<string, number>> {
+    // Return empty map if no reward IDs provided
+    if (!rewardIds || rewardIds.length === 0) {
+      return new Map();
+    }
+
+    const supabase = await createClient();
+
+    // Build query for all redemptions matching the criteria
+    let query = supabase
+      .from('redemptions')
+      .select('reward_id')
+      .eq('user_id', userId)
+      .eq('client_id', clientId) // Multi-tenant filter
+      .in('reward_id', rewardIds)
+      .is('mission_progress_id', null) // VIP tier rewards only
+      .eq('tier_at_claim', currentTier) // Current tier only
+      .in('status', ['claimed', 'fulfilled', 'concluded'])
+      .is('deleted_at', null);
+
+    // Only filter by tier_achieved_at if it exists (resets on tier change)
+    if (tierAchievedAt) {
+      query = query.gte('created_at', tierAchievedAt);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[RewardRepository] Error fetching usage counts:', error);
+      // Return zeros rather than throwing - service can handle gracefully
+      const emptyMap = new Map<string, number>();
+      rewardIds.forEach((id) => emptyMap.set(id, 0));
+      return emptyMap;
+    }
+
+    // Initialize all reward IDs with 0
+    const countMap = new Map<string, number>();
+    rewardIds.forEach((id) => countMap.set(id, 0));
+
+    // Count occurrences of each reward_id
+    data?.forEach((row) => {
+      if (row.reward_id) {
+        const currentCount = countMap.get(row.reward_id) || 0;
+        countMap.set(row.reward_id, currentCount + 1);
+      }
+    });
+
+    return countMap;
+  },
+
+  /**
    * Get reward by ID with validation
    *
    * SECURITY: Validates client_id match (multitenancy)
