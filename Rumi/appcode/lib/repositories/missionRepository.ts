@@ -13,6 +13,7 @@
 
 import { createClient } from '@/lib/supabase/server-client';
 import type { Database } from '@/lib/types/database';
+import type { GetAvailableMissionsRow, GetMissionHistoryRow } from '@/lib/types/rpc';
 
 type MissionRow = Database['public']['Tables']['missions']['Row'];
 type MissionProgressRow = Database['public']['Tables']['mission_progress']['Row'];
@@ -488,261 +489,120 @@ export const missionRepository = {
   ): Promise<AvailableMissionData[]> {
     const supabase = await createClient();
 
-    // Query 1: Get all missions (user's tier + locked previews)
-    // Per API_CONTRACTS.md lines 3304-3306
-    const { data: missions, error: missionsError } = await supabase
-      .from('missions')
-      .select(`
-        id,
-        mission_type,
-        display_name,
-        title,
-        description,
-        target_value,
-        target_unit,
-        raffle_end_date,
-        activated,
-        tier_eligibility,
-        preview_from_tier,
-        enabled,
-        display_order,
-        reward_id,
-        rewards!inner (
-          id,
-          type,
-          name,
-          description,
-          value_data,
-          redemption_type,
-          reward_source
-        ),
-        tiers!inner (
-          id,
-          tier_id,
-          tier_name,
-          tier_color,
-          tier_order
-        ),
-        mission_progress (
-          id,
-          user_id,
-          current_value,
-          status,
-          completed_at,
-          checkpoint_start,
-          checkpoint_end
-        )
-      `)
-      .eq('client_id', clientId)
-      .eq('enabled', true)
-      .or(`tier_eligibility.eq.${currentTierId},preview_from_tier.eq.${currentTierId}`);
+    // Single RPC call replaces 5 separate queries
+    // Per SingleQueryBS.md Section 4.2 - get_available_missions function
+    const { data, error } = await supabase.rpc('get_available_missions', {
+      p_user_id: userId,
+      p_client_id: clientId,
+      p_current_tier: currentTierId,
+    });
 
-    if (missionsError) {
-      console.error('[MissionRepository] Error fetching missions:', missionsError);
+    if (error) {
+      console.error('[MissionRepository] Error fetching missions:', error);
       return [];
     }
 
-    if (!missions || missions.length === 0) {
+    if (!data || data.length === 0) {
       return [];
     }
 
-    // Query 2: Get user's redemptions for these missions
-    const missionIds = missions.map((m) => m.id);
-    const { data: redemptions } = await supabase
-      .from('redemptions')
-      .select(`
-        id,
-        mission_progress_id,
-        reward_id,
-        status,
-        claimed_at,
-        fulfilled_at,
-        concluded_at,
-        rejected_at,
-        scheduled_activation_date,
-        scheduled_activation_time,
-        activation_date,
-        expiration_date
-      `)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .is('deleted_at', null);
-
-    // Query 3: Get commission boost sub-states
-    const redemptionIds = (redemptions ?? []).map((r) => r.id);
-    const { data: commissionBoosts } = await supabase
-      .from('commission_boost_redemptions')
-      .select(`
-        redemption_id,
-        boost_status,
-        scheduled_activation_date,
-        activated_at,
-        expires_at,
-        duration_days
-      `)
-      .eq('client_id', clientId)
-      .in('redemption_id', redemptionIds.length > 0 ? redemptionIds : ['']);
-
-    // Query 4: Get physical gift sub-states
-    const { data: physicalGifts } = await supabase
-      .from('physical_gift_redemptions')
-      .select(`
-        redemption_id,
-        shipped_at,
-        shipping_city,
-        requires_size
-      `)
-      .eq('client_id', clientId)
-      .in('redemption_id', redemptionIds.length > 0 ? redemptionIds : ['']);
-
-    // Query 5: Get raffle participations
-    const { data: raffleParticipations } = await supabase
-      .from('raffle_participations')
-      .select(`
-        mission_id,
-        is_winner,
-        participated_at,
-        winner_selected_at
-      `)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .in('mission_id', missionIds);
-
-    // Build lookup maps for O(1) access
-    const redemptionsByProgressId = new Map(
-      (redemptions ?? [])
-        .filter((r) => r.mission_progress_id)
-        .map((r) => [r.mission_progress_id, r])
-    );
-    const boostByRedemptionId = new Map(
-      (commissionBoosts ?? []).map((b) => [b.redemption_id, b])
-    );
-    const physicalGiftByRedemptionId = new Map(
-      (physicalGifts ?? []).map((p) => [p.redemption_id, p])
-    );
-    const raffleByMissionId = new Map(
-      (raffleParticipations ?? []).map((r) => [r.mission_id, r])
-    );
-
-    // Transform to AvailableMissionData
-    const results: AvailableMissionData[] = [];
-
-    for (const mission of missions) {
-      // Get user's progress for this mission
-      const userProgress = (mission.mission_progress as MissionProgressRow[])
-        ?.find((p) => p.user_id === userId);
-
-      // Get redemption linked to this progress
-      const redemption = userProgress
-        ? redemptionsByProgressId.get(userProgress.id)
-        : null;
-
-      // Get sub-state data
-      const commissionBoost = redemption
-        ? boostByRedemptionId.get(redemption.id)
-        : null;
-      const physicalGift = redemption
-        ? physicalGiftByRedemptionId.get(redemption.id)
-        : null;
-      const raffleParticipation = raffleByMissionId.get(mission.id);
-
-      // Type assertions for joined data
-      const reward = mission.rewards as unknown as RewardRow;
-      const tier = mission.tiers as unknown as TierRow;
-
+    // Transform flat RPC rows to AvailableMissionData structure
+    return (data as GetAvailableMissionsRow[]).map((row) => {
       // Determine if this is a locked mission (from higher tier)
-      const isLocked = mission.tier_eligibility !== currentTierId &&
-        mission.preview_from_tier === currentTierId;
+      const isLocked =
+        row.mission_tier_eligibility !== currentTierId &&
+        row.mission_tier_eligibility !== 'all' &&
+        row.mission_preview_from_tier === currentTierId;
 
-      results.push({
+      return {
         mission: {
-          id: mission.id,
-          type: mission.mission_type,
-          displayName: mission.display_name,
-          title: mission.title,
-          description: mission.description,
-          targetValue: mission.target_value,
-          targetUnit: mission.target_unit,
-          raffleEndDate: mission.raffle_end_date,
-          activated: mission.activated ?? false,
-          tierEligibility: mission.tier_eligibility,
-          previewFromTier: mission.preview_from_tier,
-          enabled: mission.enabled ?? true,
+          id: row.mission_id,
+          type: row.mission_type,
+          displayName: row.mission_display_name,
+          title: row.mission_title,
+          description: row.mission_description,
+          targetValue: row.mission_target_value,
+          targetUnit: row.mission_target_unit,
+          raffleEndDate: row.mission_raffle_end_date,
+          activated: row.mission_activated ?? false,
+          tierEligibility: row.mission_tier_eligibility,
+          previewFromTier: row.mission_preview_from_tier,
+          enabled: row.mission_enabled ?? true,
         },
         reward: {
-          id: reward.id,
-          type: reward.type,
-          name: reward.name,
-          description: reward.description,
-          valueData: reward.value_data as Record<string, unknown> | null,
-          redemptionType: reward.redemption_type ?? 'instant',
-          rewardSource: reward.reward_source ?? 'mission',
+          id: row.reward_id,
+          type: row.reward_type,
+          name: row.reward_name,
+          description: row.reward_description,
+          valueData: row.reward_value_data as Record<string, unknown> | null,
+          redemptionType: row.reward_redemption_type ?? 'instant',
+          rewardSource: row.reward_source ?? 'mission',
         },
         tier: {
-          id: tier.id,
-          name: tier.tier_name,
-          color: tier.tier_color,
-          order: tier.tier_order,
+          id: row.tier_id,
+          name: row.tier_name,
+          color: row.tier_color,
+          order: row.tier_order,
         },
-        progress: userProgress
+        progress: row.progress_id
           ? {
-              id: userProgress.id,
-              currentValue: userProgress.current_value ?? 0,
-              status: userProgress.status ?? 'active',
-              completedAt: userProgress.completed_at,
-              checkpointStart: userProgress.checkpoint_start,
-              checkpointEnd: userProgress.checkpoint_end,
+              id: row.progress_id,
+              currentValue: row.progress_current_value ?? 0,
+              status: row.progress_status ?? 'active',
+              completedAt: row.progress_completed_at,
+              checkpointStart: row.progress_checkpoint_start,
+              checkpointEnd: row.progress_checkpoint_end,
             }
           : null,
-        redemption: redemption
+        redemption: row.redemption_id
           ? {
-              id: redemption.id,
-              status: redemption.status ?? 'claimable',
-              claimedAt: redemption.claimed_at,
-              fulfilledAt: redemption.fulfilled_at,
-              concludedAt: redemption.concluded_at,
-              rejectedAt: redemption.rejected_at,
-              scheduledActivationDate: redemption.scheduled_activation_date,
-              scheduledActivationTime: redemption.scheduled_activation_time,
-              activationDate: redemption.activation_date,
-              expirationDate: redemption.expiration_date,
+              id: row.redemption_id,
+              status: row.redemption_status ?? 'claimable',
+              claimedAt: row.redemption_claimed_at,
+              fulfilledAt: row.redemption_fulfilled_at,
+              concludedAt: row.redemption_concluded_at,
+              rejectedAt: row.redemption_rejected_at,
+              scheduledActivationDate: row.redemption_scheduled_activation_date,
+              scheduledActivationTime: row.redemption_scheduled_activation_time,
+              activationDate: row.redemption_activation_date,
+              expirationDate: row.redemption_expiration_date,
             }
           : null,
-        commissionBoost: commissionBoost
+        commissionBoost: row.boost_status
           ? {
-              boostStatus: commissionBoost.boost_status,
-              scheduledActivationDate: commissionBoost.scheduled_activation_date,
-              activatedAt: commissionBoost.activated_at,
-              expiresAt: commissionBoost.expires_at,
-              durationDays: commissionBoost.duration_days,
+              boostStatus: row.boost_status,
+              scheduledActivationDate: row.boost_scheduled_activation_date ?? '',
+              activatedAt: row.boost_activated_at,
+              expiresAt: row.boost_expires_at,
+              durationDays: row.boost_duration_days ?? 0,
             }
           : null,
-        physicalGift: physicalGift
+        physicalGift:
+          row.physical_gift_requires_size !== null || row.physical_gift_shipping_city
+            ? {
+                shippedAt: row.physical_gift_shipped_at,
+                shippingCity: row.physical_gift_shipping_city,
+                requiresSize: row.physical_gift_requires_size,
+              }
+            : null,
+        raffleParticipation: row.raffle_participated_at
           ? {
-              shippedAt: physicalGift.shipped_at,
-              shippingCity: physicalGift.shipping_city,
-              requiresSize: physicalGift.requires_size,
-            }
-          : null,
-        raffleParticipation: raffleParticipation
-          ? {
-              isWinner: raffleParticipation.is_winner,
-              participatedAt: raffleParticipation.participated_at,
-              winnerSelectedAt: raffleParticipation.winner_selected_at,
+              isWinner: row.raffle_is_winner,
+              participatedAt: row.raffle_participated_at,
+              winnerSelectedAt: row.raffle_winner_selected_at,
             }
           : null,
         isLocked,
-      });
-    }
-
-    return results;
+      };
+    });
   },
 
   /**
    * Get mission history (concluded + rejected missions).
    * Per API_CONTRACTS.md lines 3827-4047
    *
-   * SECURITY: Filters by client_id (multitenancy)
+   * Uses single RPC call per MissionQuery2.md
+   * SECURITY: Filters by client_id via p_client_id parameter
    */
   async getHistory(
     userId: string,
@@ -750,118 +610,55 @@ export const missionRepository = {
   ): Promise<MissionHistoryData[]> {
     const supabase = await createClient();
 
-    // Query per API_CONTRACTS.md lines 3985-4016
-    const { data: history, error } = await supabase
-      .from('redemptions')
-      .select(`
-        id,
-        status,
-        claimed_at,
-        fulfilled_at,
-        concluded_at,
-        rejected_at,
-        mission_progress_id,
-        mission_progress!inner (
-          id,
-          completed_at,
-          status,
-          missions!inner (
-            id,
-            mission_type,
-            display_name,
-            rewards!inner (
-              id,
-              type,
-              name,
-              description,
-              value_data,
-              reward_source
-            )
-          )
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .in('status', ['concluded', 'rejected'])
-      .is('deleted_at', null)
-      .not('mission_progress_id', 'is', null)
-      .order('concluded_at', { ascending: false, nullsFirst: false });
+    // Single RPC call replaces 2 separate queries
+    // Per MissionQuery2.md - get_mission_history function
+    const { data, error } = await supabase.rpc('get_mission_history', {
+      p_user_id: userId,
+      p_client_id: clientId,
+    });
 
     if (error) {
       console.error('[MissionRepository] Error fetching history:', error);
       return [];
     }
 
-    if (!history || history.length === 0) {
+    if (!data || data.length === 0) {
       return [];
     }
 
-    // Get raffle participations for rejected raffles
-    const missionProgressIds = history
-      .map((h) => h.mission_progress_id)
-      .filter((id): id is string => id !== null);
-    const { data: raffleParticipations } = await supabase
-      .from('raffle_participations')
-      .select(`
-        mission_progress_id,
-        is_winner,
-        participated_at,
-        winner_selected_at
-      `)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .in('mission_progress_id', missionProgressIds.length > 0 ? missionProgressIds : ['']);
-
-    const raffleByProgressId = new Map(
-      (raffleParticipations ?? []).map((r) => [r.mission_progress_id, r])
-    );
-
-    // Transform to MissionHistoryData
-    return history.map((redemption) => {
-      const progress = redemption.mission_progress as unknown as {
-        id: string;
-        completed_at: string | null;
-        status: string;
-        missions: MissionRow & { rewards: RewardRow };
-      };
-      const mission = progress.missions;
-      const reward = mission.rewards;
-      const progressId = redemption.mission_progress_id;
-      const raffle = progressId ? raffleByProgressId.get(progressId) : null;
-
-      return {
-        mission: {
-          id: mission.id,
-          type: mission.mission_type,
-          displayName: mission.display_name,
-        },
-        reward: {
-          id: reward.id,
-          type: reward.type,
-          name: reward.name,
-          description: reward.description,
-          valueData: reward.value_data as Record<string, unknown> | null,
-          rewardSource: reward.reward_source ?? 'mission',
-        },
-        progress: {
-          completedAt: progress.completed_at,
-        },
-        redemption: {
-          status: redemption.status ?? 'concluded',
-          claimedAt: redemption.claimed_at,
-          fulfilledAt: redemption.fulfilled_at,
-          concludedAt: redemption.concluded_at,
-          rejectedAt: redemption.rejected_at,
-        },
-        raffleParticipation: raffle
-          ? {
-              isWinner: raffle.is_winner,
-              participatedAt: raffle.participated_at,
-              winnerSelectedAt: raffle.winner_selected_at,
-            }
-          : null,
-      };
-    });
+    // Transform flat RPC rows to MissionHistoryData structure
+    return (data as GetMissionHistoryRow[]).map((row) => ({
+      mission: {
+        id: row.mission_id,
+        type: row.mission_type,
+        displayName: row.mission_display_name,
+      },
+      reward: {
+        id: row.reward_id,
+        type: row.reward_type,
+        name: row.reward_name,
+        description: row.reward_description,
+        valueData: row.reward_value_data as Record<string, unknown> | null,
+        rewardSource: row.reward_source ?? 'mission',
+      },
+      progress: {
+        completedAt: row.progress_completed_at,
+      },
+      redemption: {
+        status: row.redemption_status,
+        claimedAt: row.redemption_claimed_at,
+        fulfilledAt: row.redemption_fulfilled_at,
+        concludedAt: row.redemption_concluded_at,
+        rejectedAt: row.redemption_rejected_at,
+      },
+      raffleParticipation: row.raffle_participated_at
+        ? {
+            isWinner: row.raffle_is_winner,
+            participatedAt: row.raffle_participated_at,
+            winnerSelectedAt: row.raffle_winner_selected_at,
+          }
+        : null,
+    }));
   },
 
   /**

@@ -1318,27 +1318,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      auth_create_otp:
-        | {
-            Args: {
-              p_access_token_encrypted?: string
-              p_code_hash: string
-              p_expires_at: string
-              p_refresh_token_encrypted?: string
-              p_session_id: string
-              p_user_id: string
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_code_hash: string
-              p_expires_at: string
-              p_session_id: string
-              p_user_id: string
-            }
-            Returns: string
-          }
+      auth_create_otp: {
+        Args: {
+          p_access_token_encrypted?: string
+          p_code_hash: string
+          p_expires_at: string
+          p_refresh_token_encrypted?: string
+          p_session_id: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       auth_create_reset_token: {
         Args: {
           p_expires_at: string
@@ -1476,7 +1466,135 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      get_available_missions: {
+        Args: { p_client_id: string; p_current_tier: string; p_user_id: string }
+        Returns: {
+          boost_activated_at: string
+          boost_duration_days: number
+          boost_expires_at: string
+          boost_scheduled_activation_date: string
+          boost_status: string
+          mission_activated: boolean
+          mission_description: string
+          mission_display_name: string
+          mission_display_order: number
+          mission_enabled: boolean
+          mission_id: string
+          mission_preview_from_tier: string
+          mission_raffle_end_date: string
+          mission_reward_id: string
+          mission_target_unit: string
+          mission_target_value: number
+          mission_tier_eligibility: string
+          mission_title: string
+          mission_type: string
+          physical_gift_requires_size: boolean
+          physical_gift_shipped_at: string
+          physical_gift_shipping_city: string
+          progress_checkpoint_end: string
+          progress_checkpoint_start: string
+          progress_completed_at: string
+          progress_current_value: number
+          progress_id: string
+          progress_status: string
+          raffle_is_winner: boolean
+          raffle_participated_at: string
+          raffle_winner_selected_at: string
+          redemption_activation_date: string
+          redemption_claimed_at: string
+          redemption_concluded_at: string
+          redemption_expiration_date: string
+          redemption_fulfilled_at: string
+          redemption_id: string
+          redemption_rejected_at: string
+          redemption_scheduled_activation_date: string
+          redemption_scheduled_activation_time: string
+          redemption_status: string
+          reward_description: string
+          reward_id: string
+          reward_name: string
+          reward_redemption_type: string
+          reward_source: string
+          reward_type: string
+          reward_value_data: Json
+          tier_color: string
+          tier_id: string
+          tier_name: string
+          tier_order: number
+        }[]
+      }
+      get_available_rewards: {
+        Args: {
+          p_client_id: string
+          p_current_tier: string
+          p_current_tier_order: number
+          p_user_id: string
+        }
+        Returns: {
+          boost_activated_at: string
+          boost_duration_days: number
+          boost_expires_at: string
+          boost_rate: number
+          boost_sales_at_expiration: number
+          boost_scheduled_activation_date: string
+          boost_status: string
+          physical_gift_requires_size: boolean
+          physical_gift_shipped_at: string
+          physical_gift_shipping_city: string
+          physical_gift_size_value: string
+          redemption_activation_date: string
+          redemption_claimed_at: string
+          redemption_expiration_date: string
+          redemption_fulfilled_at: string
+          redemption_id: string
+          redemption_scheduled_activation_date: string
+          redemption_scheduled_activation_time: string
+          redemption_status: string
+          reward_description: string
+          reward_display_order: number
+          reward_enabled: boolean
+          reward_expires_days: number
+          reward_id: string
+          reward_name: string
+          reward_preview_from_tier: string
+          reward_redemption_frequency: string
+          reward_redemption_quantity: number
+          reward_redemption_type: string
+          reward_source: string
+          reward_tier_eligibility: string
+          reward_type: string
+          reward_value_data: Json
+          tier_color: string
+          tier_id: string
+          tier_name: string
+          tier_order: number
+        }[]
+      }
       get_current_user_client_id: { Args: never; Returns: string }
+      get_mission_history: {
+        Args: { p_client_id: string; p_user_id: string }
+        Returns: {
+          mission_display_name: string
+          mission_id: string
+          mission_type: string
+          progress_completed_at: string
+          raffle_is_winner: boolean
+          raffle_participated_at: string
+          raffle_winner_selected_at: string
+          redemption_claimed_at: string
+          redemption_concluded_at: string
+          redemption_fulfilled_at: string
+          redemption_id: string
+          redemption_rejected_at: string
+          redemption_status: string
+          reward_description: string
+          reward_id: string
+          reward_name: string
+          reward_source: string
+          reward_type: string
+          reward_value_data: Json
+        }[]
+      }
       is_admin_of_client: { Args: { p_client_id: string }; Returns: boolean }
     }
     Enums: {

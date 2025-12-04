@@ -19,7 +19,7 @@
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `appcode/lib/services/authService.ts` | 789 | Business logic for all auth workflows |
+| `appcode/lib/services/authService.ts` | 879 | Business logic for all auth workflows |
 | `appcode/lib/repositories/userRepository.ts` | 358 | User CRUD with tenant isolation (RPC) |
 | `appcode/lib/repositories/otpRepository.ts` | 271 | OTP verification management (RPC, USING(false)) |
 | `appcode/lib/repositories/clientRepository.ts` | 134 | Client/tenant queries (RPC) |
@@ -36,10 +36,10 @@
 | `appcode/lib/utils/cronAuth.ts` | 172 | withCronAuth wrapper |
 
 **Database Tables Used:**
-- `users` (SchemaFinalv2.md:131-170)
-- `otps` (SchemaFinalv2.md:171-192)
-- `password_reset_tokens` (SchemaFinalv2.md:193-220)
-- `clients` (SchemaFinalv2.md:106-130)
+- `users` (SchemaFinalv2.md:123-157)
+- `otp_codes` (SchemaFinalv2.md:158-188)
+- `password_reset_tokens` (SchemaFinalv2.md:189-218)
+- `clients` (SchemaFinalv2.md:106-122)
 
 **Quick Navigation:**
 - [Service Functions](#service-functions) - All 7 auth service functions
@@ -55,7 +55,7 @@
 
 ### checkHandle()
 
-**Location:** `appcode/lib/services/authService.ts:226-261`
+**Location:** `appcode/lib/services/authService.ts:293-328`
 
 **Signature:**
 ```typescript
@@ -64,7 +64,7 @@ async checkHandle(clientId: string, handle: string): Promise<CheckHandleResult>
 
 **Purpose:** Determine routing based on TikTok handle existence and email status
 
-**Implementation** (authService.ts:226-261):
+**Implementation** (authService.ts:293-328):
 ```typescript
 async checkHandle(clientId: string, handle: string): Promise<CheckHandleResult> {
   // Normalize handle (ensure @ prefix for response, remove for query)
@@ -129,7 +129,7 @@ interface CheckHandleResult {
 
 ### initiateSignup()
 
-**Location:** `appcode/lib/services/authService.ts:281-370`
+**Location:** `appcode/lib/services/authService.ts:348-457`
 
 **Signature:**
 ```typescript
@@ -143,7 +143,7 @@ async initiateSignup(
 
 **Purpose:** Create new user account and send OTP verification email
 
-**Implementation** (authService.ts:281-370):
+**Implementation** (authService.ts:348-457):
 ```typescript
 async initiateSignup(
   clientId: string,
@@ -282,7 +282,7 @@ async initiateSignup(
 
 ### verifyOTP()
 
-**Location:** `appcode/lib/services/authService.ts:392-469`
+**Location:** `appcode/lib/services/authService.ts:470-578`
 
 **Signature:**
 ```typescript
@@ -291,7 +291,7 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult>
 
 **Purpose:** Verify 6-digit OTP code and mark email as verified
 
-**Implementation** (authService.ts:392-469):
+**Implementation** (authService.ts:470-578):
 ```typescript
 async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
   // 1. Validate code format (6 digits)
@@ -428,7 +428,7 @@ async verifyOTP(sessionId: string, code: string): Promise<VerifyOTPResult> {
 
 ### resendOTP()
 
-**Location:** `appcode/lib/services/authService.ts:489-550`
+**Location:** `appcode/lib/services/authService.ts:579-660`
 
 **Signature:**
 ```typescript
@@ -437,7 +437,7 @@ async resendOTP(sessionId: string): Promise<ResendOTPResult>
 
 **Purpose:** Generate and send new OTP code for existing session
 
-**Implementation** (authService.ts:489-550):
+**Implementation** (authService.ts:579-660):
 ```typescript
 async resendOTP(sessionId: string): Promise<ResendOTPResult> {
   // 1-2. Query existing OTP record by session_id
@@ -541,7 +541,7 @@ async resendOTP(sessionId: string): Promise<ResendOTPResult> {
 
 ### login()
 
-**Location:** `appcode/lib/services/authService.ts:571-619`
+**Location:** `appcode/lib/services/authService.ts:661-731`
 
 **Signature:**
 ```typescript
@@ -550,7 +550,7 @@ async login(clientId: string, handle: string, password: string): Promise<LoginRe
 
 **Purpose:** Authenticate existing user with handle and password
 
-**Implementation** (authService.ts:571-619):
+**Implementation** (authService.ts:661-731):
 ```typescript
 async login(clientId: string, handle: string, password: string): Promise<LoginResult> {
   // Normalize handle (remove @ prefix for query)
@@ -640,7 +640,7 @@ async login(clientId: string, handle: string, password: string): Promise<LoginRe
 
 ### forgotPassword()
 
-**Location:** `appcode/lib/services/authService.ts:642-711`
+**Location:** `appcode/lib/services/authService.ts:732-817`
 
 **Signature:**
 ```typescript
@@ -649,7 +649,7 @@ async forgotPassword(clientId: string, identifier: string): Promise<ForgotPasswo
 
 **Purpose:** Initiate password reset flow, send reset email
 
-**Implementation** (authService.ts:642-711):
+**Implementation** (authService.ts:732-817):
 ```typescript
 async forgotPassword(clientId: string, identifier: string): Promise<ForgotPasswordResult> {
   // Normalize identifier
@@ -770,7 +770,7 @@ async forgotPassword(clientId: string, identifier: string): Promise<ForgotPasswo
 
 ### resetPassword()
 
-**Location:** `appcode/lib/services/authService.ts:728-788`
+**Location:** `appcode/lib/services/authService.ts:818-878`
 
 **Signature:**
 ```typescript
@@ -779,7 +779,7 @@ async resetPassword(token: string, newPassword: string): Promise<ResetPasswordRe
 
 **Purpose:** Reset password using token from email link
 
-**Implementation** (authService.ts:728-788):
+**Implementation** (authService.ts:818-878):
 ```typescript
 async resetPassword(token: string, newPassword: string): Promise<ResetPasswordResult> {
   // 1. Find valid token by comparing with bcrypt
@@ -2027,7 +2027,7 @@ async deleteExpired(): Promise<number> {
 ### Tables Used
 
 **Primary Table: `users`**
-- **Schema Reference:** SchemaFinalv2.md:131-170
+- **Schema Reference:** SchemaFinalv2.md:123-157
 - **Purpose:** Store user accounts with authentication details
 - **Key Fields:**
   - `id` (UUID, PK) - Matches Supabase Auth user ID
@@ -2043,8 +2043,8 @@ async deleteExpired(): Promise<number> {
   - `UNIQUE(client_id, email)` - Email unique per client
   - `CHECK(tiktok_handle NOT LIKE '@%')` - Handle stored without @ prefix
 
-**Related Table: `otps`**
-- **Schema Reference:** SchemaFinalv2.md:171-192
+**Related Table: `otp_codes`**
+- **Schema Reference:** SchemaFinalv2.md:158-188
 - **Purpose:** Store OTP verification codes
 - **Key Fields:**
   - `id` (UUID, PK)
@@ -2060,7 +2060,7 @@ async deleteExpired(): Promise<number> {
   - `idx_otps_user_id` - Fast lookup by user
 
 **Related Table: `password_reset_tokens`**
-- **Schema Reference:** SchemaFinalv2.md:193-220
+- **Schema Reference:** SchemaFinalv2.md:189-218
 - **Purpose:** Store password reset tokens
 - **Key Fields:**
   - `id` (UUID, PK)
@@ -2073,7 +2073,7 @@ async deleteExpired(): Promise<number> {
   - `idx_password_reset_user_id` - Fast lookup by user
 
 **Related Table: `clients`**
-- **Schema Reference:** SchemaFinalv2.md:106-130
+- **Schema Reference:** SchemaFinalv2.md:106-122
 - **Purpose:** Multi-tenant client configuration
 - **Used For:** Email branding (client.name in emails)
 
@@ -2226,14 +2226,14 @@ password_reset_tokens
 
 ## Configuration Constants
 
-**OTP Configuration** (authService.ts:27-30):
+**OTP Configuration** (authService.ts:33-36):
 ```typescript
 const OTP_LENGTH = 6;                // 6-digit codes
 const OTP_EXPIRY_MINUTES = 5;        // Per API_CONTRACTS.md
 const BCRYPT_ROUNDS = 10;             // Industry standard
 ```
 
-**Password Reset Configuration** (authService.ts:32-34):
+**Password Reset Configuration** (authService.ts:38-40):
 ```typescript
 const RESET_TOKEN_EXPIRY_MINUTES = 15;  // Token lifetime
 const RESET_TOKEN_RATE_LIMIT = 3;        // Max requests per hour
@@ -2252,18 +2252,18 @@ const minimumWaitTime = 30000; // 30 seconds between resends
 
 | Function | Lines | Purpose |
 |----------|-------|---------|
-| `generateOTP()` | 39-43 | Generate 6-digit random code |
-| `generateSessionId()` | 48-50 | Generate 32-byte hex session ID |
-| `generateResetToken()` | 56-58 | Generate 32-byte base64url token (44 chars) |
-| `hashOTP()` | 63-65 | bcrypt hash OTP with rounds=10 |
-| `verifyOTPHash()` | 70-72 | bcrypt compare OTP against hash |
-| `sendOTPEmail()` | 78-93 | Send OTP email (placeholder, logs in dev) |
-| `sendPasswordResetEmail()` | 99-129 | Send reset email (placeholder, logs in dev) |
-| `maskEmail()` | 134-140 | Mask email for display (e.g., "j***@example.com") |
+| `generateOTP()` | 44-56 | Generate 6-digit random code |
+| `generateSessionId()` | 59-65 | Generate 32-byte hex session ID |
+| `generateResetToken()` | 67-72 | Generate 32-byte base64url token (44 chars) |
+| `hashOTP()` | 74-79 | bcrypt hash OTP with rounds=10 |
+| `verifyOTPHash()` | 81-90 | bcrypt compare OTP against hash |
+| `sendOTPEmail()` | 92-137 | Send OTP email (placeholder, logs in dev) |
+| `sendPasswordResetEmail()` | 139-197 | Send reset email (placeholder, logs in dev) |
+| `maskEmail()` | 199-213 | Mask email for display (e.g., "j***@example.com") |
 
 **TODO items:**
-- Implement actual Resend email integration (authService.ts:86-92, 116-128)
-- Configure RESEND_API_KEY and RESEND_DOMAIN environment variables
+- Configure production Resend domain (currently using resend.dev test domain at authService.ts:101, 157)
+- Configure RESEND_API_KEY environment variable for production
 
 ---
 
@@ -2645,9 +2645,9 @@ export const POST = withCronAuth(async (request) => {
 
 - **EXECUTION_PLAN.md:** [Phase 3 Tasks](../EXECUTION_PLAN.md#phase-3-authentication-system)
 - **API_CONTRACTS.md:** [Authentication Endpoints](../API_CONTRACTS.md#authentication)
-- **SchemaFinalv2.md:** [Users Table](../SchemaFinalv2.md) (lines 131-170)
-- **SchemaFinalv2.md:** [OTPs Table](../SchemaFinalv2.md) (lines 171-192)
-- **SchemaFinalv2.md:** [Password Reset Tokens Table](../SchemaFinalv2.md) (lines 193-220)
+- **SchemaFinalv2.md:** [Users Table](../SchemaFinalv2.md) (lines 123-157)
+- **SchemaFinalv2.md:** [OTP Codes Table](../SchemaFinalv2.md) (lines 158-188)
+- **SchemaFinalv2.md:** [Password Reset Tokens Table](../SchemaFinalv2.md) (lines 189-218)
 - **ARCHITECTURE.md Section 12:** SECURITY DEFINER Pattern for Auth (RPC Functions)
 - **Loyalty.md:** [Flow 3 (Signup)](../Loyalty.md), [Flow 4 (OTP)](../Loyalty.md), [Flow 5 (Login)](../Loyalty.md)
 - **ARCHITECTURE.md:** [Service Layer Pattern](../ARCHITECTURE.md#section-5)

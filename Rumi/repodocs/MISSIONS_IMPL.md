@@ -3,7 +3,7 @@
 **Purpose:** Enable creators to view missions, track progress, claim rewards, and participate in raffles
 **Phase:** Phase 5 - Missions System
 **Target Audience:** LLM agents debugging or modifying this feature
-**Last Updated:** 2025-12-03
+**Last Updated:** 2025-12-04
 
 ---
 
@@ -18,13 +18,20 @@
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `appcode/lib/repositories/missionRepository.ts` | 1,252 | Database queries with tenant isolation |
+| `appcode/lib/repositories/missionRepository.ts` | 1,111 | Database queries with tenant isolation (RPC-based) |
 | `appcode/lib/repositories/raffleRepository.ts` | 316 | Raffle participation queries |
 | `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 14 statuses, sorting, flippable cards |
+| `appcode/lib/types/rpc.ts` | 124 | TypeScript types for RPC function return values |
 | `appcode/app/api/missions/route.ts` | 130 | GET /api/missions endpoint |
 | `appcode/app/api/missions/[missionId]/claim/route.ts` | 167 | POST /api/missions/:id/claim endpoint |
 | `appcode/app/api/missions/[missionId]/participate/route.ts` | 140 | POST /api/missions/:id/participate endpoint |
 | `appcode/app/api/missions/history/route.ts` | 116 | GET /api/missions/history endpoint |
+
+**RPC Functions (PostgreSQL):**
+| Function | Migration File | Purpose |
+|----------|----------------|---------|
+| `get_available_missions` | `supabase/migrations/20251203_single_query_rpc_functions.sql` | Single query for all mission data |
+| `get_available_rewards` | `supabase/migrations/20251203_single_query_rpc_functions.sql` | Single query for all reward data |
 
 **Database Tables Used:**
 - `missions` (SchemaFinalv2.md:362-423)
@@ -391,7 +398,7 @@ GET /api/missions/history (route.ts:21)
 
 #### missionRepository.listAvailable()
 
-**Location:** `appcode/lib/repositories/missionRepository.ts:484-743`
+**Location:** `appcode/lib/repositories/missionRepository.ts:485-598`
 
 **Signature:**
 ```typescript
@@ -402,51 +409,76 @@ async listAvailable(
 ): Promise<AvailableMissionData[]>
 ```
 
-**Purpose:** Retrieves all missions for a user with JOINs to progress, redemptions, and sub-state tables.
+**Purpose:** Retrieves all missions for a user via single RPC call. Replaces previous 5-query approach.
 
-**Query Implementation (lines 493-538):**
+**RPC Implementation (lines 494-498):**
 ```typescript
-const { data: missions, error: missionsError } = await supabase
-  .from('missions')
-  .select(`
-    id,
-    mission_type,
-    display_name,
-    title,
-    description,
-    target_value,
-    target_unit,
-    raffle_end_date,
-    activated,
-    tier_eligibility,
-    preview_from_tier,
-    enabled,
-    display_order,
-    reward_id,
-    rewards!inner (
-      id, type, name, description, value_data, redemption_type, reward_source
-    ),
-    tiers!inner (
-      id, tier_id, tier_name, tier_color, tier_order
-    ),
-    mission_progress (
-      id, user_id, current_value, status, completed_at, checkpoint_start, checkpoint_end
-    )
-  `)
-  .eq('client_id', clientId)  // ⚠️ Multi-tenant filter (line 536)
-  .eq('enabled', true)
-  .or(`tier_eligibility.eq.${currentTierId},preview_from_tier.eq.${currentTierId}`);
+// Single RPC call replaces 5 separate queries
+// Per SingleQueryBS.md Section 4.2 - get_available_missions function
+const { data, error } = await supabase.rpc('get_available_missions', {
+  p_user_id: userId,
+  p_client_id: clientId,
+  p_current_tier: currentTierId,
+});
 ```
 
-**Multi-Tenant Filter:** ✅ Present (line 536) - `.eq('client_id', clientId)`
+**Multi-Tenant Filter:** ✅ Enforced in RPC function via `p_client_id` parameter
+- SQL: `WHERE m.client_id = p_client_id` (migration line 154)
 
-**Database Tables:**
+**RPC Function Location:** `supabase/migrations/20251203_single_query_rpc_functions.sql:13-162`
+
+**RPC Query (PostgreSQL):**
+```sql
+SELECT
+  m.id, m.mission_type, m.display_name, m.title, ...
+  r.id, r.type, r.name, r.description, ...
+  t.tier_id, t.tier_name, t.tier_color, t.tier_order,
+  mp.id, mp.current_value, mp.status, mp.completed_at, ...
+  red.id, red.status, red.claimed_at, ...
+  cb.boost_status, cb.activated_at, cb.expires_at, ...
+  pg.shipped_at, pg.shipping_city, pg.requires_size,
+  rp.is_winner, rp.participated_at, rp.winner_selected_at
+FROM missions m
+INNER JOIN rewards r ON m.reward_id = r.id
+INNER JOIN tiers t ON m.tier_eligibility = t.tier_id AND m.client_id = t.client_id
+LEFT JOIN mission_progress mp ON m.id = mp.mission_id AND mp.user_id = p_user_id
+LEFT JOIN redemptions red ON mp.id = red.mission_progress_id AND red.user_id = p_user_id
+LEFT JOIN commission_boost_redemptions cb ON red.id = cb.redemption_id
+LEFT JOIN physical_gift_redemptions pg ON red.id = pg.redemption_id
+LEFT JOIN raffle_participations rp ON m.id = rp.mission_id AND rp.user_id = p_user_id
+WHERE m.client_id = p_client_id AND m.enabled = true
+  AND (m.tier_eligibility = p_current_tier OR m.tier_eligibility = 'all' OR m.preview_from_tier = p_current_tier)
+ORDER BY m.display_order ASC;
+```
+
+**TypeScript Mapping (lines 510-597):**
+```typescript
+return (data as GetMissionHistoryRow[]).map((row) => ({
+  mission: { id: row.mission_id, type: row.mission_type, ... },
+  reward: { id: row.reward_id, type: row.reward_type, ... },
+  tier: { id: row.tier_id, name: row.tier_name, color: row.tier_color },
+  progress: row.progress_id ? { id: row.progress_id, ... } : null,
+  redemption: row.redemption_id ? { id: row.redemption_id, ... } : null,
+  commissionBoost: row.boost_status ? { boostStatus: row.boost_status, ... } : null,
+  physicalGift: row.physical_gift_requires_size !== null ? { ... } : null,
+  raffleParticipation: row.raffle_participated_at ? { ... } : null,
+  isLocked,
+}));
+```
+
+**Database Tables (via RPC JOINs):**
 - Primary: `missions` (SchemaFinalv2.md:362-423)
 - Joined: `rewards` (SchemaFinalv2.md:462-592)
 - Joined: `tiers` (SchemaFinalv2.md:254-273)
 - Joined: `mission_progress` (SchemaFinalv2.md:425-460)
+- Joined: `redemptions` (SchemaFinalv2.md:594-664)
+- Joined: `commission_boost_redemptions` (SchemaFinalv2.md:666-748)
+- Joined: `physical_gift_redemptions` (SchemaFinalv2.md:824-890)
+- Joined: `raffle_participations` (SchemaFinalv2.md:892-957)
 
 **Returns:** Array of `AvailableMissionData` with mission, reward, tier, progress, redemption, and sub-state data
+
+**Type Reference:** `GetAvailableMissionsRow` in `appcode/lib/types/rpc.ts:13-74`
 
 ---
 
@@ -701,13 +733,20 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
 
 | Function | File:Line | Table(s) | Multi-Tenant | Operation |
 |----------|-----------|----------|--------------|-----------|
-| `listAvailable()` | missionRepository.ts:493 | missions, rewards, tiers, mission_progress | ✅ line 536 | SELECT multiple |
-| `getHistory()` | missionRepository.ts:747 | missions, redemptions, raffle_participations | ✅ line 784 | SELECT multiple |
-| `findById()` | missionRepository.ts:873 | missions, mission_progress, redemptions | ✅ line 924 | SELECT single |
-| `claimReward()` | missionRepository.ts:1111 | redemptions | ✅ line 1116 | SELECT + UPDATE |
+| `listAvailable()` | missionRepository.ts:485 | **RPC: get_available_missions** | ✅ via p_client_id | RPC single query |
+| `getHistory()` | missionRepository.ts:606 | redemptions, mission_progress, missions, rewards, raffle_participations | ✅ line 643 | SELECT (2 queries) |
+| `findById()` | missionRepository.ts:726 | missions, mission_progress, redemptions | ✅ line 777 | SELECT single |
+| `claimReward()` | missionRepository.ts:960 | redemptions | ✅ line 965 | SELECT + UPDATE |
 | `participate()` | raffleRepository.ts:67 | missions | ✅ line 85 | SELECT + INSERT |
 | `getRaffleMissionInfo()` | raffleRepository.ts:248 | missions, rewards | ✅ line 261 | SELECT single |
 | `hasParticipated()` | raffleRepository.ts:306 | raffle_participations | ✅ line 311 | SELECT single |
+
+### RPC Functions
+
+| RPC Function | Migration Line | Tables Joined | Security |
+|--------------|----------------|---------------|----------|
+| `get_available_missions` | 13-162 | missions, rewards, tiers, mission_progress, redemptions, commission_boost_redemptions, physical_gift_redemptions, raffle_participations | SECURITY DEFINER, client_id enforced via parameter |
+| `get_available_rewards` | 175-289 | rewards, tiers, redemptions, commission_boost_redemptions, physical_gift_redemptions | SECURITY DEFINER, client_id enforced via parameter |
 
 ### Multi-Tenant Filter Verification
 
@@ -793,7 +832,8 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
 
 ---
 
-**Document Version:** 3.0
+**Document Version:** 4.0
 **Steps Completed:** 3 / 4 (5.1 Repositories, 5.2 Services, 5.3 API Routes)
-**Last Updated:** 2025-12-03
-**Completeness:** Repositories ✅, Services ✅, Routes ✅, Tests 📋
+**Last Updated:** 2025-12-04
+**Completeness:** Repositories ✅ (RPC refactored), Services ✅, Routes ✅, Tests 📋
+**RPC Migration:** `get_available_missions` deployed, `get_available_rewards` deployed

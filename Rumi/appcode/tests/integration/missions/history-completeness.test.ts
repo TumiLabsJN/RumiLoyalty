@@ -416,4 +416,183 @@ describe('History Completeness Tests', () => {
       expect(raffleLoss).toBeDefined();
     });
   });
+
+  describe('get_mission_history RPC direct call', () => {
+    it('should return concluded missions via RPC', async () => {
+      const supabase = getTestSupabase();
+
+      // Create mission
+      const { mission } = await createTestMission({
+        clientId: testClient.id,
+        rewardId: testReward.id,
+        title: 'RPC History Test Mission',
+        targetValue: 100,
+        tierEligibility: 'all',
+      });
+
+      // Create completed progress
+      const { progress } = await createTestMissionProgress({
+        userId: testUser.id,
+        missionId: mission.id,
+        clientId: testClient.id,
+        currentValue: 100,
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      // Create concluded redemption
+      await createTestRedemption({
+        userId: testUser.id,
+        rewardId: testReward.id,
+        clientId: testClient.id,
+        tierAtClaim: testTier.tierId,
+        missionProgressId: progress.id,
+        status: 'concluded',
+        claimedAt: new Date(),
+        concludedAt: new Date(),
+      });
+
+      // Call RPC directly (tests the PostgreSQL function)
+      const { data: history, error } = await supabase.rpc('get_mission_history', {
+        p_user_id: testUser.id,
+        p_client_id: testClient.id,
+      });
+
+      // Assertions
+      expect(error).toBeNull();
+      expect(history).toHaveLength(1);
+      expect(history![0].mission_id).toBe(mission.id);
+      expect(history![0].redemption_status).toBe('concluded');
+      // concluded_at may be null if factory doesn't set it, just verify status is correct
+    });
+
+    it('should return rejected raffle missions with raffle participation data', async () => {
+      const supabase = getTestSupabase();
+
+      // Create raffle mission - use existing raffle test pattern from raffle-winner-selection.test.ts
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 30);
+
+      // Insert mission directly to avoid factory constraints
+      // Raffle requires: target_value = 0, raffle_end_date NOT NULL
+      const { data: missionData, error: missionError } = await supabase
+        .from('missions')
+        .insert({
+          client_id: testClient.id,
+          reward_id: testReward.id,
+          title: 'RPC History Raffle Test',
+          display_name: 'RPC History Raffle Test',
+          mission_type: 'raffle',
+          target_value: 0,
+          target_unit: 'count',
+          tier_eligibility: 'all',
+          activated: true,
+          enabled: true,
+          display_order: 1,
+          raffle_end_date: futureDate.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (missionError) throw new Error(`Failed to create raffle mission: ${missionError.message}`);
+      const mission = missionData;
+
+      // Create progress
+      const { progress } = await createTestMissionProgress({
+        userId: testUser.id,
+        missionId: mission.id,
+        clientId: testClient.id,
+        currentValue: 1,
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      // Create rejected redemption (raffle loser)
+      const { redemption } = await createTestRedemption({
+        userId: testUser.id,
+        rewardId: testReward.id,
+        clientId: testClient.id,
+        tierAtClaim: testTier.tierId,
+        missionProgressId: progress.id,
+        status: 'rejected',
+        claimedAt: new Date(),
+        rejectedAt: new Date(),
+      });
+
+      // Create raffle participation (loser) - requires redemption_id
+      const { error: raffleError } = await supabase.from('raffle_participations').insert({
+        user_id: testUser.id,
+        mission_id: mission.id,
+        mission_progress_id: progress.id,
+        redemption_id: redemption.id,
+        client_id: testClient.id,
+        is_winner: false,
+        participated_at: new Date().toISOString(),
+        winner_selected_at: new Date().toISOString(),
+      });
+      if (raffleError) throw new Error(`Failed to create raffle participation: ${raffleError.message}`);
+
+      // Call RPC directly (tests LEFT JOIN to raffle_participations)
+      const { data: history, error } = await supabase.rpc('get_mission_history', {
+        p_user_id: testUser.id,
+        p_client_id: testClient.id,
+      });
+
+      // Assertions
+      expect(error).toBeNull();
+      expect(history).toHaveLength(1);
+      expect(history![0].mission_id).toBe(mission.id);
+      expect(history![0].redemption_status).toBe('rejected');
+      expect(history![0].raffle_is_winner).toBe(false);
+      expect(history![0].raffle_participated_at).not.toBeNull();
+    });
+
+    it('should enforce multi-tenant isolation', async () => {
+      const supabase = getTestSupabase();
+
+      // Create mission for testClient
+      const { mission } = await createTestMission({
+        clientId: testClient.id,
+        rewardId: testReward.id,
+        title: 'Tenant Isolation Test',
+        targetValue: 100,
+        tierEligibility: 'all',
+      });
+
+      const { progress } = await createTestMissionProgress({
+        userId: testUser.id,
+        missionId: mission.id,
+        clientId: testClient.id,
+        currentValue: 100,
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      await createTestRedemption({
+        userId: testUser.id,
+        rewardId: testReward.id,
+        clientId: testClient.id,
+        tierAtClaim: testTier.tierId,
+        missionProgressId: progress.id,
+        status: 'concluded',
+        claimedAt: new Date(),
+        concludedAt: new Date(),
+      });
+
+      // Create different client
+      const { client: otherClient } = await createTestClient({ name: 'Other Client' });
+
+      // Query with wrong client_id should return empty
+      const { data: history, error } = await supabase.rpc('get_mission_history', {
+        p_user_id: testUser.id,
+        p_client_id: otherClient.id,
+      });
+
+      expect(error).toBeNull();
+      expect(history).toHaveLength(0);
+
+      // Cleanup other client
+      await cleanupTestData(otherClient.id);
+    });
+  });
 });
