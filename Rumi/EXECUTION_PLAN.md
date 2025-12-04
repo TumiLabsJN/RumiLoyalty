@@ -998,6 +998,18 @@
     - **Test Cases:** (1) 5 users participate successfully, (2) admin selection sets 1 winner is_winner=true, (3) 4 losers have is_winner=false, (4) winner redemption status='claimable', (5) loser redemptions status='rejected', (6) loser history shows raffleData.isWinner=false ("Better luck next time")
     - **Acceptance Criteria:** All 6 test cases MUST pass, raffle_participations.is_winner MUST be correctly set per SchemaFinalv2.md line 923, redemption statuses MUST match winner/loser per lines 938-941, prevents everyone-wins-100-iPhones catastrophic bug
 
+- [x] **Task 5.4.9:** Test disabled mission filtering
+    - **Action:** Create `tests/integration/missions/disabled-filtering.test.ts` with test cases verifying missions with `activated=false` are excluded from queries
+    - **References:** SchemaFinalv2.md lines 362-420 (missions table, activated column), lib/services/missionService.ts (listAvailableMissions WHERE clause), API_CONTRACTS.md lines 2951-3140 (GET /api/missions)
+    - **Implementation Guide:** MUST test 2 cases: (1) query with activated=true mission returns that mission, (2) query with activated=false mission excludes it from results. Use same factory pattern as existing mission tests.
+    - **Acceptance Criteria:** Test file exists with 2+ passing tests, queries MUST verify `activated=true` filter excludes deactivated missions, follows multi-tenant pattern (client_id filter)
+
+- [x] **Task 5.4.10:** Test mission priority sorting
+    - **Action:** Create `tests/integration/missions/priority-sorting.test.ts` with test cases verifying 12-priority status sorting order
+    - **References:** lib/services/missionService.ts lines 800-900 (sortMissionsByPriority function), API_CONTRACTS.md lines 3000-3100 (status enum and display order), repodocs/MISSIONS_IMPL.md (12-priority sort documentation)
+    - **Implementation Guide:** MUST test 3 cases: (1) default_claim missions appear before in_progress, (2) locked missions appear after claimable missions, (3) full sort order matches: default_claim > default_schedule > boost_claim > boost_schedule > raffle_available > raffle_processing > in_progress > locked > locked_schedule > locked_raffle > locked_boost > concluded
+    - **Acceptance Criteria:** Test file exists with 3+ passing tests, sorting MUST match 12-priority order documented in MISSIONS_IMPL.md, test creates missions with different statuses and verifies array order
+
 ---
 
 # PHASE 6: REWARDS SYSTEM
@@ -1605,6 +1617,12 @@
 - [ ] **Task 10.2.5:** Test tier isolation
     - **Action:** Automate: login as lower-tier user → verify cannot see higher-tier rewards/missions
     - **Acceptance Criteria:** Test passes
+
+- [ ] **Task 10.2.6:** Test mission API response structure
+    - **Action:** Add E2E test cases to `tests/e2e/playwright/` verifying GET /api/missions response includes all required fields
+    - **References:** API_CONTRACTS.md lines 2976-3140 (MissionsResponse schema), API_CONTRACTS.md lines 3050-3100 (progress object schema: current, target, percentage)
+    - **Implementation Guide:** MUST verify 4 cases: (1) response.missions[*].progress object exists for active missions, (2) progress has current, target, percentage fields with correct types, (3) percentage is between 0-100, (4) all required MissionsResponse fields present (user, missions array, each mission has id, displayName, status, reward)
+    - **Acceptance Criteria:** E2E test validates API response matches contract schema per API_CONTRACTS.md lines 2976-3140, prevents frontend breaking from missing/malformed fields
 
 ## Step 10.3: CI/CD Pipeline
 - [ ] **Task 10.3.1:** Create GitHub Actions workflow

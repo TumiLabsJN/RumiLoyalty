@@ -550,8 +550,8 @@ export async function claimMissionReward(
 **Example:**
 ```typescript
 // lib/repositories/missionRepository.ts
-import { createClient } from '@/lib/utils/supabase'
-import type { Mission } from '@/lib/types/mission'
+import { createClient } from '@/lib/supabase/server-client';
+import type { Database } from '@/lib/types/database';
 
 export const missionRepository = {
   /**
