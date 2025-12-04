@@ -1110,33 +1110,35 @@
     - **Acceptance Criteria:** Validates all 11 pre-claim rules (lines 4902-4951), checks tier eligibility matches current_tier (line 4907), checks no active redemption (lines 4909-4917), enforces tier-specific usage limits (lines 4919-4931), validates discount scheduling weekday + 09:00-16:00 EST (lines 4933-4936), auto-sets commission_boost time to 18:00:00 EST (lines 4937-4939), validates physical_gift shippingInfo + size requirements (lines 4940-4951), routes by reward type (instant/scheduled/physical), applies redemption period reset rules (lines 4953-4965), throws specific error types, calls repository.redeemReward, returns complete response with updatedRewards array, follows service layer patterns
 
 - [ ] **Task 6.2.4:** Implement claimInstant function
-    - **Action:** Add function for instant reward claim (gift_card, spark_ads, experience) with Google Calendar event creation
-    - **References:** Loyalty.md lines 1994-2007 (Instant Rewards calendar trigger), MissionsRewardsFlows.md (Instant Reward Flow)
-    - **Implementation Guide:** After creating redemption with status='claimed', call googleCalendar.createCalendarEvent with: title="🎁 Fulfill {reward_type}: @{handle}", due=claimed_at + 2 hours, description includes reward type, value, creator handle, email, and action instructions. Store returned event_id in redemptions.google_calendar_event_id
-    - **Acceptance Criteria:** Creates redemption record, creates Google Calendar event with 2-hour due time, stores google_calendar_event_id in redemptions table, handles calendar API errors gracefully (redemption still succeeds if calendar fails)
+    - **Action:** Add function for instant reward claim (gift_card, spark_ads, experience) with Google Calendar event creation. Called from claimReward() after validation passes.
+    - **References:** Loyalty.md lines 1698-1711 (Instant Rewards calendar trigger), MissionsRewardsFlows.md (Instant Reward Flow), lib/utils/googleCalendar.ts (createInstantRewardEvent helper)
+    - **Implementation Guide:** (1) Call rewardRepository.redeemReward() to create redemption (status='claimed'), (2) Call googleCalendar.createInstantRewardEvent with handle, rewardType, value, email, (3) If calendar succeeds, call rewardRepository.updateCalendarEventId() to store event_id, (4) Build and return ClaimRewardResponse. Title: "🎁 Fulfill {reward_type}: @{handle}", due: claimed_at + 2 hours.
+    - **Acceptance Criteria:** Calls redeemReward() (redemption created), creates Google Calendar event with 2-hour due time via createInstantRewardEvent(), stores google_calendar_event_id via updateCalendarEventId(), handles calendar API errors gracefully (redemption still succeeds if calendar fails), returns ClaimRewardResponse
+    - **Pre-requisite:** Add updateCalendarEventId(redemptionId, clientId, eventId) to rewardRepository.ts
 
 - [ ] **Task 6.2.5:** Implement claimScheduled function
-    - **Action:** Add function for scheduled reward (discount) with Google Calendar event creation
-    - **References:** Loyalty.md lines 2028-2046 (Discount Activation calendar trigger), MissionsRewardsFlows.md (Scheduled Reward Flow)
-    - **Implementation Guide:** After creating redemption with status='claimed' and redemption_type='scheduled', call googleCalendar.createCalendarEvent with: title="🔔 Activate Discount: @{handle}", due=scheduled_activation_date + scheduled_activation_time, reminderMinutes=15, description includes creator handle, discount percent, duration, coupon code, max uses, and step-by-step TikTok Seller Central instructions. Store returned event_id in redemptions.google_calendar_event_id
-    - **Acceptance Criteria:** Creates redemption record with scheduled fields, creates Google Calendar event at scheduled time with 15-min reminder, stores google_calendar_event_id, handles calendar API errors gracefully
+    - **Action:** Add function for scheduled reward (discount) with Google Calendar event creation. Called from claimReward() after validation passes.
+    - **References:** Loyalty.md lines 1732-1750 (Discount Activation calendar trigger), MissionsRewardsFlows.md (Scheduled Reward Flow), lib/utils/googleCalendar.ts (createDiscountActivationEvent helper)
+    - **Implementation Guide:** (1) Call rewardRepository.redeemReward() with scheduledActivationDate/Time to create redemption (status='claimed', redemption_type='scheduled'), (2) Call googleCalendar.createDiscountActivationEvent with handle, percent, durationMinutes, couponCode, maxUses, activationDateTime, (3) If calendar succeeds, call rewardRepository.updateCalendarEventId() to store event_id, (4) Build and return ClaimRewardResponse. Title: "🔔 Activate Discount: @{handle}", due: scheduled_activation_date + time, 15-min reminder.
+    - **Acceptance Criteria:** Calls redeemReward() with scheduled fields, creates Google Calendar event at scheduled time with 15-min reminder via createDiscountActivationEvent(), stores google_calendar_event_id via updateCalendarEventId(), handles calendar API errors gracefully, returns ClaimRewardResponse
 
 - [ ] **Task 6.2.6:** Implement claimPhysical function
-    - **Action:** Add function requiring shipping address with Google Calendar event creation
-    - **References:** Loyalty.md lines 2009-2026 (Physical Gift calendar trigger), MissionsRewardsFlows.md (Physical Gift Flow)
-    - **Implementation Guide:** After creating redemption and physical_gift_redemptions row, call googleCalendar.createCalendarEvent with: title="📦 Ship Physical Gift: @{handle}", due=claimed_at + 2 hours, description includes item name, size (if applicable), full shipping address, and action instructions. Store returned event_id in redemptions.google_calendar_event_id
-    - **Acceptance Criteria:** Creates physical_gift_redemptions with shipping address, creates Google Calendar event with 2-hour due time and shipping details, stores google_calendar_event_id, validates address provided
+    - **Action:** Add function for physical_gift reward with shipping address and Google Calendar event creation. Called from claimReward() after validation passes.
+    - **References:** Loyalty.md lines 1713-1730 (Physical Gift calendar trigger), MissionsRewardsFlows.md (Physical Gift Flow), lib/utils/googleCalendar.ts (createPhysicalGiftEvent helper)
+    - **Implementation Guide:** (1) Call rewardRepository.redeemReward() with shippingInfo to create redemption + physical_gift_redemptions row, (2) Call googleCalendar.createPhysicalGiftEvent with handle, itemName, sizeValue, shippingAddress, (3) If calendar succeeds, call rewardRepository.updateCalendarEventId() to store event_id, (4) Build and return ClaimRewardResponse. Title: "📦 Ship Physical Gift: @{handle}", due: claimed_at + 2 hours.
+    - **Acceptance Criteria:** Calls redeemReward() which creates physical_gift_redemptions with shipping address, creates Google Calendar event with 2-hour due time and shipping details via createPhysicalGiftEvent(), stores google_calendar_event_id via updateCalendarEventId(), handles calendar API errors gracefully, returns ClaimRewardResponse
 
 - [ ] **Task 6.2.7:** Implement claimCommissionBoost function
-    - **Action:** Add function to activate boost and auto-sync
-    - **References:** Loyalty.md Pattern 4 (Auto-Sync), Pattern 7 (Boost History)
-    - **Acceptance Criteria:** Creates boost state, trigger updates users.current_commission_boost, logs activation
+    - **Action:** Add function for commission_boost reward. Called from claimReward() after validation passes. NOTE: Calendar event is NOT created at claim time - it's created at pending_payout (Task 6.2.7a).
+    - **References:** Loyalty.md Pattern 4 (Auto-Sync), Pattern 7 (Boost History), SchemaFinalv2.md lines 665-746 (commission_boost_redemptions table)
+    - **Implementation Guide:** (1) Call rewardRepository.redeemReward() with scheduledActivationDate/Time, durationDays, boostRate to create redemption + commission_boost_redemptions row (boost_status='scheduled'), (2) NO calendar event at claim - calendar created when boost reaches pending_payout (Task 6.2.7a), (3) Build and return ClaimRewardResponse.
+    - **Acceptance Criteria:** Calls redeemReward() which creates commission_boost_redemptions with boost_status='scheduled', NO calendar event at claim time (deferred to 6.2.7a), returns ClaimRewardResponse with scheduled confirmation
 
 - [ ] **Task 6.2.7a:** Add Commission Boost payout calendar event
-    - **Action:** Create calendar event when boost_status transitions to 'pending_payout'
-    - **References:** Loyalty.md lines 2048-2066 (Commission Boost Payout calendar trigger)
-    - **Implementation Guide:** In the service function that handles boost_status → 'pending_payout' transition, call googleCalendar.createCalendarEvent with: title="💸 Commission Payout: @{handle}", due=NOW() + 2 hours, description includes creator handle, payout amount, payment method, payment account, boost percent, duration days, sales delta, and action instructions. Store event_id in commission_boost_redemptions.google_calendar_event_id
-    - **Acceptance Criteria:** Calendar event created when boost reaches pending_payout status, event due in 2 hours, description includes all payout details, event_id stored
+    - **Action:** Create calendar event when boost_status transitions to 'pending_payout'. This is triggered by daily cron after 20-day clearing period, NOT at claim time.
+    - **References:** Loyalty.md lines 1752-1770 (Commission Boost Payout calendar trigger), lib/utils/googleCalendar.ts (createCommissionPayoutEvent helper)
+    - **Implementation Guide:** In the cron/service function that handles boost_status → 'pending_payout' transition: (1) Call googleCalendar.createCommissionPayoutEvent with handle, payoutAmount, paymentMethod, paymentAccount, boostPercent, boostDurationDays, salesDelta, (2) Store event_id in commission_boost_redemptions.google_calendar_event_id. Title: "💸 Commission Payout: @{handle}", due: NOW() + 2 hours.
+    - **Acceptance Criteria:** Calendar event created when boost reaches pending_payout status via createCommissionPayoutEvent(), event due in 2 hours, description includes all payout details, event_id stored in commission_boost_redemptions.google_calendar_event_id
 
 - [ ] **Task 6.2.8:** Implement getRewardHistory function
     - **Action:** Add function that formats concluded redemptions using same backend formatting rules as GET /api/rewards

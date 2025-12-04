@@ -265,16 +265,37 @@ return (
 
 ### Implementation Steps
 
-#### Fix: Remove Overly Restrictive Constraint
+#### Fix: Use Proper Generic Constraint
 
 **File:** `/home/jorge/Loyalty/Rumi/appcode/components/adm/data-display/AdminTable.tsx`
 
-**Option 1 (Recommended): Remove Constraint Entirely**
+**Option 2 (RECOMMENDED): Use object Constraint**
 ```typescript
-// Line 28 - OLD CODE:
+// Line 29 - OLD CODE:
 export function AdminTable<T extends Record<string, unknown>>({
 
-// Line 28 - NEW CODE:
+// Line 29 - NEW CODE:
+export function AdminTable<T extends object>({
+```
+
+**Rationale:**
+- `object` type allows any non-primitive value
+- Standard interfaces satisfy `extends object`
+- Prevents usage with primitives (string, number, etc.)
+- Standard TypeScript pattern (idiomatic constraint)
+- Documents intent clearly (table expects object-shaped data)
+- More maintainable than no constraint
+
+**This is the proper fix, not a bandaid.**
+
+---
+
+**Option 1 (Alternative): Remove Constraint Entirely**
+```typescript
+// Line 29 - OLD CODE:
+export function AdminTable<T extends Record<string, unknown>>({
+
+// Line 29 - NEW CODE:
 export function AdminTable<T>({
 ```
 
@@ -284,22 +305,10 @@ export function AdminTable<T>({
 - No additional constraint needed
 - Simplest fix
 
----
-
-**Option 2 (Alternative): Use object Constraint**
-```typescript
-// Line 28 - OLD CODE:
-export function AdminTable<T extends Record<string, unknown>>({
-
-// Line 28 - NEW CODE:
-export function AdminTable<T extends object>({
-```
-
-**Rationale:**
-- `object` type allows any non-primitive value
-- Standard interfaces satisfy `extends object`
-- Prevents usage with primitives (string, number, etc.)
-- More explicit than no constraint
+**Why Not Recommended:**
+- Allows primitives (string, number, etc.) which is nonsensical
+- Less explicit about what T should be
+- Could be called with inappropriate types
 
 ---
 
@@ -322,14 +331,14 @@ export interface ActiveRedemption {
 
 ---
 
-### Recommended Fix: Option 1
+### Recommended Fix: Option 2 (extends object)
 
 **Single Line Change:**
 ```typescript
-export function AdminTable<T>({
+export function AdminTable<T extends object>({
 ```
 
-**Complete Context (lines 28-35):**
+**Complete Context (lines 29-36):**
 ```typescript
 // Before:
 export function AdminTable<T extends Record<string, unknown>>({
@@ -342,7 +351,7 @@ export function AdminTable<T extends Record<string, unknown>>({
 }: AdminTableProps<T>) {
 
 // After:
-export function AdminTable<T>({
+export function AdminTable<T extends object>({
   columns,
   data,
   keyField,
@@ -353,7 +362,13 @@ export function AdminTable<T>({
 ```
 
 **Lines Affected:**
-- Line 28: Remove generic constraint
+- Line 29: Change generic constraint from `Record<string, unknown>` to `object`
+
+**Why This Fix:**
+- Proper TypeScript constraint for object-shaped data
+- Prevents nonsensical primitive usage
+- Standard idiomatic pattern
+- Maintains full type safety
 
 ---
 
@@ -767,8 +782,8 @@ app/admin/
 ### Fix Required
 **Single line change:**
 ```typescript
-// Remove overly restrictive constraint
-export function AdminTable<T>({
+// Use proper object constraint
+export function AdminTable<T extends object>({
 ```
 
 ### Implementation Risk
@@ -781,6 +796,8 @@ export function AdminTable<T>({
 
 ---
 
-**Document Version:** 1.0
-**Implementation Status:** Not yet implemented
-**Next Step:** Execute fix using Implementation Guide above
+**Document Version:** 1.1
+**Implementation Status:** ✅ IMPLEMENTED (2025-12-04)
+**Fix Applied:** Option 2 - Changed constraint to `extends object`
+**Result:** All 13 AdminTable-related TypeScript errors resolved
+**Next Step:** Manual runtime testing recommended (optional - fix is compile-time only)

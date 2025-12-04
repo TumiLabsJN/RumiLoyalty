@@ -26,7 +26,7 @@ interface AdminTableProps<T> {
 // COMPONENT
 // =============================================================================
 
-export function AdminTable<T extends Record<string, unknown>>({
+export function AdminTable<T extends object>({
   columns,
   data,
   keyField,
