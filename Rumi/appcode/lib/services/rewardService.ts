@@ -26,7 +26,21 @@
 import {
   rewardRepository,
   type AvailableRewardData,
+  type ShippingInfo,
 } from '@/lib/repositories/rewardRepository';
+import {
+  AppError,
+  ErrorCode,
+  tierIneligibleError,
+  activeClaimExistsError,
+  limitReachedError,
+  schedulingRequiredError,
+  invalidScheduleWeekdayError,
+  invalidTimeSlotError,
+  shippingInfoRequiredError,
+  sizeRequiredError,
+  invalidSizeSelectionError,
+} from '@/lib/utils/errors';
 
 // ============================================================================
 // Types
@@ -139,6 +153,63 @@ export interface ListAvailableRewardsParams {
   userHandle: string;
   tierName: string;
   tierColor: string;
+}
+
+/**
+ * Input parameters for claimReward
+ * Per API_CONTRACTS.md lines 4852-4876
+ */
+export interface ClaimRewardParams {
+  userId: string;
+  clientId: string;
+  rewardId: string;
+  currentTier: string;
+  tierAchievedAt: string | null;
+  scheduledActivationAt?: string;
+  shippingInfo?: ShippingInfo;
+  sizeValue?: string;
+}
+
+/**
+ * Next steps hint for UI
+ * Per API_CONTRACTS.md lines 5042-5046
+ */
+export interface NextSteps {
+  action: 'wait_fulfillment' | 'shipping_confirmation' | 'scheduled_confirmation';
+  message: string;
+}
+
+/**
+ * Response for claimReward
+ * Per API_CONTRACTS.md lines 5007-5057
+ */
+export interface ClaimRewardResponse {
+  success: boolean;
+  message: string;
+  redemption: {
+    id: string;
+    status: 'claimed';
+    rewardType: 'gift_card' | 'commission_boost' | 'discount' | 'spark_ads' | 'physical_gift' | 'experience';
+    claimedAt: string;
+    reward: {
+      id: string;
+      name: string;
+      displayText: string;
+      type: string;
+      rewardSource: 'vip_tier';
+      valueData: Record<string, unknown> | null;
+    };
+    scheduledActivationAt?: string;
+    usedCount: number;
+    totalQuantity: number;
+    nextSteps: NextSteps;
+  };
+  updatedRewards: Array<{
+    id: string;
+    status: string;
+    canClaim: boolean;
+    usedCount: number;
+  }>;
 }
 
 // ============================================================================
@@ -533,6 +604,101 @@ function transformValueData(
   return Object.keys(result).length > 0 ? result : null;
 }
 
+/**
+ * Get next steps hint based on reward type
+ * Per API_CONTRACTS.md lines 5083-5086, 5123-5126, 5159-5162
+ */
+function getNextSteps(rewardType: string): NextSteps {
+  switch (rewardType) {
+    case 'physical_gift':
+      return {
+        action: 'shipping_confirmation',
+        message:
+          'Your shipping info has been received. We\'ll send tracking details via email!',
+      };
+    case 'discount':
+    case 'commission_boost':
+      return {
+        action: 'scheduled_confirmation',
+        message:
+          rewardType === 'discount'
+            ? 'Your discount will activate at the scheduled time!'
+            : 'Your boost will activate automatically at 6 PM ET on the scheduled date!',
+      };
+    default:
+      // gift_card, spark_ads, experience
+      return {
+        action: 'wait_fulfillment',
+        message:
+          'Your reward is being processed. You\'ll receive an email when it\'s ready!',
+      };
+  }
+}
+
+/**
+ * Get updated status after claim based on reward type
+ * Per API_CONTRACTS.md lines 5091, 5131, 5167
+ */
+function getUpdatedStatus(rewardType: string, hasShippingInfo: boolean): string {
+  switch (rewardType) {
+    case 'physical_gift':
+      return hasShippingInfo ? 'redeeming_physical' : 'redeeming';
+    case 'discount':
+    case 'commission_boost':
+      return 'scheduled';
+    default:
+      // gift_card, spark_ads, experience
+      return 'redeeming';
+  }
+}
+
+/**
+ * Generate success message based on reward type
+ * Per API_CONTRACTS.md lines 5065, 5103, 5143
+ */
+function getSuccessMessage(
+  rewardType: string,
+  description: string | null,
+  scheduledDate?: string
+): string {
+  switch (rewardType) {
+    case 'gift_card':
+      return 'Gift card claimed! You\'ll receive your reward soon.';
+    case 'spark_ads':
+      return 'Spark Ads boost claimed! You\'ll receive your reward soon.';
+    case 'experience':
+      return `${description || 'Experience'} claimed! You'll receive details soon.`;
+    case 'physical_gift':
+      return `${description || 'Item'} claimed! We'll ship it to your address soon.`;
+    case 'discount':
+      return scheduledDate
+        ? `Discount scheduled to activate on ${formatDateForMessage(scheduledDate)}!`
+        : 'Discount scheduled!';
+    case 'commission_boost':
+      return scheduledDate
+        ? `Commission boost scheduled to activate on ${formatDateForMessage(scheduledDate)} at 6:00 PM ET`
+        : 'Commission boost scheduled!';
+    default:
+      return 'Reward claimed successfully!';
+  }
+}
+
+/**
+ * Format date for user-facing message
+ * e.g., "Jan 20"
+ */
+function formatDateForMessage(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return dateString;
+  }
+}
+
 // ============================================================================
 // Service Functions
 // ============================================================================
@@ -664,7 +830,271 @@ export const rewardService = {
     };
   },
 
-  // Task 6.2.3: claimReward - 11 pre-claim validation rules, type routing
+  /**
+   * Claim a VIP tier reward with 11-step pre-claim validation.
+   * Per API_CONTRACTS.md lines 4836-5279 (POST /api/rewards/:id/claim)
+   *
+   * Validation Rules (in order):
+   * 1. Authentication (handled by route)
+   * 2. Reward exists
+   * 3. Reward enabled
+   * 4. Tier eligibility matches
+   * 5. VIP tier only (reward_source='vip_tier')
+   * 6. No active claim (status IN ['claimed', 'fulfilled'])
+   * 7. Usage limit check
+   * 8. Scheduling required for discount/commission_boost
+   * 9. Discount scheduling: weekday Mon-Fri, 09:00-16:00 EST
+   * 10. Commission boost: future date, auto-set to 18:00:00 EST
+   * 11. Physical gift: shippingInfo required, sizeValue if requires_size
+   *
+   * @param params - Claim parameters
+   * @returns ClaimRewardResponse with redemption and updatedRewards
+   */
+  async claimReward(params: ClaimRewardParams): Promise<ClaimRewardResponse> {
+    const {
+      userId,
+      clientId,
+      rewardId,
+      currentTier,
+      tierAchievedAt,
+      scheduledActivationAt,
+      shippingInfo,
+      sizeValue,
+    } = params;
+
+    // =========================================================================
+    // VALIDATION RULES 2-3: Reward exists and enabled
+    // =========================================================================
+    const reward = await rewardRepository.getById(rewardId, clientId);
+
+    if (!reward) {
+      throw new AppError(
+        ErrorCode.REWARD_NOT_FOUND,
+        'Reward not found or not available for your tier',
+        404
+      );
+    }
+
+    if (!reward.enabled) {
+      throw new AppError(
+        ErrorCode.REWARD_NOT_FOUND,
+        'This reward is not currently available',
+        404
+      );
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 4: Tier eligibility
+    // =========================================================================
+    if (reward.tier_eligibility !== currentTier) {
+      throw tierIneligibleError(reward.tier_eligibility, currentTier);
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 5: VIP tier only
+    // =========================================================================
+    if (reward.reward_source !== 'vip_tier') {
+      throw new AppError(
+        ErrorCode.REWARD_NOT_FOUND,
+        'This reward is not a VIP tier reward. Use mission claim endpoint instead.',
+        400
+      );
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 6: No active claim
+    // =========================================================================
+    const { hasActive, redemption: activeRedemption } =
+      await rewardRepository.hasActiveRedemption(userId, rewardId, clientId);
+
+    if (hasActive && activeRedemption) {
+      throw activeClaimExistsError(activeRedemption.id, activeRedemption.status);
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 7: Usage limit check
+    // =========================================================================
+    const { usedCount } = await rewardRepository.getUsageCount(
+      userId,
+      rewardId,
+      clientId,
+      currentTier
+    );
+
+    const totalQuantity = reward.redemption_quantity;
+    if (totalQuantity !== null && usedCount >= totalQuantity) {
+      throw limitReachedError(
+        usedCount,
+        totalQuantity,
+        reward.redemption_frequency ?? 'tier'
+      );
+    }
+
+    // =========================================================================
+    // VALIDATION RULES 8-10: Scheduling validation
+    // =========================================================================
+    const rewardType = reward.type as string;
+    let scheduledDate: string | undefined;
+    let scheduledTime: string | undefined;
+
+    if (rewardType === 'discount' || rewardType === 'commission_boost') {
+      // Rule 8: Scheduling required
+      if (!scheduledActivationAt) {
+        throw schedulingRequiredError(rewardType);
+      }
+
+      const scheduledDateTime = new Date(scheduledActivationAt);
+      const now = new Date();
+
+      // Must be in the future
+      if (scheduledDateTime <= now) {
+        throw new AppError(
+          ErrorCode.INVALID_SCHEDULE,
+          'Scheduled date must be in the future',
+          400
+        );
+      }
+
+      if (rewardType === 'discount') {
+        // Rule 9: Discount scheduling - weekday Mon-Fri, 09:00-16:00 EST
+        const dayOfWeek = scheduledDateTime.getUTCDay();
+        // Convert to EST for time validation (UTC-5, ignoring DST for simplicity)
+        const estHour = (scheduledDateTime.getUTCHours() - 5 + 24) % 24;
+
+        // Check weekday (0=Sunday, 6=Saturday)
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          throw invalidScheduleWeekdayError();
+        }
+
+        // Check time slot (09:00-16:00 EST)
+        if (estHour < 9 || estHour >= 16) {
+          throw invalidTimeSlotError();
+        }
+
+        // Extract date and time for storage
+        scheduledDate = scheduledDateTime.toISOString().split('T')[0];
+        scheduledTime = scheduledDateTime.toISOString().split('T')[1].split('.')[0];
+      } else {
+        // Rule 10: Commission boost - auto-set to 18:00:00 EST (23:00 UTC)
+        scheduledDate = scheduledDateTime.toISOString().split('T')[0];
+        scheduledTime = '23:00:00'; // 18:00 EST = 23:00 UTC
+      }
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 11: Physical gift requirements
+    // =========================================================================
+    if (rewardType === 'physical_gift') {
+      if (!shippingInfo) {
+        throw shippingInfoRequiredError();
+      }
+
+      const valueData = reward.value_data as Record<string, unknown> | null;
+      const requiresSize = valueData?.requires_size === true;
+      const sizeOptions = (valueData?.size_options as string[]) || [];
+
+      if (requiresSize && !sizeValue) {
+        throw sizeRequiredError(sizeOptions);
+      }
+
+      if (sizeValue && !sizeOptions.includes(sizeValue)) {
+        throw invalidSizeSelectionError(sizeValue, sizeOptions);
+      }
+    }
+
+    // =========================================================================
+    // CREATE REDEMPTION
+    // =========================================================================
+    const valueData = reward.value_data as Record<string, unknown> | null;
+    const redemptionType: 'instant' | 'scheduled' =
+      rewardType === 'discount' || rewardType === 'commission_boost'
+        ? 'scheduled'
+        : 'instant';
+
+    const redeemResult = await rewardRepository.redeemReward({
+      userId,
+      rewardId,
+      clientId,
+      rewardType,
+      tierAtClaim: currentTier,
+      redemptionType,
+      scheduledActivationDate: scheduledDate,
+      scheduledActivationTime: scheduledTime,
+      // Commission boost specific
+      durationDays: (valueData?.duration_days as number) ?? (valueData?.durationDays as number) ?? 30,
+      boostRate: (valueData?.percent as number) ?? 0,
+      // Physical gift specific
+      shippingInfo: shippingInfo
+        ? {
+            firstName: shippingInfo.firstName,
+            lastName: shippingInfo.lastName,
+            addressLine1: shippingInfo.addressLine1,
+            addressLine2: shippingInfo.addressLine2,
+            city: shippingInfo.city,
+            state: shippingInfo.state,
+            postalCode: shippingInfo.postalCode,
+            country: shippingInfo.country,
+            phone: shippingInfo.phone,
+          }
+        : undefined,
+      sizeValue,
+      requiresSize: (valueData?.requires_size as boolean) ?? false,
+      sizeCategory: (valueData?.size_category as string) ?? undefined,
+    });
+
+    // =========================================================================
+    // BUILD RESPONSE
+    // =========================================================================
+    const newUsedCount = usedCount + 1;
+
+    // Generate formatted name and displayText
+    const name = generateName(rewardType, valueData, reward.description);
+    const displayText = generateDisplayText(rewardType, valueData, reward.description);
+
+    // Determine next steps based on reward type
+    const nextSteps = getNextSteps(rewardType);
+
+    // Determine updated status for this reward
+    const updatedStatus = getUpdatedStatus(rewardType, shippingInfo !== undefined);
+
+    // Generate success message
+    const message = getSuccessMessage(rewardType, reward.description, scheduledDate);
+
+    return {
+      success: true,
+      message,
+      redemption: {
+        id: redeemResult.redemptionId,
+        status: 'claimed',
+        rewardType: rewardType as ClaimRewardResponse['redemption']['rewardType'],
+        claimedAt: redeemResult.claimedAt,
+        reward: {
+          id: reward.id,
+          name,
+          displayText,
+          type: rewardType,
+          rewardSource: 'vip_tier',
+          valueData: transformValueData(rewardType, valueData),
+        },
+        scheduledActivationAt:
+          scheduledDate && scheduledTime
+            ? `${scheduledDate}T${scheduledTime}Z`
+            : undefined,
+        usedCount: newUsedCount,
+        totalQuantity: totalQuantity ?? 0,
+        nextSteps,
+      },
+      updatedRewards: [
+        {
+          id: reward.id,
+          status: updatedStatus,
+          canClaim: false,
+          usedCount: newUsedCount,
+        },
+      ],
+    };
+  },
+
   // Task 6.2.4: claimInstant - gift_card, spark_ads, experience + Google Calendar
   // Task 6.2.5: claimScheduled - discount with scheduled activation + Calendar
   // Task 6.2.6: claimPhysical - shipping address + Calendar

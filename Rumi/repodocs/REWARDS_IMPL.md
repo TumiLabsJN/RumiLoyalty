@@ -15,7 +15,7 @@
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/rewardRepository.ts` | 638 | Main reward/redemption queries with tenant isolation |
+| `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/rewardRepository.ts` | 722 | Main reward/redemption queries with tenant isolation |
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/commissionBoostRepository.ts` | 225 | Commission boost sub-state management |
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/physicalGiftRepository.ts` | 189 | Physical gift shipping sub-state management |
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/userRepository.ts` | 485 | User payment info (getPaymentInfo, savePaymentInfo) |
@@ -222,7 +222,7 @@ const { data, error } = await supabase
 
 ---
 
-#### redeemReward() - Lines 440-535
+#### redeemReward() - Lines 440-619
 
 **Signature:**
 ```typescript
@@ -232,10 +232,19 @@ async redeemReward(params: RedeemRewardParams): Promise<RedeemRewardResult>
 **Purpose:** Full redemption with sub-state creation for commission_boost or physical_gift.
 
 **Step 1: Create redemption (lines 445-460)**
-**Step 2: Create commission_boost sub-state if applicable (lines 474-498)**
-**Step 3: Create physical_gift sub-state if applicable (lines 499-532)**
+**Step 2: Validate and create commission_boost sub-state if applicable (lines 552-582)**
+**Step 3: Create physical_gift sub-state if applicable (lines 583-616)**
 
-**Rollback on sub-state failure (lines 494, 527):**
+**Validation Logic (lines 553-557):**
+For commission_boost rewards, validates `scheduledActivationDate` is provided and not empty:
+```typescript
+if (!params.scheduledActivationDate?.trim()) {
+  console.error('[RewardRepository] scheduled_activation_date is required for commission_boost but was not provided or is empty');
+  throw new Error('scheduled_activation_date is required for commission_boost rewards');
+}
+```
+
+**Rollback on sub-state failure (lines 578, 611):**
 ```typescript
 await supabase.from('redemptions').delete().eq('id', redemption.id);
 ```
@@ -449,7 +458,7 @@ const { data, error } = await supabase
 
 ---
 
-#### markAsShipped() - Lines 145-188
+#### markAsShipped() - Lines 145-189
 
 **Signature:**
 ```typescript
@@ -476,6 +485,14 @@ const { data, error, count } = await supabase
   .eq('client_id', clientId)  // ⚠️ Multi-tenant filter (line 167)
   .select('shipped_at');
 ```
+
+**Return Value (line 186):**
+```typescript
+return {
+  shippedAt: data[0].shipped_at ?? shippedAt,
+};
+```
+Uses nullish coalescing to ensure type safety - falls back to the timestamp value just set if database returns NULL.
 
 **Verification (lines 179-183):**
 ```typescript
@@ -645,10 +662,11 @@ if (!data || data.length === 0) {
 | 364 | 'Failed to check active redemption' | hasActiveRedemption() |
 | 417 | 'Failed to create redemption' | createRedemption() |
 | 464 | 'Failed to create redemption' | redeemReward() |
-| 495 | 'Failed to create commission boost sub-state' | redeemReward() |
-| 528 | 'Failed to create physical gift sub-state' | redeemReward() |
-| 584 | 'Failed to fetch concluded redemptions' | getConcludedRedemptions() |
-| 633 | 'Failed to count concluded redemptions' | getRedemptionCount() |
+| 556 | 'scheduled_activation_date is required for commission_boost rewards' | redeemReward() |
+| 579 | 'Failed to create commission boost sub-state' | redeemReward() |
+| 612 | 'Failed to create physical gift sub-state' | redeemReward() |
+| 652 | 'Failed to fetch concluded redemptions' | getConcludedRedemptions() |
+| 701 | 'Failed to count concluded redemptions' | getRedemptionCount() |
 
 **commissionBoostRepository.ts:**
 | Line | Error Message | Function |
@@ -712,7 +730,14 @@ if (!data || data.length === 0) {
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1
 **Steps Completed:** 1 / 4 (Step 6.1 Repositories)
 **Last Updated:** 2025-12-04
 **Completeness:** Repositories ✅ | Services ⏳ | Routes ⏳ | Testing ⏳
+
+**Recent Changes (v1.1):**
+- Updated rewardRepository.ts line count (638 → 722 lines)
+- Documented validation logic for commission_boost.scheduled_activation_date (lines 553-557)
+- Documented nullish coalescing in markAsShipped() return value (line 186)
+- Updated error message line numbers after code changes
+- Changes per RewardFix.md implementation (TypeScript compilation error fixes)
