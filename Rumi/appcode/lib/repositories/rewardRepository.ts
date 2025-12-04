@@ -550,6 +550,12 @@ export const rewardRepository = {
 
     // Step 2: Create sub-state record based on reward type
     if (params.rewardType === 'commission_boost') {
+      // VALIDATION: Ensure scheduled_activation_date is provided and not empty
+      if (!params.scheduledActivationDate?.trim()) {
+        console.error('[RewardRepository] scheduled_activation_date is required for commission_boost but was not provided or is empty');
+        throw new Error('scheduled_activation_date is required for commission_boost rewards');
+      }
+
       // Per SchemaFinalv2.md lines 688-715 (commission_boost_redemptions)
       // boost_status defaults to 'scheduled' per line 693
       const { data: boostState, error: boostError } = await supabase

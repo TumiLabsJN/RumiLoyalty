@@ -183,7 +183,7 @@ export const physicalGiftRepository = {
     }
 
     return {
-      shippedAt: data[0].shipped_at,
+      shippedAt: data[0].shipped_at ?? shippedAt,
     };
   },
 };
