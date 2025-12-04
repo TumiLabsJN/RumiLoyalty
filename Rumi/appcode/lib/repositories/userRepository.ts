@@ -355,4 +355,131 @@ export const userRepository = {
 
     return data ?? false;
   },
+
+  /**
+   * Get user's saved payment information for pre-filling payment modals.
+   * Per Task 6.1.13 and API_CONTRACTS.md lines 5287-5327.
+   *
+   * Queries users.default_payment_method and users.default_payment_account.
+   * Decrypts payment_account using Pattern 9 encryption utility.
+   *
+   * SECURITY:
+   * - Filters by client_id AND user_id (Section 9 Critical Rule #1)
+   * - Decrypts default_payment_account (Pattern 9)
+   *
+   * @param userId - User ID
+   * @param clientId - Tenant ID for multi-tenant isolation
+   * @returns PaymentInfoResult with hasPaymentInfo, paymentMethod, paymentAccount
+   */
+  async getPaymentInfo(
+    userId: string,
+    clientId: string
+  ): Promise<{
+    hasPaymentInfo: boolean;
+    paymentMethod: 'paypal' | 'venmo' | null;
+    paymentAccount: string | null;
+  }> {
+    // Import decrypt lazily to avoid circular dependencies
+    const { safeDecrypt } = await import('@/lib/utils/encryption');
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('default_payment_method, default_payment_account')
+      .eq('id', userId)
+      .eq('client_id', clientId) // Critical Rule #1: Tenant isolation
+      .single();
+
+    if (error) {
+      console.error('[UserRepository] Error fetching payment info:', error);
+      // Return empty result on error (user may not exist)
+      return {
+        hasPaymentInfo: false,
+        paymentMethod: null,
+        paymentAccount: null,
+      };
+    }
+
+    // No saved payment info
+    if (!data.default_payment_method) {
+      return {
+        hasPaymentInfo: false,
+        paymentMethod: null,
+        paymentAccount: null,
+      };
+    }
+
+    // Decrypt payment account (Pattern 9)
+    const decryptedAccount = data.default_payment_account
+      ? safeDecrypt(data.default_payment_account)
+      : null;
+
+    return {
+      hasPaymentInfo: true,
+      paymentMethod: data.default_payment_method as 'paypal' | 'venmo',
+      paymentAccount: decryptedAccount,
+    };
+  },
+
+  /**
+   * Save user's default payment information.
+   * Per Task 6.1.14 and API_CONTRACTS.md lines 5331-5451.
+   *
+   * Encrypts payment_account using Pattern 9 (AES-256-GCM) before storage.
+   * Called when saveAsDefault=true during payment info submission.
+   *
+   * SECURITY:
+   * - Encrypts default_payment_account before UPDATE (Pattern 9)
+   * - Filters by client_id AND user_id (Section 9 Critical Rule #1)
+   * - Verifies count > 0 after UPDATE (Section 9 checklist item 4)
+   *
+   * @param userId - User ID
+   * @param clientId - Tenant ID for multi-tenant isolation
+   * @param paymentMethod - 'paypal' or 'venmo'
+   * @param paymentAccount - PayPal email or Venmo handle (will be encrypted)
+   * @returns boolean indicating success
+   */
+  async savePaymentInfo(
+    userId: string,
+    clientId: string,
+    paymentMethod: 'paypal' | 'venmo',
+    paymentAccount: string
+  ): Promise<boolean> {
+    // Import encrypt lazily to avoid circular dependencies
+    const { encrypt } = await import('@/lib/utils/encryption');
+
+    const supabase = await createClient();
+    const now = new Date().toISOString();
+
+    // Encrypt payment account before storage (Pattern 9)
+    const encryptedAccount = encrypt(paymentAccount);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({
+        default_payment_method: paymentMethod,
+        default_payment_account: encryptedAccount,
+        payment_info_updated_at: now,
+        updated_at: now,
+      })
+      .eq('id', userId)
+      .eq('client_id', clientId) // Critical Rule #1: Tenant isolation
+      .select('id');
+
+    if (error) {
+      console.error('[UserRepository] Error saving payment info:', error);
+      throw new Error(`Failed to save payment info: ${error.message}`);
+    }
+
+    // Section 9 checklist item 4: Verify count > 0
+    if (!data || data.length === 0) {
+      console.error(
+        '[UserRepository] No rows updated for payment info - user not found'
+      );
+      return false;
+    }
+
+    return true;
+  },
 };

@@ -2,7 +2,7 @@
  * Mission Service
  *
  * Business logic for missions page data transformation, status computation,
- * and reward claiming. Handles 14-status computation, 12-priority sorting,
+ * and reward claiming. Handles 16-status computation, 12-priority sorting,
  * 8 flippable card types, and VIP metric-aware formatting.
  *
  * References:
@@ -929,7 +929,7 @@ function sortMissions(
 
 /**
  * Get all missions for the missions page.
- * Computes 14 statuses, applies 12-priority sorting, generates 8 flippable card types.
+ * Computes 16 statuses, applies 12-priority sorting, generates 8 flippable card types.
  *
  * Per API_CONTRACTS.md lines 2955-3238
  *

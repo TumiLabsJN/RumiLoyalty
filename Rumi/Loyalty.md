@@ -1896,18 +1896,23 @@ Create calendar events as reminders for all manual tasks, triggered when action 
 
 ### Pattern 7: Commission Boost State History
 
-**Requirement:** Commission boost state transitions MUST be logged to audit table via database trigger.
+**Requirement:** Commission boost state transitions MUST be logged to audit table for complete financial compliance.
 
 **Apply to:**
+- **Initial creation** (application code logs NULL → 'scheduled' when boost is claimed)
 - All commission boost status updates (cron activation, expiration)
 - Admin payout actions (pending_payout → paid)
 - User payment info submission (pending_info → pending_payout)
 
-**Rule:** Database trigger logs all boost_status changes to commission_boost_state_history table (financial compliance).
+**Rule:**
+- **Creation:** Application code inserts initial state history record (from_status=NULL, to_status='scheduled') when creating commission_boost_redemptions record. This ensures complete audit trail from boost creation.
+- **Updates:** Database trigger logs all subsequent boost_status changes to commission_boost_state_history table.
 
-**Schema:** commission_boost_state_history table (SchemaFinalv2.md Section 2.7)
+**Schema:** commission_boost_state_history table (SchemaFinalv2.md Section 2.6)
 
-👉 **Implementation:** SchemaFinalv2.md lines 735-750 (trigger), ARCHITECTURE.md Section 10.7
+👉 **Implementation:**
+- Creation logging: commissionBoostRepository.createBoostState() (application code)
+- Update logging: SchemaFinalv2.md lines 786-820 (AFTER UPDATE trigger)
 
 ---
 

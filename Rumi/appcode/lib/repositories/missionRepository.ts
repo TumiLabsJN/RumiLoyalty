@@ -478,7 +478,7 @@ export const missionRepository = {
    * Per API_CONTRACTS.md lines 2955-3820:
    * - Returns missions for user's tier + locked previews from higher tiers
    * - Joins with progress, redemptions, and sub-state tables
-   * - Service layer computes 14 statuses from this data
+   * - Service layer computes 16 statuses from this data
    *
    * SECURITY: Filters by client_id (multitenancy)
    */

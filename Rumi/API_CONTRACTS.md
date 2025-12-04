@@ -5473,6 +5473,7 @@ SELECT
   rw.type,
   rw.name,
   rw.description,
+  rw.value_data,        -- JSONB: Required for formatting (amount, percent, durationDays, displayText)
   rw.reward_source,
   r.claimed_at,
   r.concluded_at

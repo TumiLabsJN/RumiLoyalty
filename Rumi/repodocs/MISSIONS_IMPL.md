@@ -18,9 +18,9 @@
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `appcode/lib/repositories/missionRepository.ts` | 1,111 | Database queries with tenant isolation (RPC-based) |
+| `appcode/lib/repositories/missionRepository.ts` | 1,049 | Database queries with tenant isolation (RPC-based) |
 | `appcode/lib/repositories/raffleRepository.ts` | 316 | Raffle participation queries |
-| `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 14 statuses, sorting, flippable cards |
+| `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 16 statuses, sorting, flippable cards |
 | `appcode/lib/types/rpc.ts` | 124 | TypeScript types for RPC function return values |
 | `appcode/app/api/missions/route.ts` | 130 | GET /api/missions endpoint |
 | `appcode/app/api/missions/[missionId]/claim/route.ts` | 167 | POST /api/missions/:id/claim endpoint |
@@ -45,7 +45,7 @@
 **Quick Navigation:**
 - [Core Functions](#core-functions) - Repositories and services
 - [Database Queries](#database-queries) - All queries with filters
-- [Status Computation](#status-computation) - 14 statuses logic
+- [Status Computation](#status-computation) - 16 statuses logic
 - [Error Handling](#error-handling) - Error codes and scenarios
 - [Debugging](#debugging-checklist) - Common issues and fixes
 
@@ -638,8 +638,8 @@ return {
 ```
 
 **Calls:**
-- `missionRepository.listAvailable()` (missionRepository.ts:484) - Get raw data
-- `computeStatus()` (missionService.ts:490) - Derive 14 statuses
+- `missionRepository.listAvailable()` (missionRepository.ts:485) - Get raw data
+- `computeStatus()` (missionService.ts:490) - Derive 16 statuses
 - `transformMission()` (missionService.ts:750) - Format for API response
 - `sortMissions()` (missionService.ts:887) - Apply 12-priority sorting
 
@@ -651,7 +651,7 @@ return {
 
 **Location:** `appcode/lib/services/missionService.ts:490-600`
 
-**14 Possible Statuses (lines 96-112):**
+**16 Possible Statuses (lines 96-112):**
 ```typescript
 export type MissionStatus =
   | 'in_progress'        // Active mission, user working on it

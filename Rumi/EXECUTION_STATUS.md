@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-03 (Step 5.4 COMPLETE - Mission Testing) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-04 (Added pre-implementation validation + subtask approval workflow) [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **FILE SIZE LIMIT: 250 lines maximum**
 
-**Current size:** 240 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
+**Current size:** 248 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
 **Status:** ✅ UNDER LIMIT [✅ UNDER LIMIT / ⚠️ OVER LIMIT]
 
 **PRE-MODIFICATION CHECK:**
@@ -31,7 +31,7 @@ wc -l EXECUTION_STATUS.md  # Still under 250?
 
 ## ⚠️ FOR NEW/COMPACTED LLM SESSIONS
 
-**Phase 1, 2, 3, 4, 5 COMPLETE.** Ready for Phase 6 (Rewards APIs). **Schema:** VARCHAR(50) with CHECK constraints (NOT ENUMs).
+**Phase 1, 2, 3, 4, 5 COMPLETE. Phase 6 IN PROGRESS (Tasks 6.1.1-6.1.7 done).** **Schema:** VARCHAR(50) with CHECK constraints (NOT ENUMs).
 
 **Critical Rules:**
 - Read "Decision Authority" in EXECUTION_PLAN.md - ASK USER if ambiguous
@@ -49,11 +49,55 @@ wc -l EXECUTION_STATUS.md  # Still under 250?
 
 **Starting New Task:** Update "Current Task" → Read EXECUTION_PLAN.md → Read source docs → Create "What's Left" checklist → Move previous to "Recently Completed"
 
+**Executing Subtasks (X.Y.Z format):**
+1. Read EXECUTION_PLAN.md subtask (e.g., Task 6.1.1)
+2. Read referenced docs (API_CONTRACTS.md lines, SchemaFinalv2.md sections)
+3. **STOP - Validate alignment:** Compare task description vs. reference docs
+   - If discrepancy found: Report to user, await clarification
+   - If aligned: Proceed to implementation
+4. Implement EXACTLY per API_CONTRACTS.md (NO additions, NO interpretations)
+5. Mark subtask [x] in EXECUTION_PLAN.md
+6. **STOP - Request approval:** "Task X.Y.Z complete. Review and approve before X.Y.(Z+1)?"
+7. Only proceed to next subtask after user confirmation
+
 **Completing Task:** Mark [x] in EXECUTION_PLAN.md → Add to "Recently Completed" → Clear "What's Left" → Move to next task → Share Acceptance Criteria Verification table
 
 **Completing Step (X.Y.*):** Commit: "Complete: Step X.Y - [description]" (NOT after individual tasks)
 
 **Considering Change:** Use Change Request Decision Tree in ChangeRequestDoc.md, ASK USER if unclear
+
+---
+
+## 🔍 PRE-IMPLEMENTATION VALIDATION (MANDATORY)
+
+**Before writing ANY code for a subtask:**
+
+1. **Read task from EXECUTION_PLAN.md:**
+   - Extract: Task number, description, acceptance criteria, references
+
+2. **Read ALL referenced documents:**
+   - API_CONTRACTS.md lines X-Y
+   - SchemaFinalv2.md sections
+   - ARCHITECTURE.md sections
+   - Loyalty.md flows
+
+3. **⚠️ STOP - Compare and report discrepancies:**
+   - Does task description match API_CONTRACTS.md spec?
+   - Are field names consistent with SchemaFinalv2.md?
+   - Are status codes/enums aligned across docs?
+   - Are acceptance criteria verifiable from specs?
+
+4. **If ANY discrepancy found:**
+   - ❌ DO NOT implement
+   - ✅ Report: "Discrepancy detected between EXECUTION_PLAN.md Task X.Y.Z and [DOC] lines A-B: [explain difference]"
+   - ✅ Ask user: "Which source is correct? Should I update EXECUTION_PLAN.md or follow [DOC]?"
+   - ✅ Wait for user decision
+
+5. **Only after validation passes:**
+   - Implement EXACTLY per API_CONTRACTS.md
+   - NO additional features
+   - NO interpretation of ambiguous specs
+   - NO "improvements" beyond spec
 
 ---
 
@@ -122,6 +166,10 @@ If either check fails, FIX before proceeding with task.
 ❌ **Growing file beyond 250 lines** → Run `wc -l` after changes, trim if over
 ❌ **Keeping old CR sections** → Move to ChangeRequestDoc.md when closed
 ❌ **Including extracted data** → Violates Anti-Hallucination Rule, read source docs instead
+❌ **Implementing without pre-validation** → Read task, read references, REPORT discrepancies BEFORE coding
+❌ **Adding features not in API_CONTRACTS.md** → Implement ONLY what's specified, nothing extra
+❌ **Interpreting ambiguous specs** → ASK USER if task differs from API_CONTRACTS.md
+❌ **Skipping subtask approval** → STOP after each subtask, await user OK before next
 
 **Compliance check before saving:**
 - [ ] Line count < 250 lines (`wc -l EXECUTION_STATUS.md`)
@@ -134,26 +182,27 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**Step 5.4 - Mission Testing** (2025-12-03)
-- `tests/integration/services/missionService.test.ts` - 5 passing + 26 todo (232 lines)
-- `tests/integration/missions/completion-detection.test.ts` - 8 passing (269 lines)
-- `tests/integration/missions/claim-creates-redemption.test.ts` - 9 passing (495 lines)
-- `tests/integration/missions/state-validation.test.ts` - 7 passing (376 lines)
-- `tests/integration/missions/tier-filtering.test.ts` - 9 passing (324 lines)
-- `tests/integration/missions/history-completeness.test.ts` - 6 passing (380 lines)
-- `tests/integration/missions/raffle-winner-selection.test.ts` - 9 passing (461 lines)
-- **Total: 53 passing tests**, all 8 tasks (5.4.1-5.4.8) complete per EXECUTION_PLAN.md
+**Step 6.1 - Reward Repositories** (2025-12-04)
+- `lib/repositories/rewardRepository.ts` - 638 lines, 8 functions (listAvailable, getUsageCount, getById, hasActiveRedemption, createRedemption, redeemReward, getConcludedRedemptions, getRedemptionCount)
+- `lib/repositories/commissionBoostRepository.ts` - 225 lines, 2 functions (createBoostState, savePaymentInfo)
+- `lib/repositories/physicalGiftRepository.ts` - 189 lines, 2 functions (createGiftState, markAsShipped)
+- `lib/repositories/userRepository.ts` - 485 lines, 2 payment functions (getPaymentInfo, savePaymentInfo)
+- **Total: 1,537 lines**, all 14 tasks (6.1.1-6.1.14) complete, REWARDS_IMPL.md created
 
 ---
 
 ## 🎯 CURRENT TASK
 
-**Task:** Phase 5 COMPLETE - Ready for Phase 6 (Rewards APIs)
-**Next Step:** Start Step 6.1 - Rewards Repositories
+**Task:** Step 6.2 - Reward Services (Task 6.2.1 DONE)
+**Next Step:** Continue with Task 6.2.2 (listAvailableRewards)
 
 **What's Left:**
-- [ ] Read EXECUTION_PLAN.md Phase 6 tasks
-- [ ] Start Step 6.1 when instructed
+- [x] Task 6.2.1: Create rewardService.ts file
+- [ ] Task 6.2.2: listAvailableRewards - status computation, formatting, sorting
+- [ ] Task 6.2.3: claimReward - 11 pre-claim validation rules, type routing
+- [ ] Task 6.2.4-6.2.7a: Claim functions by type + Google Calendar
+- [ ] Task 6.2.8: getRewardHistory
+- [ ] Task 6.2.9-6.2.10: Payment info service functions
 
 ---
 
@@ -161,16 +210,16 @@ If either check fails, FIX before proceeding with task.
 
 **Count:** 10/10 ✅ AT LIMIT
 
-1. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 passing tests, 7 test files, multi-tenant + completion + claim + state + tier + history + raffle
-2. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes: GET /api/missions, POST claim, POST participate, GET history
-3. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts (1,295 lines), 14 statuses, 8 flippable cards, 12-priority sort
-4. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository.ts (1,252 lines), raffleRepository.ts (316 lines)
-5. [x] **Tasks 4.4.1-3** Dashboard Testing (2025-12-03) - 21 tests, multi-tenant isolation, congrats modal
-6. [x] **Tasks 4.3.1-2** Dashboard API Routes (2025-12-03) - GET /api/dashboard, GET /api/dashboard/featured-mission
-7. [x] **Tasks 4.2.1-4** Dashboard Services (2025-12-03) - dashboardService.ts (513 lines), VIP metric formatting
-8. [x] **Tasks 4.1.1-5** Dashboard Repositories (2025-12-03) - dashboardRepository.ts, missionRepository.ts
-9. [x] **Tasks 3.5.1-17** Security Infrastructure (2025-12-03) - Rate limiting, validation, admin/file/cron auth
-10. [x] **Tasks 3.4.1-7** Auth Integration Tests (2025-12-02) - 6 tests, E2E Playwright ← DELETE WHEN ADDING #11
+1. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with listAvailable (RPC), getUsageCount, createRedemption
+2. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 passing tests, 7 test files, multi-tenant + completion + claim + state + tier + history + raffle
+3. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes: GET /api/missions, POST claim, POST participate, GET history
+4. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts (1,295 lines), 14 statuses, 8 flippable cards, 12-priority sort
+5. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository.ts (1,252 lines), raffleRepository.ts (316 lines)
+6. [x] **Tasks 4.4.1-3** Dashboard Testing (2025-12-03) - 21 tests, multi-tenant isolation, congrats modal
+7. [x] **Tasks 4.3.1-2** Dashboard API Routes (2025-12-03) - GET /api/dashboard, GET /api/dashboard/featured-mission
+8. [x] **Tasks 4.2.1-4** Dashboard Services (2025-12-03) - dashboardService.ts (513 lines), VIP metric formatting
+9. [x] **Tasks 4.1.1-5** Dashboard Repositories (2025-12-03) - dashboardRepository.ts, missionRepository.ts
+10. [x] **Tasks 3.5.1-17** Security Infrastructure (2025-12-03) - Rate limiting, validation, admin/file/cron auth
 
 ---
 
@@ -194,46 +243,6 @@ If either check fails, FIX before proceeding with task.
 ## 🚫 ACTIVE BLOCKERS
 
 None.
-
----
-
-## 🧪 SELF-TEST (Run monthly or when file feels bloated)
-
-```bash
-# Test 1: File size
-LINES=$(wc -l < EXECUTION_STATUS.md)
-if [ $LINES -gt 250 ]; then
-  echo "❌ FAIL: File is $LINES lines (max 250)"
-else
-  echo "✅ PASS: File is $LINES lines"
-fi
-
-# Test 2: RECENTLY COMPLETED cap
-COUNT=$(sed -n '/## ✅ RECENTLY COMPLETED/,/^## /p' EXECUTION_STATUS.md | grep -c "^- \[x\]")
-if [ $COUNT -gt 10 ]; then
-  echo "❌ FAIL: RECENTLY COMPLETED has $COUNT entries (max 10)"
-else
-  echo "✅ PASS: RECENTLY COMPLETED has $COUNT entries"
-fi
-
-# Test 3: No duplicate task lists
-DUPE=$(grep -c "^- \[x\] \*\*Task 2.1.1:" EXECUTION_STATUS.md)
-if [ $DUPE -gt 1 ]; then
-  echo "❌ FAIL: Duplicate task lists found"
-else
-  echo "✅ PASS: No duplicate task lists"
-fi
-
-# Test 4: No old RESOLVED sections
-RESOLVED=$(grep -c "^## ✅ RESOLVED:" EXECUTION_STATUS.md)
-if [ $RESOLVED -gt 0 ]; then
-  echo "⚠️  WARNING: Found $RESOLVED RESOLVED sections (should be 0)"
-else
-  echo "✅ PASS: No RESOLVED sections"
-fi
-```
-
-**Expected output:** All passes (or 1 warning if RESOLVED sections exist)
 
 ---
 

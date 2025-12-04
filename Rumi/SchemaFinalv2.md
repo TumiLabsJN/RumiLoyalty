@@ -770,7 +770,9 @@ CREATE INDEX idx_boost_tenant ON commission_boost_redemptions(client_id, boost_s
 - User disputes: Definitive proof of state transitions
 - Analytics: Measure transition times, identify bottlenecks
 
-**Auto-populated by trigger:** Database trigger automatically logs all commission boost status changes (see Loyalty.md Pattern 7)
+**Logging Mechanism:**
+- **Initial creation (INSERT):** Application code logs the first state history record (from_status=NULL, to_status='scheduled') when creating a commission_boost_redemptions record. This ensures complete audit trail from boost creation. See commissionBoostRepository.createBoostState().
+- **Subsequent updates (UPDATE):** Database trigger automatically logs all boost_status changes (see Loyalty.md Pattern 7)
 
 **Indexes:**
 ```sql

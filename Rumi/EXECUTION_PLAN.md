@@ -1017,84 +1017,82 @@
 **Objective:** Implement reward listing, redemption, sub-state management.
 
 ## Step 6.1: Reward Repositories
-- [ ] **Task 6.1.1:** Create reward repository file
+- [x] **Task 6.1.1:** Create reward repository file
     - **Action:** Create `/lib/repositories/rewardRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 6.1.2:** Implement listAvailable function
+- [x] **Task 6.1.2:** Implement listAvailable function
     - **Action:** Add function querying rewards with active redemptions and sub-states using LEFT JOINs
     - **References:** API_CONTRACTS.md lines 4053-4827 (GET /api/rewards database query lines 4733-4792), SchemaFinalv2.md (rewards table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** MUST execute single optimized query (lines 4733-4792) with LEFT JOINs to: (1) redemptions table WHERE mission_progress_id IS NULL AND status NOT IN ('concluded', 'rejected') AND deleted_at IS NULL (lines 4769-4775), (2) commission_boost_redemptions for boost_status/activated_at/expires_at/sales_at_expiration (lines 4758, 4739-4743), (3) physical_gift_redemptions for shipping_city/shipped_at (lines 4759, 4745-4747), (4) tiers for tier_name (line 4768). Filter rewards WHERE client_id=$clientId AND enabled=true AND reward_source='vip_tier' AND (tier_eligibility=$currentTier OR preview_from_tier filtering lines 4782-4790). Return all data needed for backend status computation and formatting including rewardSource field. Use single query strategy for performance (lines 4796-4804)
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), executes single query with LEFT JOINs to redemptions/commission_boost_redemptions/physical_gift_redemptions/tiers per lines 4733-4792, filters by enabled=true AND reward_source='vip_tier' (excludes mission rewards per line 4781), filters by tier_eligibility OR preview_from_tier logic (lines 4782-4790), excludes concluded/rejected redemptions (line 4773), includes all fields needed for status computation (redemption_status, boost_status, shipping_city, shipped_at, scheduled dates, activation dates), includes rewardSource in response, ordered by display_order ASC for backend re-sorting
 
-- [ ] **Task 6.1.3:** Implement getUsageCount function
+- [x] **Task 6.1.3:** Implement getUsageCount function
     - **Action:** Add function counting VIP tier redemptions for current tier only with tier achievement reset logic
     - **References:** API_CONTRACTS.md lines 4540-4590 (Usage Count Calculation for VIP Tier Rewards), SchemaFinalv2.md (redemptions table), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** MUST execute query per lines 4542-4556: SELECT COUNT(*) FROM redemptions WHERE user_id=$userId AND reward_id=$rewardId AND mission_progress_id IS NULL (VIP tier rewards only, line 4548) AND tier_at_claim=$currentTier (current tier only, line 4549) AND status IN ('claimed', 'fulfilled', 'concluded') (active and completed claims, line 4550) AND deleted_at IS NULL (not soft-deleted, line 4551) AND created_at >= (SELECT tier_achieved_at FROM users WHERE id=$userId) (resets on tier change, lines 4552-4556). Key points (lines 4559-4562): mission rewards don't count (mission_progress_id IS NULL), only current tier counts (tier_at_claim filter), resets when tier changes (tier_achieved_at comparison). Usage count reset behavior (lines 4564-4600): tier promotion resets to 0, tier demotion soft-deletes higher tier redemptions, re-promotion gives fresh limits. Note: This function is for VIP tier rewards only (reward_source='vip_tier'); mission reward usage is tracked separately via mission_progress_id
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), counts WHERE mission_progress_id IS NULL (VIP tier rewards only per line 4548), filters tier_at_claim=$currentTier (current tier only per line 4549), filters status IN ('claimed', 'fulfilled', 'concluded') per line 4550, excludes soft-deleted (deleted_at IS NULL per line 4551), filters created_at >= tier_achieved_at for tier change reset logic (lines 4552-4556), implements fresh count on tier promotion/demotion/re-promotion per lines 4564-4600, validates reward has reward_source='vip_tier' before counting
 
-- [ ] **Task 6.1.4:** Implement redeemReward function
+- [x] **Task 6.1.4:** Implement redeemReward function
     - **Action:** Add transactional function to insert redemption with tier-specific usage counting and create sub-state tables
     - **References:** API_CONTRACTS.md lines 4810-5241 (POST /api/rewards/:id/claim with usage limits and sub-state requirements), SchemaFinalv2.md (redemptions, commission_boost_redemptions, physical_gift_redemptions tables), Loyalty.md Pattern 1 (Transactional), Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
     - **Implementation Guide:** MUST first validate reward.reward_source='vip_tier' (line 4934-4938, mission rewards use POST /api/missions/:id/claim instead). MUST execute transactional INSERT with tier-specific data: (1) INSERT INTO redemptions (user_id, reward_id, client_id, status='claimed', claimed_at=NOW(), tier_at_claim=$currentTier, mission_progress_id=NULL for VIP tier rewards line 4908, scheduled_activation_date/time if provided) (2) Count usage WHERE mission_progress_id IS NULL AND tier_at_claim=$currentTier AND created_at >= tier_achieved_at (lines 4919-4931) to enforce usage limits, (3) For commission_boost: INSERT INTO commission_boost_redemptions (redemption_id, boost_status='pending_info', scheduled_activation_date/time), (4) For physical_gift: INSERT INTO physical_gift_redemptions (redemption_id, shipping_city, shipping_state, shipping_address_encrypted, size_value if provided), (5) For discount: store scheduled_activation_date and scheduled_activation_time in redemptions table. NO points deduction (VIP tier rewards use redemption_quantity limits, not points per line 4814). Redemption period reset: gift_card/physical_gift/experience count once forever, commission_boost/spark_ads/discount reset on tier re-achievement (lines 4953-4965)
     - **Acceptance Criteria:** MUST validate reward.reward_source='vip_tier' before processing (lines 4934-4938), MUST validate client_id is provided (Section 9 Critical Rule #2), MUST use transaction, NO points deduction (VIP tier rewards line 4814), enforces usage limits with tier-specific count WHERE mission_progress_id IS NULL AND tier_at_claim=$currentTier AND created_at >= tier_achieved_at (lines 4919-4931), inserts redemption with tier_at_claim field, creates sub-state for commission_boost (commission_boost_redemptions) or physical_gift (physical_gift_redemptions), applies redemption period reset rules (lines 4953-4965), returns redemption ID and created sub-state IDs
 
-- [ ] **Task 6.1.5:** Create redemption repository file
+- [x] **Task 6.1.5:** Create redemption repository file
     - **Action:** Create `/lib/repositories/redemptionRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 6.1.6:** Implement getHistory function
+- [x] **Task 6.1.6:** Implement getHistory function
     - **Action:** Add function querying concluded redemptions with INNER JOIN rewards for user
     - **References:** API_CONTRACTS.md lines 5439-5578 (GET /api/rewards/history backend query lines 5454-5468), SchemaFinalv2.md (redemptions, rewards tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Implementation Guide:** MUST execute query (lines 5454-5468): SELECT redemptions.id, reward_id, rewards.type, rewards.name, rewards.description, rewards.reward_source, claimed_at, concluded_at FROM redemptions INNER JOIN rewards ON redemptions.reward_id = rewards.id WHERE redemptions.user_id=$userId AND redemptions.status='concluded' AND redemptions.client_id=$clientId ORDER BY concluded_at DESC. Return all fields needed for backend formatting: type (for formatting rules), name, description, value_data JSONB (for amount/percent/durationDays/displayText), reward_source (for rewardSource in response), claimed_at, concluded_at. NO pagination per API spec (lines 5413-5554 show no offset/limit parameters). Note: History can contain both VIP tier and mission rewards
+    - **Implementation Guide:** MUST execute query (lines 5467-5485): SELECT redemptions.id, reward_id, rewards.type, rewards.name, rewards.description, rewards.value_data, rewards.reward_source, claimed_at, concluded_at FROM redemptions INNER JOIN rewards ON redemptions.reward_id = rewards.id WHERE redemptions.user_id=$userId AND redemptions.status='concluded' AND redemptions.client_id=$clientId ORDER BY concluded_at DESC. Return all fields needed for backend formatting: type (for formatting rules), name, description, value_data JSONB (for amount/percent/durationDays/displayText), reward_source (for rewardSource in response), claimed_at, concluded_at. NO pagination per API spec (lines 5413-5554 show no offset/limit parameters). Note: History can contain both VIP tier and mission rewards
     - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), executes INNER JOIN rewards (line 5490), filters WHERE status='concluded' (line 5466), NO pagination (API spec shows no pagination), ordered by concluded_at DESC (line 5467), returns all fields needed for backend formatting (type, name, description, value_data, reward_source, claimed_at, concluded_at), includes rewardSource in response (line 5497)
 
-- [ ] **Task 6.1.7:** Create commission boost repository file
+- [x] **Task 6.1.7:** Create commission boost repository file
     - **Action:** Create `/lib/repositories/commissionBoostRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640, includes Encryption Repository Example lines 641-717), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 6.1.8:** Implement createBoostState function
+- [x] **Task 6.1.8:** Implement createBoostState function
     - **Action:** Add function to insert commission_boost_redemptions record with state history
-    - **References:** SchemaFinalv2.md (commission_boost_redemptions table), Loyalty.md Pattern 7 (Commission Boost State History), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST insert into commission_boost_redemptions AND commission_boost_state_history, creates state with boost_percentage, start_date, end_date, boost_status='active'
+    - **References:** SchemaFinalv2.md (commission_boost_redemptions table lines 666-746), Loyalty.md Pattern 7 (Commission Boost State History), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST insert into commission_boost_redemptions AND commission_boost_state_history (from_status=NULL, to_status='scheduled'), creates state with boost_rate, scheduled_activation_date, duration_days, boost_status='scheduled' (per SchemaFinalv2.md default)
 
-- [ ] **Task 6.1.9:** Implement deactivateBoost function
-    - **Action:** Add function to update boost_status='deactivated' and insert state history record
-    - **References:** SchemaFinalv2.md (commission_boost_redemptions table), Loyalty.md Pattern 7 (Commission Boost State History), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), updates boost_status to 'deactivated', inserts commission_boost_state_history record
+- [x] **Task 6.1.9:** ~~Implement deactivateBoost function~~ **REMOVED**
+    - **Reason:** 'deactivated' is not a valid boost_status per SchemaFinalv2.md CHECK constraint. Boost cancellation is handled via parent redemptions.status='rejected' pattern instead. No new status needed.
 
-- [ ] **Task 6.1.10:** Create physical gift repository file
+- [x] **Task 6.1.10:** Create physical gift repository file
     - **Action:** Create `/lib/repositories/physicalGiftRepository.ts`
     - **References:** ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640, includes Encryption Repository Example lines 641-717), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern
 
-- [ ] **Task 6.1.11:** Implement createGiftState function
-    - **Action:** Add function to insert physical_gift_redemptions with encrypted shipping address
-    - **References:** SchemaFinalv2.md (physical_gift_redemptions table), Loyalty.md Pattern 6 (VIP Reward Lifecycle), Pattern 9 (Encryption), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), MUST encrypt shipping_address before INSERT (Section 9 checklist item 6), creates record with shipping_status='pending'
+- [x] **Task 6.1.11:** Implement createGiftState function
+    - **Action:** Add function to insert physical_gift_redemptions with shipping address
+    - **References:** SchemaFinalv2.md (physical_gift_redemptions table lines 826-890), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST validate client_id is provided (Section 9 Critical Rule #2), inserts shipping info fields per SchemaFinalv2.md (no encryption - shipping addresses not classified as sensitive per Loyalty.md Pattern 9), shipping state inferred from timestamps (shipped_at IS NULL = pending, per schema design)
 
-- [ ] **Task 6.1.12:** Implement updateShippingStatus function
-    - **Action:** Add function to update shipping_status with state transition validation
-    - **References:** SchemaFinalv2.md (physical_gift_redemptions table), Loyalty.md Pattern 6 (VIP Reward Lifecycle), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), validates shipping_status transitions (pending→shipped→delivered)
+- [x] **Task 6.1.12:** Implement markAsShipped function
+    - **Action:** Add function to update shipped_at timestamp with tracking info (per SchemaFinalv2.md timestamp-based design, no shipping_status column)
+    - **References:** SchemaFinalv2.md (physical_gift_redemptions table lines 867-870), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), MUST throw NotFoundError if count === 0 (Section 9 checklist item 5), sets shipped_at=NOW(), tracking_number, carrier; shipping state inferred from timestamps (shipped_at IS NULL = pending, shipped_at IS NOT NULL = shipped)
 
-- [ ] **Task 6.1.13:** Implement getPaymentInfo function
+- [x] **Task 6.1.13:** Implement getPaymentInfo function
     - **Action:** Add function to retrieve and decrypt saved payment info from users table
     - **References:** API_CONTRACTS.md lines 5246-5289 (GET /api/user/payment-info response schema lines 5260-5264), ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption)
     - **Implementation Guide:** Query users table: SELECT default_payment_method, default_payment_account WHERE id=$userId AND client_id=$clientId. Decrypt default_payment_account using encryption utility (Pattern 9). Return object with hasPaymentInfo boolean, paymentMethod ('paypal'|'venmo'|null), and decrypted paymentAccount (string|null) per lines 5260-5264. If default_payment_method IS NULL return hasPaymentInfo=false with null values (lines 5278-5285), else return hasPaymentInfo=true with decrypted account (lines 5269-5275)
     - **Acceptance Criteria:** MUST decrypt default_payment_account field using encryption utility (Section 9 checklist item 6, Pattern 9), MUST filter by client_id AND user_id (Section 9 Critical Rule #1), queries users.default_payment_method and users.default_payment_account (not commission_boost_redemptions), returns object matching lines 5260-5264 with hasPaymentInfo boolean, paymentMethod ('paypal'|'venmo'|null), paymentAccount (decrypted string|null), returns hasPaymentInfo=false with nulls if no saved info
 
-- [ ] **Task 6.1.14:** Implement savePaymentInfo function
-    - **Action:** Add function to update redemption with encrypted payment info and optionally save to user defaults
-    - **References:** API_CONTRACTS.md lines 5290-5412 (POST /api/rewards/:id/payment-info with encryption and status transition), ARCHITECTURE.md Section 5 (Encryption Repository Example, lines 641-717), Section 9 (Multitenancy Enforcement, lines 1104-1137), Loyalty.md Pattern 9 (Sensitive Data Encryption)
-    - **Implementation Guide:** MUST perform 2 database operations: (1) UPDATE redemptions SET payment_method=$paymentMethod, payment_account=encrypt($paymentAccount), status='fulfilled', payment_info_collected_at=NOW() WHERE id=$redemptionId AND client_id=$clientId (lines 5343-5345), verify count > 0 after UPDATE (Section 9 checklist item 4), (2) if saveAsDefault=true then UPDATE users SET default_payment_method=$paymentMethod, default_payment_account=encrypt($paymentAccount) WHERE id=$userId AND client_id=$clientId (lines 5309, 5347). PaymentMethod enum ONLY 'paypal' or 'venmo' (line 5307, NOT zelle or bank_account). Return updated redemption data and userPaymentUpdated boolean
-    - **Acceptance Criteria:** MUST encrypt payment_account before UPDATE using encryption utility (Section 9 checklist item 6, Pattern 9), validates paymentMethod enum is 'paypal' or 'venmo' ONLY (line 5307), updates redemption.status from 'pending_info' to 'fulfilled' (line 5343), sets payment_info_collected_at timestamp (line 5345), MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), if saveAsDefault=true updates users.default_payment_method and users.default_payment_account with encryption (lines 5309, 5347), returns userPaymentUpdated boolean
+- [x] **Task 6.1.14:** Implement savePaymentInfo function
+    - **Action:** Add function to update commission_boost_redemptions with encrypted payment info, update redemption status, and optionally save to user defaults
+    - **References:** API_CONTRACTS.md lines 5331-5451 (POST /api/rewards/:id/payment-info), SchemaFinalv2.md lines 662-745 (commission_boost_redemptions table - payment fields), lines 590-661 (redemptions table - status only), ARCHITECTURE.md Section 9 (Multitenancy Enforcement), Loyalty.md Pattern 9 (Sensitive Data Encryption)
+    - **Implementation Guide:** MUST perform 3 database operations: (1) UPDATE commission_boost_redemptions SET payment_method=$paymentMethod, payment_account=encrypt($paymentAccount), payment_info_collected_at=NOW(), boost_status='pending_payout' WHERE redemption_id=$redemptionId AND client_id=$clientId, verify count > 0 (Section 9 checklist item 4), (2) UPDATE redemptions SET status='fulfilled', fulfilled_at=NOW() WHERE id=$redemptionId AND client_id=$clientId, (3) if saveAsDefault=true then UPDATE users SET default_payment_method=$paymentMethod, default_payment_account=encrypt($paymentAccount), payment_info_updated_at=NOW() WHERE id=$userId AND client_id=$clientId. PaymentMethod ONLY 'paypal' or 'venmo'. Return updated redemption data and userPaymentUpdated boolean
+    - **Acceptance Criteria:** MUST encrypt payment_account before UPDATE using encryption utility (Pattern 9), validates paymentMethod is 'paypal' or 'venmo' ONLY, updates commission_boost_redemptions.payment_method/payment_account/payment_info_collected_at (NOT redemptions table), updates commission_boost_redemptions.boost_status to 'pending_payout', updates redemptions.status to 'fulfilled' and fulfilled_at timestamp, MUST filter by client_id (Section 9 Critical Rule #1), MUST verify count > 0 after UPDATE (Section 9 checklist item 4), if saveAsDefault=true updates users.default_payment_method and users.default_payment_account with encryption, returns userPaymentUpdated boolean
 
 ## Step 6.2: Reward Services
-- [ ] **Task 6.2.1:** Create reward service file
+- [x] **Task 6.2.1:** Create reward service file
     - **Action:** Create `/lib/services/rewardService.ts`
     - **References:** ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943)
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns

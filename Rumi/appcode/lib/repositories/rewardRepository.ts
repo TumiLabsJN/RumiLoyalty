@@ -14,6 +14,7 @@
 
 import { createClient } from '@/lib/supabase/server-client';
 import type { Database } from '@/lib/types/database';
+import type { GetAvailableRewardsRow } from '@/lib/types/rpc';
 
 type RewardRow = Database['public']['Tables']['rewards']['Row'];
 type RedemptionRow = Database['public']['Tables']['redemptions']['Row'];
@@ -86,10 +87,62 @@ export interface CreateRedemptionResult {
   subStateId?: string;
 }
 
+/**
+ * Shipping info for physical gifts
+ * Per API_CONTRACTS.md lines 4865-4875
+ */
+export interface ShippingInfo {
+  firstName: string;
+  lastName: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  phone: string;
+}
+
+/**
+ * Parameters for redeeming a VIP tier reward
+ * Per API_CONTRACTS.md lines 4836-4988 (POST /api/rewards/:id/claim)
+ */
+export interface RedeemRewardParams {
+  userId: string;
+  rewardId: string;
+  clientId: string;
+  rewardType: string;
+  tierAtClaim: string;
+  redemptionType: 'instant' | 'scheduled';
+  // For commission_boost and discount
+  scheduledActivationDate?: string;
+  scheduledActivationTime?: string;
+  // For commission_boost
+  durationDays?: number;
+  boostRate?: number;
+  tierCommissionRate?: number;
+  // For physical_gift
+  shippingInfo?: ShippingInfo;
+  sizeValue?: string;
+  requiresSize?: boolean;
+  sizeCategory?: string;
+}
+
+/**
+ * Result of redeeming a VIP tier reward
+ */
+export interface RedeemRewardResult {
+  redemptionId: string;
+  status: string;
+  claimedAt: string;
+  boostSubStateId?: string;
+  physicalGiftSubStateId?: string;
+}
+
 export const rewardRepository = {
   /**
    * Get all available rewards for user's current tier with active redemptions and sub-states.
-   * Executes single optimized query with LEFT JOINs per API_CONTRACTS.md lines 4740-4800.
+   * Uses single RPC call per SingleQueryBS.md Section 4.1.
    *
    * Per API_CONTRACTS.md lines 4786-4797:
    * - Filter by client_id, enabled=true, reward_source='vip_tier'
@@ -98,7 +151,7 @@ export const rewardRepository = {
    * - LEFT JOIN commission_boost_redemptions for boost sub-state
    * - LEFT JOIN physical_gift_redemptions for shipping sub-state
    *
-   * SECURITY: Validates client_id match (multitenancy)
+   * SECURITY: Validates client_id match via RPC parameter (multitenancy)
    */
   async listAvailable(
     userId: string,
@@ -108,189 +161,77 @@ export const rewardRepository = {
   ): Promise<AvailableRewardData[]> {
     const supabase = await createClient();
 
-    // Get rewards with tier info
-    const { data: rewards, error: rewardsError } = await supabase
-      .from('rewards')
-      .select(`
-        id,
-        type,
-        name,
-        description,
-        value_data,
-        tier_eligibility,
-        preview_from_tier,
-        redemption_frequency,
-        redemption_quantity,
-        redemption_type,
-        reward_source,
-        display_order,
-        enabled
-      `)
-      .eq('client_id', clientId)
-      .eq('enabled', true)
-      .eq('reward_source', 'vip_tier')
-      .order('display_order', { ascending: true });
+    // Single RPC call replaces 4+ separate queries
+    // Per SingleQueryBS.md Section 4.1 - get_available_rewards function
+    const { data, error } = await supabase.rpc('get_available_rewards', {
+      p_user_id: userId,
+      p_client_id: clientId,
+      p_current_tier: currentTier,
+      p_current_tier_order: currentTierOrder,
+    });
 
-    if (rewardsError) {
-      console.error('Error fetching rewards:', rewardsError);
-      throw new Error('Failed to fetch rewards');
-    }
-
-    if (!rewards || rewards.length === 0) {
+    if (error) {
+      console.error('[RewardRepository] Error fetching available rewards:', error);
       return [];
     }
 
-    // Get tier info for all tiers (for tier name lookup)
-    const { data: tiers, error: tiersError } = await supabase
-      .from('tiers')
-      .select('tier_id, tier_name, tier_color, tier_order')
-      .eq('client_id', clientId);
-
-    if (tiersError) {
-      console.error('Error fetching tiers:', tiersError);
-      throw new Error('Failed to fetch tiers');
+    if (!data || data.length === 0) {
+      return [];
     }
 
-    const tierMap = new Map(tiers?.map(t => [t.tier_id, t]) || []);
-
-    // Get active redemptions for this user (VIP tier rewards only)
-    // Per API_CONTRACTS.md lines 4776-4781: mission_progress_id IS NULL, status NOT IN ('concluded', 'rejected')
-    const rewardIds = rewards.map(r => r.id);
-    const { data: redemptions, error: redemptionsError } = await supabase
-      .from('redemptions')
-      .select(`
-        id,
-        reward_id,
-        status,
-        claimed_at,
-        scheduled_activation_date,
-        scheduled_activation_time,
-        activation_date,
-        expiration_date
-      `)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .is('mission_progress_id', null)
-      .not('status', 'in', '("concluded","rejected")')
-      .is('deleted_at', null)
-      .in('reward_id', rewardIds);
-
-    if (redemptionsError) {
-      console.error('Error fetching redemptions:', redemptionsError);
-      throw new Error('Failed to fetch redemptions');
-    }
-
-    // Create redemption map by reward_id
-    const redemptionMap = new Map(redemptions?.map(r => [r.reward_id, r]) || []);
-
-    // Get commission boost sub-states for active redemptions
-    const redemptionIds = redemptions?.map(r => r.id) || [];
-    type BoostSubState = {
-      redemption_id: string;
-      boost_status: string;
-      activated_at: string | null;
-      expires_at: string | null;
-      sales_at_expiration: number | null;
-    };
-    type PhysicalGiftSubState = {
-      redemption_id: string;
-      shipping_city: string | null;
-      shipped_at: string | null;
-    };
-    let boostMap = new Map<string, BoostSubState>();
-    let physicalGiftMap = new Map<string, PhysicalGiftSubState>();
-
-    if (redemptionIds.length > 0) {
-      const { data: boosts, error: boostsError } = await supabase
-        .from('commission_boost_redemptions')
-        .select('redemption_id, boost_status, activated_at, expires_at, sales_at_expiration')
-        .in('redemption_id', redemptionIds);
-
-      if (boostsError) {
-        console.error('Error fetching commission boosts:', boostsError);
-      } else {
-        boostMap = new Map(boosts?.map(b => [b.redemption_id, b]) || []);
-      }
-
-      const { data: physicalGifts, error: giftsError } = await supabase
-        .from('physical_gift_redemptions')
-        .select('redemption_id, shipping_city, shipped_at')
-        .in('redemption_id', redemptionIds);
-
-      if (giftsError) {
-        console.error('Error fetching physical gifts:', giftsError);
-      } else {
-        physicalGiftMap = new Map(physicalGifts?.map(p => [p.redemption_id, p]) || []);
-      }
-    }
-
-    // Filter and transform rewards
-    const result: AvailableRewardData[] = [];
-
-    for (const reward of rewards) {
-      // Check tier eligibility per API_CONTRACTS.md lines 4789-4797
-      const tierInfo = tierMap.get(reward.tier_eligibility);
-      const isCurrentTier = reward.tier_eligibility === currentTier;
-
-      // Check preview visibility
-      let isVisible = isCurrentTier;
-      if (!isVisible && reward.preview_from_tier) {
-        const previewTier = tierMap.get(reward.preview_from_tier);
-        if (previewTier && currentTierOrder >= previewTier.tier_order) {
-          isVisible = true;
-        }
-      }
-
-      if (!isVisible) continue;
-
-      const redemption = redemptionMap.get(reward.id);
-      const boost = redemption ? boostMap.get(redemption.id) : null;
-      const physicalGift = redemption ? physicalGiftMap.get(redemption.id) : null;
-
-      result.push({
-        reward: {
-          id: reward.id,
-          type: reward.type,
-          name: reward.name,
-          description: reward.description,
-          valueData: reward.value_data as Record<string, unknown> | null,
-          tierEligibility: reward.tier_eligibility,
-          previewFromTier: reward.preview_from_tier,
-          redemptionFrequency: reward.redemption_frequency ?? 'unlimited',
-          redemptionQuantity: reward.redemption_quantity,
-          redemptionType: reward.redemption_type ?? 'instant',
-          rewardSource: reward.reward_source ?? 'mission',
-          displayOrder: reward.display_order,
-          enabled: reward.enabled ?? false,
-        },
-        tier: {
-          id: tierInfo?.tier_id || reward.tier_eligibility,
-          name: tierInfo?.tier_name || reward.tier_eligibility,
-          color: tierInfo?.tier_color || '#6366f1',
-        },
-        redemption: redemption ? {
-          id: redemption.id,
-          status: redemption.status ?? 'claimable',
-          claimedAt: redemption.claimed_at,
-          scheduledActivationDate: redemption.scheduled_activation_date,
-          scheduledActivationTime: redemption.scheduled_activation_time,
-          activationDate: redemption.activation_date,
-          expirationDate: redemption.expiration_date,
-        } : null,
-        commissionBoost: boost ? {
-          boostStatus: boost.boost_status,
-          activatedAt: boost.activated_at,
-          expiresAt: boost.expires_at,
-          salesAtExpiration: boost.sales_at_expiration ? Number(boost.sales_at_expiration) : null,
-        } : null,
-        physicalGift: physicalGift ? {
-          shippingCity: physicalGift.shipping_city,
-          shippedAt: physicalGift.shipped_at,
-        } : null,
-      });
-    }
-
-    return result;
+    // Map RPC rows to AvailableRewardData
+    return (data as GetAvailableRewardsRow[]).map((row) => ({
+      reward: {
+        id: row.reward_id,
+        type: row.reward_type,
+        name: row.reward_name,
+        description: row.reward_description,
+        valueData: row.reward_value_data,
+        tierEligibility: row.reward_tier_eligibility,
+        previewFromTier: row.reward_preview_from_tier,
+        redemptionFrequency: row.reward_redemption_frequency ?? 'unlimited',
+        redemptionQuantity: row.reward_redemption_quantity,
+        redemptionType: row.reward_redemption_type ?? 'instant',
+        rewardSource: row.reward_source ?? 'vip_tier',
+        displayOrder: row.reward_display_order,
+        enabled: row.reward_enabled ?? false,
+      },
+      tier: {
+        id: row.tier_id,
+        name: row.tier_name,
+        color: row.tier_color,
+      },
+      redemption: row.redemption_id
+        ? {
+            id: row.redemption_id,
+            status: row.redemption_status ?? 'claimable',
+            claimedAt: row.redemption_claimed_at,
+            scheduledActivationDate: row.redemption_scheduled_activation_date,
+            scheduledActivationTime: row.redemption_scheduled_activation_time,
+            activationDate: row.redemption_activation_date,
+            expirationDate: row.redemption_expiration_date,
+          }
+        : null,
+      commissionBoost: row.boost_status
+        ? {
+            boostStatus: row.boost_status,
+            activatedAt: row.boost_activated_at,
+            expiresAt: row.boost_expires_at,
+            salesAtExpiration: row.boost_sales_at_expiration
+              ? Number(row.boost_sales_at_expiration)
+              : null,
+          }
+        : null,
+      physicalGift:
+        row.physical_gift_requires_size !== null ||
+        row.physical_gift_shipping_city !== null ||
+        row.physical_gift_shipped_at !== null
+          ? {
+              shippingCity: row.physical_gift_shipping_city,
+              shippedAt: row.physical_gift_shipped_at,
+            }
+          : null,
+    }));
   },
 
   /**
@@ -481,6 +422,116 @@ export const rewardRepository = {
       status: data.status ?? 'claimed',
       claimedAt: data.claimed_at ?? new Date().toISOString(),
     };
+  },
+
+  /**
+   * Redeem a VIP tier reward with sub-state creation.
+   * Per API_CONTRACTS.md lines 4836-5001 (POST /api/rewards/:id/claim)
+   * Per SchemaFinalv2.md lines 524-746 (commission_boost_redemptions)
+   * Per SchemaFinalv2.md lines 678-888 (physical_gift_redemptions)
+   *
+   * Creates:
+   * 1. Redemption record with status='claimed', tier_at_claim, mission_progress_id=NULL
+   * 2. For commission_boost: commission_boost_redemptions with boost_status='scheduled'
+   * 3. For physical_gift: physical_gift_redemptions with shipping info
+   *
+   * SECURITY: Validates client_id is provided (multitenancy)
+   */
+  async redeemReward(params: RedeemRewardParams): Promise<RedeemRewardResult> {
+    const supabase = await createClient();
+    const claimedAt = new Date().toISOString();
+
+    // Step 1: Create redemption record
+    const { data: redemption, error: redemptionError } = await supabase
+      .from('redemptions')
+      .insert({
+        user_id: params.userId,
+        reward_id: params.rewardId,
+        client_id: params.clientId,
+        tier_at_claim: params.tierAtClaim,
+        redemption_type: params.redemptionType,
+        status: 'claimed',
+        claimed_at: claimedAt,
+        scheduled_activation_date: params.scheduledActivationDate || null,
+        scheduled_activation_time: params.scheduledActivationTime || null,
+        mission_progress_id: null, // VIP tier rewards have no mission
+      })
+      .select('id, status, claimed_at')
+      .single();
+
+    if (redemptionError) {
+      console.error('[RewardRepository] Error creating redemption:', redemptionError);
+      throw new Error('Failed to create redemption');
+    }
+
+    const result: RedeemRewardResult = {
+      redemptionId: redemption.id,
+      status: redemption.status ?? 'claimed',
+      claimedAt: redemption.claimed_at ?? claimedAt,
+    };
+
+    // Step 2: Create sub-state record based on reward type
+    if (params.rewardType === 'commission_boost') {
+      // Per SchemaFinalv2.md lines 688-715 (commission_boost_redemptions)
+      // boost_status defaults to 'scheduled' per line 693
+      const { data: boostState, error: boostError } = await supabase
+        .from('commission_boost_redemptions')
+        .insert({
+          redemption_id: redemption.id,
+          client_id: params.clientId,
+          boost_status: 'scheduled',
+          scheduled_activation_date: params.scheduledActivationDate,
+          duration_days: params.durationDays ?? 30,
+          boost_rate: params.boostRate ?? 0,
+          tier_commission_rate: params.tierCommissionRate ?? null,
+        })
+        .select('id')
+        .single();
+
+      if (boostError) {
+        console.error('[RewardRepository] Error creating boost sub-state:', boostError);
+        // Rollback: delete the redemption we just created
+        await supabase.from('redemptions').delete().eq('id', redemption.id);
+        throw new Error('Failed to create commission boost sub-state');
+      }
+
+      result.boostSubStateId = boostState.id;
+    } else if (params.rewardType === 'physical_gift' && params.shippingInfo) {
+      // Per SchemaFinalv2.md lines 846-870 (physical_gift_redemptions)
+      const { data: giftState, error: giftError } = await supabase
+        .from('physical_gift_redemptions')
+        .insert({
+          redemption_id: redemption.id,
+          client_id: params.clientId,
+          requires_size: params.requiresSize ?? false,
+          size_category: params.sizeCategory ?? null,
+          size_value: params.sizeValue ?? null,
+          size_submitted_at: params.sizeValue ? new Date().toISOString() : null,
+          shipping_recipient_first_name: params.shippingInfo.firstName,
+          shipping_recipient_last_name: params.shippingInfo.lastName,
+          shipping_address_line1: params.shippingInfo.addressLine1,
+          shipping_address_line2: params.shippingInfo.addressLine2 ?? null,
+          shipping_city: params.shippingInfo.city,
+          shipping_state: params.shippingInfo.state,
+          shipping_postal_code: params.shippingInfo.postalCode,
+          shipping_country: params.shippingInfo.country,
+          shipping_phone: params.shippingInfo.phone,
+          shipping_info_submitted_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (giftError) {
+        console.error('[RewardRepository] Error creating physical gift sub-state:', giftError);
+        // Rollback: delete the redemption we just created
+        await supabase.from('redemptions').delete().eq('id', redemption.id);
+        throw new Error('Failed to create physical gift sub-state');
+      }
+
+      result.physicalGiftSubStateId = giftState.id;
+    }
+
+    return result;
   },
 
   /**
