@@ -387,7 +387,64 @@ Action:
 }
 
 /**
+ * Create commission boost scheduled event (at claim time)
+ *
+ * Called when user claims a commission boost. Creates calendar event
+ * with due date calculated as: activation + duration + 20 days clearing.
+ *
+ * Note: Payout amount is TBD at claim time - will be calculated after
+ * boost expires based on sales during boost period.
+ *
+ * @param handle - Creator's TikTok handle (with @)
+ * @param boostPercent - Boost percentage (e.g., 5 for 5%)
+ * @param boostDurationDays - Boost duration in days
+ * @param activationDate - Scheduled activation date
+ * @param email - Creator's email for contact info
+ */
+export async function createCommissionBoostScheduledEvent(
+  handle: string,
+  boostPercent: number,
+  boostDurationDays: number,
+  activationDate: Date,
+  email: string
+): Promise<CalendarEventResult> {
+  // Calculate key dates
+  const expiresAt = new Date(activationDate);
+  expiresAt.setDate(expiresAt.getDate() + boostDurationDays);
+
+  const payoutDueDate = new Date(expiresAt);
+  payoutDueDate.setDate(payoutDueDate.getDate() + 20); // 20-day clearing period
+
+  const title = `💸 Commission Payout Due: ${handle}`;
+  const description = `Creator: ${handle}
+Email: ${email}
+
+Boost Details:
+- Percent: ${boostPercent}%
+- Duration: ${boostDurationDays} days
+- Activates: ${activationDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+- Expires: ${expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+- Payout Due: ${payoutDueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+
+Payout Amount: TBD (calculated after boost expires)
+Payment Info: TBD (user will submit after boost expires)
+
+Action: After user submits payment info, send payout via their selected method`;
+
+  return createCalendarEvent({
+    title,
+    description,
+    dueDateTime: payoutDueDate,
+    reminderMinutes: 60, // 1 hour reminder before payout due
+  });
+}
+
+/**
  * Create commission payout event
+ *
+ * Note: This helper is for use when all payout details are known
+ * (e.g., when admin is ready to send payment). For claim-time
+ * calendar creation, use createCommissionBoostScheduledEvent instead.
  */
 export async function createCommissionPayoutEvent(
   handle: string,

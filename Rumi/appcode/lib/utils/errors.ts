@@ -428,6 +428,19 @@ export function invalidVenmoHandleError(): AppError {
   );
 }
 
+/**
+ * Create payment info not required error (redemption not in pending_info status)
+ * Per API_CONTRACTS.md lines 5435-5441
+ */
+export function paymentInfoNotRequiredError(currentStatus: string): AppError {
+  return new AppError(
+    ErrorCode.PAYMENT_INFO_NOT_REQUIRED,
+    'This reward is not awaiting payment information',
+    403,
+    { currentStatus }
+  );
+}
+
 // =============================================================================
 // SECTION 6: Type Guards
 // =============================================================================

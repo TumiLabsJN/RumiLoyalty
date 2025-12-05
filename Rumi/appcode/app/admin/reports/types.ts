@@ -59,7 +59,7 @@ export interface DateRange {
  * Per AdminFlows.md lines 1597-1608
  */
 export interface RewardsSummaryRow {
-  rewardType: RewardType            // @backend: rewards.type
+  rewardType: RewardType | 'total'  // @backend: rewards.type | 'total' for summary
   rewardTypeFormatted: string       // @backend: computed ("Gift Cards")
   count: number                     // @backend: COUNT(redemptions.id) WHERE status='concluded'
   countFormatted: string            // @backend: computed ("45")

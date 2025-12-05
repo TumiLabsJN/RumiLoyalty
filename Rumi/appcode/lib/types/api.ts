@@ -440,6 +440,8 @@ export interface ClaimMissionRequest {
 }
 
 export interface ShippingAddress {
+  firstName: string;   // Recipient first name (required for carrier delivery)
+  lastName: string;    // Recipient last name (required for carrier delivery)
   line1: string;
   line2?: string;
   city: string;

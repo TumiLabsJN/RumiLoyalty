@@ -28,6 +28,8 @@ import {
   type AvailableRewardData,
   type ShippingInfo,
 } from '@/lib/repositories/rewardRepository';
+import { userRepository } from '@/lib/repositories/userRepository';
+import { commissionBoostRepository } from '@/lib/repositories/commissionBoostRepository';
 import {
   AppError,
   ErrorCode,
@@ -40,7 +42,17 @@ import {
   shippingInfoRequiredError,
   sizeRequiredError,
   invalidSizeSelectionError,
+  paymentAccountMismatchError,
+  invalidPaypalEmailError,
+  invalidVenmoHandleError,
+  paymentInfoNotRequiredError,
 } from '@/lib/utils/errors';
+import {
+  createInstantRewardEvent,
+  createDiscountActivationEvent,
+  createPhysicalGiftEvent,
+  createCommissionBoostScheduledEvent,
+} from '@/lib/utils/googleCalendar';
 
 // ============================================================================
 // Types
@@ -168,6 +180,9 @@ export interface ClaimRewardParams {
   scheduledActivationAt?: string;
   shippingInfo?: ShippingInfo;
   sizeValue?: string;
+  // Added for Google Calendar event creation (Task 6.2.4)
+  userHandle: string; // TikTok handle for calendar event title
+  userEmail: string; // Email for calendar event description
 }
 
 /**
@@ -177,6 +192,83 @@ export interface ClaimRewardParams {
 export interface NextSteps {
   action: 'wait_fulfillment' | 'shipping_confirmation' | 'scheduled_confirmation';
   message: string;
+}
+
+/**
+ * Single history item in reward history response
+ * Per API_CONTRACTS.md lines 5499-5509
+ */
+export interface RewardHistoryItem {
+  id: string;
+  rewardId: string;
+  name: string;
+  description: string;
+  type: string;
+  rewardSource: 'vip_tier' | 'mission';
+  claimedAt: string;
+  concludedAt: string;
+  status: 'concluded';
+}
+
+/**
+ * Full response for GET /api/rewards/history
+ * Per API_CONTRACTS.md lines 5490-5510
+ */
+export interface RedemptionHistoryResponse {
+  user: RewardUserInfo;
+  history: RewardHistoryItem[];
+}
+
+/**
+ * Input parameters for getRewardHistory
+ */
+export interface GetRewardHistoryParams {
+  userId: string;
+  clientId: string;
+  userHandle: string;
+  currentTier: string;
+  tierName: string;
+  tierColor: string;
+}
+
+/**
+ * Response for GET /api/user/payment-info
+ * Per API_CONTRACTS.md lines 5301-5305
+ */
+export interface PaymentInfoResponse {
+  hasPaymentInfo: boolean;
+  paymentMethod: 'paypal' | 'venmo' | null;
+  paymentAccount: string | null;
+}
+
+/**
+ * Input parameters for savePaymentInfo
+ * Per API_CONTRACTS.md lines 5346-5351
+ */
+export interface SavePaymentInfoParams {
+  userId: string;
+  clientId: string;
+  redemptionId: string;
+  paymentMethod: 'paypal' | 'venmo';
+  paymentAccount: string;
+  paymentAccountConfirm: string;
+  saveAsDefault: boolean;
+}
+
+/**
+ * Response for POST /api/rewards/:id/payment-info
+ * Per API_CONTRACTS.md lines 5379-5389
+ */
+export interface SavePaymentInfoResponse {
+  success: boolean;
+  message: string;
+  redemption: {
+    id: string;
+    status: 'fulfilled';
+    paymentMethod: 'paypal' | 'venmo';
+    paymentInfoCollectedAt: string;
+  };
+  userPaymentUpdated: boolean;
 }
 
 /**
@@ -860,6 +952,8 @@ export const rewardService = {
       scheduledActivationAt,
       shippingInfo,
       sizeValue,
+      userHandle,
+      userEmail,
     } = params;
 
     // =========================================================================
@@ -1043,6 +1137,108 @@ export const rewardService = {
     });
 
     // =========================================================================
+    // CREATE CALENDAR EVENT (Task 6.2.4+)
+    // Per Loyalty.md lines 1691-1794 (Google Calendar Integration)
+    // Non-blocking: redemption succeeds even if calendar fails
+    // =========================================================================
+    // Format handle with @ prefix for calendar event titles (per Loyalty.md)
+    const handleWithAt = userHandle.startsWith('@') ? userHandle : `@${userHandle}`;
+
+    if (['gift_card', 'spark_ads', 'experience'].includes(rewardType)) {
+      // Task 6.2.4: Instant rewards - calendar event due in 2 hours
+      const calendarValue = (valueData?.amount as number) ?? 0;
+      const calendarResult = await createInstantRewardEvent(
+        handleWithAt,
+        rewardType,
+        calendarValue,
+        userEmail
+      );
+      if (calendarResult.success && calendarResult.eventId) {
+        await rewardRepository.updateCalendarEventId(
+          redeemResult.redemptionId,
+          clientId,
+          calendarResult.eventId
+        );
+      }
+    }
+    else if (rewardType === 'discount' && scheduledDate && scheduledTime) {
+      // Task 6.2.5: Discount - calendar event at scheduled activation time with 15-min reminder
+      const discountPercent = (valueData?.percent as number) ?? 0;
+      const durationMinutes = (valueData?.duration_minutes as number) ?? 1440;
+      const couponCode = (valueData?.coupon_code as string) ?? (valueData?.couponCode as string) ?? '';
+      const maxUses = (valueData?.max_uses as number) ?? (valueData?.maxUses as number) ?? null;
+
+      // Build activation DateTime from scheduled date and time
+      const activationDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+
+      const calendarResult = await createDiscountActivationEvent(
+        handleWithAt,
+        discountPercent,
+        durationMinutes,
+        couponCode,
+        maxUses,
+        activationDateTime
+      );
+      if (calendarResult.success && calendarResult.eventId) {
+        await rewardRepository.updateCalendarEventId(
+          redeemResult.redemptionId,
+          clientId,
+          calendarResult.eventId
+        );
+      }
+    }
+    else if (rewardType === 'physical_gift' && shippingInfo) {
+      // Task 6.2.6: Physical gift - calendar event due in 2 hours with shipping details
+      const itemName = reward.name ?? reward.description ?? 'Physical Gift';
+
+      const calendarResult = await createPhysicalGiftEvent(
+        handleWithAt,
+        itemName,
+        sizeValue ?? null,
+        {
+          firstName: shippingInfo.firstName,
+          lastName: shippingInfo.lastName,
+          line1: shippingInfo.addressLine1,
+          line2: shippingInfo.addressLine2,
+          city: shippingInfo.city,
+          state: shippingInfo.state,
+          postalCode: shippingInfo.postalCode,
+        }
+      );
+      if (calendarResult.success && calendarResult.eventId) {
+        await rewardRepository.updateCalendarEventId(
+          redeemResult.redemptionId,
+          clientId,
+          calendarResult.eventId
+        );
+      }
+    }
+    else if (rewardType === 'commission_boost' && scheduledDate) {
+      // Task 6.2.7a: Commission boost - calendar event at claim with calculated payout due date
+      // Due date = activation_date + duration_days + 20 days (clearing period)
+      const boostPercent = (valueData?.percent as number) ?? 0;
+      const boostDurationDays = (valueData?.duration_days as number) ?? (valueData?.durationDays as number) ?? 30;
+
+      // Build activation date from scheduled date and time (time is always 23:00 UTC = 6 PM EST)
+      const activationDateTime = new Date(`${scheduledDate}T${scheduledTime || '23:00:00'}`);
+
+      const calendarResult = await createCommissionBoostScheduledEvent(
+        handleWithAt,
+        boostPercent,
+        boostDurationDays,
+        activationDateTime,
+        userEmail
+      );
+      if (calendarResult.success && calendarResult.eventId) {
+        await rewardRepository.updateCalendarEventId(
+          redeemResult.redemptionId,
+          clientId,
+          calendarResult.eventId
+        );
+      }
+    }
+
+    // =========================================================================
     // BUILD RESPONSE
     // =========================================================================
     const newUsedCount = usedCount + 1;
@@ -1095,12 +1291,189 @@ export const rewardService = {
     };
   },
 
-  // Task 6.2.4: claimInstant - gift_card, spark_ads, experience + Google Calendar
-  // Task 6.2.5: claimScheduled - discount with scheduled activation + Calendar
-  // Task 6.2.6: claimPhysical - shipping address + Calendar
-  // Task 6.2.7: claimCommissionBoost - boost activation, auto-sync
-  // Task 6.2.7a: Commission Boost payout calendar event
-  // Task 6.2.8: getRewardHistory - format concluded redemptions
-  // Task 6.2.9: getPaymentInfo - service wrapper
-  // Task 6.2.10: savePaymentInfo - 4 validation rules
+  /**
+   * Get reward redemption history for user.
+   * Per API_CONTRACTS.md lines 5454-5578 (GET /api/rewards/history)
+   *
+   * Returns concluded redemptions with:
+   * - Backend-formatted name and description (same rules as GET /api/rewards)
+   * - User info header
+   * - Sorted by concludedAt DESC
+   *
+   * @param params - User info and tier context
+   * @returns Complete RedemptionHistoryResponse
+   */
+  async getRewardHistory(
+    params: GetRewardHistoryParams
+  ): Promise<RedemptionHistoryResponse> {
+    const {
+      userId,
+      clientId,
+      userHandle,
+      currentTier,
+      tierName,
+      tierColor,
+    } = params;
+
+    // Fetch concluded redemptions from repository
+    const rawHistory = await rewardRepository.getConcludedRedemptions(
+      userId,
+      clientId
+    );
+
+    // Transform each redemption with backend formatting
+    const history: RewardHistoryItem[] = rawHistory.map((item) => {
+      // Generate backend-formatted name and description using same rules as GET /api/rewards
+      const name = generateName(item.type, item.valueData, item.description);
+      const description = generateDisplayText(item.type, item.valueData, item.description);
+
+      return {
+        id: item.id,
+        rewardId: item.rewardId,
+        name,
+        description,
+        type: item.type,
+        rewardSource: item.rewardSource as 'vip_tier' | 'mission',
+        claimedAt: item.claimedAt || '',
+        concludedAt: item.concludedAt || '',
+        status: 'concluded' as const,
+      };
+    });
+
+    return {
+      user: {
+        id: userId,
+        handle: userHandle,
+        currentTier,
+        currentTierName: tierName,
+        currentTierColor: tierColor,
+      },
+      history,
+    };
+  },
+
+  /**
+   * Get user's saved payment information for pre-filling payment modals.
+   * Per API_CONTRACTS.md lines 5287-5327 (GET /api/user/payment-info)
+   *
+   * Returns decrypted payment info if saved, or null values if not.
+   *
+   * @param userId - User ID
+   * @param clientId - Tenant ID for multi-tenant isolation
+   * @returns PaymentInfoResponse with hasPaymentInfo, paymentMethod, paymentAccount
+   */
+  async getPaymentInfo(
+    userId: string,
+    clientId: string
+  ): Promise<PaymentInfoResponse> {
+    // Delegate to repository which handles decryption
+    return userRepository.getPaymentInfo(userId, clientId);
+  },
+
+  /**
+   * Save payment information for a commission boost redemption.
+   * Per API_CONTRACTS.md lines 5331-5450 (POST /api/rewards/:id/payment-info)
+   *
+   * Validates 4 rules:
+   * 1. paymentAccount === paymentAccountConfirm
+   * 2. PayPal: valid email format
+   * 3. Venmo: handle starts with @
+   * 4. boost_status must be 'pending_info'
+   *
+   * Then saves to commission_boost_redemptions and optionally to user defaults.
+   *
+   * @param params - Payment info parameters including validation fields
+   * @returns SavePaymentInfoResponse with redemption status and userPaymentUpdated flag
+   * @throws AppError for validation failures
+   */
+  async savePaymentInfo(
+    params: SavePaymentInfoParams
+  ): Promise<SavePaymentInfoResponse> {
+    const {
+      userId,
+      clientId,
+      redemptionId,
+      paymentMethod,
+      paymentAccount,
+      paymentAccountConfirm,
+      saveAsDefault,
+    } = params;
+
+    // =========================================================================
+    // VALIDATION RULE 1: Account confirmation match
+    // Per API_CONTRACTS.md lines 5411-5416
+    // =========================================================================
+    if (paymentAccount !== paymentAccountConfirm) {
+      throw paymentAccountMismatchError();
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 2: PayPal email format
+    // Per API_CONTRACTS.md lines 5419-5424
+    // =========================================================================
+    if (paymentMethod === 'paypal') {
+      // Basic email regex - checks for @ and domain
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(paymentAccount)) {
+        throw invalidPaypalEmailError();
+      }
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 3: Venmo handle format
+    // Per API_CONTRACTS.md lines 5427-5432
+    // =========================================================================
+    if (paymentMethod === 'venmo') {
+      if (!paymentAccount.startsWith('@')) {
+        throw invalidVenmoHandleError();
+      }
+    }
+
+    // =========================================================================
+    // VALIDATION RULE 4: Redemption status must be 'pending_info'
+    // Per API_CONTRACTS.md lines 5435-5441
+    // =========================================================================
+    const boostStatus = await commissionBoostRepository.getBoostStatus(
+      redemptionId,
+      clientId
+    );
+
+    if (boostStatus !== 'pending_info') {
+      throw paymentInfoNotRequiredError(boostStatus || 'not_found');
+    }
+
+    // =========================================================================
+    // SAVE PAYMENT INFO
+    // =========================================================================
+    // Save to commission_boost_redemptions (updates status to 'pending_payout')
+    const result = await commissionBoostRepository.savePaymentInfo(
+      redemptionId,
+      clientId,
+      paymentMethod,
+      paymentAccount
+    );
+
+    // Optionally save as user default
+    let userPaymentUpdated = false;
+    if (saveAsDefault) {
+      userPaymentUpdated = await userRepository.savePaymentInfo(
+        userId,
+        clientId,
+        paymentMethod,
+        paymentAccount
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Payment information saved successfully',
+      redemption: {
+        id: result.redemptionId,
+        status: result.status,
+        paymentMethod: result.paymentMethod,
+        paymentInfoCollectedAt: result.paymentInfoCollectedAt,
+      },
+      userPaymentUpdated,
+    };
+  },
 };

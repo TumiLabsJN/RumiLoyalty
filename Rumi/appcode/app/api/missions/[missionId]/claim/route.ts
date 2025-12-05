@@ -26,8 +26,8 @@ interface ClaimRequestBody {
   scheduledActivationTime?: string;
   size?: string;
   shippingAddress?: {
-    firstName?: string;
-    lastName?: string;
+    firstName: string;   // Required for carrier delivery
+    lastName: string;    // Required for carrier delivery
     line1: string;
     line2?: string;
     city: string;

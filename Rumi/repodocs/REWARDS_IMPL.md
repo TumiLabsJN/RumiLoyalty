@@ -11,14 +11,23 @@
 
 **Steps Documented:**
 - Step 6.1 - Reward Repositories ✅
+- Step 6.2 - Reward Services ✅
+- Step 6.3 - Reward API Routes ✅
 
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/rewardRepository.ts` | 722 | Main reward/redemption queries with tenant isolation |
-| `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/commissionBoostRepository.ts` | 225 | Commission boost sub-state management |
+| `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/commissionBoostRepository.ts` | 253 | Commission boost sub-state management |
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/physicalGiftRepository.ts` | 189 | Physical gift shipping sub-state management |
 | `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/userRepository.ts` | 485 | User payment info (getPaymentInfo, savePaymentInfo) |
+| `/home/jorge/Loyalty/Rumi/appcode/lib/services/rewardService.ts` | 1479 | Reward business logic, validation, formatting |
+| `/home/jorge/Loyalty/Rumi/appcode/lib/utils/googleCalendar.ts` | 498 | Google Calendar event helpers |
+| `/home/jorge/Loyalty/Rumi/appcode/app/api/rewards/route.ts` | 114 | GET /api/rewards - rewards list |
+| `/home/jorge/Loyalty/Rumi/appcode/app/api/rewards/[rewardId]/claim/route.ts` | 140 | POST /api/rewards/:id/claim |
+| `/home/jorge/Loyalty/Rumi/appcode/app/api/rewards/history/route.ts` | 111 | GET /api/rewards/history |
+| `/home/jorge/Loyalty/Rumi/appcode/app/api/user/payment-info/route.ts` | 89 | GET /api/user/payment-info |
+| `/home/jorge/Loyalty/Rumi/appcode/app/api/rewards/[rewardId]/payment-info/route.ts` | 142 | POST /api/rewards/:id/payment-info (Zod) |
 
 **Type Definitions (rewardRepository.ts):**
 | Type | Lines | Purpose |
@@ -598,6 +607,569 @@ if (!data || data.length === 0) {
 
 ---
 
+## Step 6.2 - Reward Services
+
+### rewardService.ts (1,479 lines)
+
+**Location:** `appcode/lib/services/rewardService.ts`
+
+**Type Definitions (Lines 98-318):**
+| Type | Lines | Purpose |
+|------|-------|---------|
+| `RewardUserInfo` | 98-108 | User context for rewards page |
+| `StatusDetails` | 110-122 | Computed reward status with UI hints |
+| `RewardItem` | 124-148 | Formatted reward for API response |
+| `RewardsPageResponse` | 150-157 | Full GET /api/rewards response |
+| `ListAvailableRewardsParams` | 159-172 | Input for listAvailableRewards() |
+| `ClaimRewardParams` | 174-190 | Input for claimReward() |
+| `NextSteps` | 192-199 | Post-claim action hints |
+| `RewardHistoryItem` | 201-215 | Single history entry |
+| `RedemptionHistoryResponse` | 217-223 | Full history response |
+| `GetRewardHistoryParams` | 225-236 | Input for getRewardHistory() |
+| `PaymentInfoResponse` | 238-246 | GET /api/user/payment-info response |
+| `SavePaymentInfoParams` | 248-260 | Input for savePaymentInfo() |
+| `SavePaymentInfoResponse` | 262-276 | POST payment-info response |
+| `ClaimRewardResponse` | 278-318 | Full claim response |
+
+---
+
+#### listAvailableRewards() - Lines 820-943
+
+**Signature:**
+```typescript
+async listAvailableRewards(
+  params: ListAvailableRewardsParams
+): Promise<RewardsPageResponse>
+```
+
+**Purpose:** Get available rewards with computed status and formatting for rewards page.
+
+**Key Logic:**
+1. Calls `rewardRepository.listAvailable()` (line 827)
+2. Maps each reward through formatting pipeline (lines 839-936)
+3. Computes status using `computeStatus()` helper (line 845)
+4. Generates name using `generateName()` helper (line 855)
+5. Generates displayText using `generateDisplayText()` helper (line 856)
+6. Sorts by sortPriority DESC (line 938)
+
+**Status Computation (lines 397-512):**
+- `available`: Can claim (no active redemption, under limit)
+- `claimed`: Has active redemption status='claimed'
+- `fulfilled`: Has active redemption status='fulfilled'
+- `limit_reached`: Usage >= redemption_quantity
+- `coming_soon`: User tier < preview_from_tier
+- `locked`: User tier < tier_eligibility
+
+---
+
+#### claimReward() - Lines 945-1244
+
+**Signature:**
+```typescript
+async claimReward(params: ClaimRewardParams): Promise<ClaimRewardResponse>
+```
+
+**Purpose:** Validate and process reward claims with type-specific handling.
+
+**11 Pre-Claim Validation Rules (lines 955-1062):**
+1. Reward exists (line 959)
+2. Reward enabled (line 968)
+3. Tier eligibility (line 976)
+4. No active redemption (line 988)
+5. Usage limit not reached (line 1002)
+6. Scheduling required for discount/commission_boost (line 1016)
+7. Discount: weekday Mon-Fri (line 1028)
+8. Discount: time 09:00-16:00 EST (line 1036)
+9. Commission boost: future date (line 1049)
+10. Physical gift: shipping info required (line 1056)
+11. Physical gift: size validation if requires_size=true (line 1062)
+
+**Calendar Event Creation (lines 1097-1156):**
+- Instant rewards (gift_card, spark_ads, experience): 2-hour due time (lines 1097-1109)
+- Discount: scheduled activation with 15-min reminder (lines 1110-1131)
+- Physical gift: 2-hour due time with shipping details (lines 1132-1155)
+- Commission boost: due date = activation + duration + 20 days (lines 1133-1156)
+
+**Implementation (lines 1068-1095):**
+```typescript
+const redeemResult = await rewardRepository.redeemReward({
+  userId,
+  clientId,
+  rewardId,
+  tierAtClaim: currentTier,
+  redemptionType,
+  scheduledActivationDate: scheduledDate,
+  scheduledActivationTime: scheduledTime,
+  shippingInfo,
+  sizeValue,
+  durationDays,
+  boostRate,
+});
+```
+
+---
+
+#### getRewardHistory() - Lines 1306-1352
+
+**Signature:**
+```typescript
+async getRewardHistory(
+  params: GetRewardHistoryParams
+): Promise<RedemptionHistoryResponse>
+```
+
+**Purpose:** Get concluded redemptions with same formatting as listAvailableRewards.
+
+**Implementation (lines 1319-1340):**
+```typescript
+const rawHistory = await rewardRepository.getConcludedRedemptions(userId, clientId);
+
+const history: RewardHistoryItem[] = rawHistory.map((item) => {
+  const name = generateName(item.type, item.valueData, item.description);
+  const description = generateDisplayText(item.type, item.valueData, item.description);
+  return {
+    id: item.id,
+    rewardId: item.rewardId,
+    name,
+    description,
+    type: item.type,
+    rewardSource: item.rewardSource as 'vip_tier' | 'mission',
+    claimedAt: item.claimedAt || '',
+    concludedAt: item.concludedAt || '',
+    status: 'concluded' as const,
+  };
+});
+```
+
+---
+
+#### getPaymentInfo() - Lines 1365-1371
+
+**Signature:**
+```typescript
+async getPaymentInfo(
+  userId: string,
+  clientId: string
+): Promise<PaymentInfoResponse>
+```
+
+**Purpose:** Wrapper for userRepository.getPaymentInfo().
+
+**Implementation (line 1370):**
+```typescript
+return userRepository.getPaymentInfo(userId, clientId);
+```
+
+---
+
+#### savePaymentInfo() - Lines 1389-1478
+
+**Signature:**
+```typescript
+async savePaymentInfo(
+  params: SavePaymentInfoParams
+): Promise<SavePaymentInfoResponse>
+```
+
+**Purpose:** Validate and save payment info for commission boost payout.
+
+**4 Validation Rules (lines 1406-1443):**
+1. Account confirmation match (lines 1406-1408)
+2. PayPal email format (lines 1414-1420)
+3. Venmo @ prefix (lines 1426-1430)
+4. boost_status = 'pending_info' (lines 1436-1443)
+
+**Implementation (lines 1449-1465):**
+```typescript
+const result = await commissionBoostRepository.savePaymentInfo(
+  redemptionId,
+  clientId,
+  paymentMethod,
+  paymentAccount
+);
+
+let userPaymentUpdated = false;
+if (saveAsDefault) {
+  userPaymentUpdated = await userRepository.savePaymentInfo(
+    userId,
+    clientId,
+    paymentMethod,
+    paymentAccount
+  );
+}
+```
+
+---
+
+### Helper Functions (Lines 315-798)
+
+#### generateName() - Lines 315-340
+
+**Purpose:** Generate backend-formatted reward name by type.
+
+**Formatting Rules (per API_CONTRACTS.md lines 5517-5524):**
+| Type | Format |
+|------|--------|
+| gift_card | `"$" + amount + " Gift Card"` |
+| commission_boost | `percent + "% Pay Boost"` |
+| spark_ads | `"$" + amount + " Ads Boost"` |
+| discount | `percent + "% Deal Boost"` |
+| physical_gift | `"Gift Drop: " + description` |
+| experience | `description` |
+
+---
+
+#### generateDisplayText() - Lines 342-427
+
+**Purpose:** Generate backend-formatted display text by type.
+
+**Formatting Rules:**
+| Type | Format |
+|------|--------|
+| gift_card | `"Amazon Gift Card"` |
+| commission_boost | `"Higher earnings (" + durationDays + "d)"` |
+| spark_ads | `"Spark Ads Promo"` |
+| discount | `"Follower Discount (" + durationDays + "d)"` |
+| physical_gift | `valueData.displayText || description` |
+| experience | `valueData.displayText || description` |
+
+---
+
+#### computeStatus() - Lines 429-575
+
+**Purpose:** Compute reward status for UI display.
+
+**Status Priority (highest to lowest):**
+1. `coming_soon` - User can't claim but can preview
+2. `locked` - User's tier below requirement
+3. `limit_reached` - Usage >= quantity
+4. `claimed` - Active redemption in claimed state
+5. `fulfilled` - Active redemption in fulfilled state
+6. `available` - Can claim
+
+---
+
+### Google Calendar Integration
+
+**Location:** `appcode/lib/utils/googleCalendar.ts`
+
+#### createCommissionBoostScheduledEvent() - Lines 404-440
+
+**Signature:**
+```typescript
+async createCommissionBoostScheduledEvent(
+  handle: string,
+  boostPercent: number,
+  boostDurationDays: number,
+  activationDate: Date,
+  email: string
+): Promise<CalendarEventResult>
+```
+
+**Purpose:** Create calendar event at claim time for commission boost payout.
+
+**Due Date Calculation (lines 411-416):**
+```typescript
+const expiresAt = new Date(activationDate);
+expiresAt.setDate(expiresAt.getDate() + boostDurationDays);
+
+const payoutDueDate = new Date(expiresAt);
+payoutDueDate.setDate(payoutDueDate.getDate() + 20); // 20-day clearing period
+```
+
+**Event Details:**
+- Title: `"💸 Commission Payout Due: @{handle}"`
+- Due: `activation_date + duration_days + 20 days`
+- Reminder: 60 minutes before
+
+---
+
+### commissionBoostRepository Additions
+
+#### getBoostStatus() - Lines 130-148
+
+**Signature:**
+```typescript
+async getBoostStatus(
+  redemptionId: string,
+  clientId: string
+): Promise<string | null>
+```
+
+**Purpose:** Get boost_status to validate payment info submission.
+
+**Multi-Tenant Filter:** Line 140 `.eq('client_id', clientId)`
+
+---
+
+## Step 6.3 - Reward API Routes
+
+### Presentation Layer Pattern
+
+All 5 routes follow ARCHITECTURE.md Section 5 pattern:
+1. **Auth validation** - JWT token via `supabase.auth.getUser()`
+2. **Get user** - Via `userRepository.findByAuthId()`
+3. **Multi-tenant check** - `user.clientId !== clientId`
+4. **Call service** - Delegate business logic to rewardService
+5. **Return response** - NextResponse.json with proper status
+
+---
+
+### GET /api/rewards (114 lines)
+
+**Location:** `appcode/app/api/rewards/route.ts`
+
+**Purpose:** Returns all VIP tier rewards with pre-computed status and formatting.
+
+**Function Call Chain:**
+```
+GET /api/rewards (route.ts:24)
+  ├─→ supabase.auth.getUser() (route.ts:28)
+  ├─→ userRepository.findByAuthId() (route.ts:54)
+  ├─→ dashboardRepository.getUserDashboard() (route.ts:77)
+  ├─→ rewardService.listAvailableRewards() (route.ts:89)
+  │   ├─→ rewardRepository.listAvailable() (rewardService.ts:827)
+  │   ├─→ rewardRepository.getRedemptionCount() (rewardService.ts:834)
+  │   └─→ computeStatus(), generateName(), generateDisplayText() (rewardService.ts:845-856)
+  └─→ Response (route.ts:102)
+```
+
+**Service Call (route.ts:89-98):**
+```typescript
+const rewardsResponse = await rewardService.listAvailableRewards({
+  userId: user.id,
+  clientId,
+  currentTier: dashboardData.currentTier.id,
+  currentTierOrder: dashboardData.currentTier.order,
+  tierAchievedAt: user.tierAchievedAt ?? null,
+  userHandle: user.tiktokHandle ?? '',
+  tierName: dashboardData.currentTier.name,
+  tierColor: dashboardData.currentTier.color,
+});
+```
+
+**Multi-Tenant Filter:** Line 66 `if (user.clientId !== clientId)` (verified with grep)
+**Response:** `RewardsPageResponse` with user, redemptionCount, rewards[]
+**Database Tables:** rewards (SchemaFinalv2.md:458-586), redemptions (SchemaFinalv2.md:590-661), tiers (SchemaFinalv2.md:250-268)
+
+---
+
+### POST /api/rewards/:id/claim (140 lines)
+
+**Location:** `appcode/app/api/rewards/[rewardId]/claim/route.ts`
+
+**Purpose:** Claims a VIP tier reward, creates redemption record.
+
+**Function Call Chain:**
+```
+POST /api/rewards/:id/claim (route.ts:43)
+  ├─→ supabase.auth.getUser() (route.ts:52)
+  ├─→ userRepository.findByAuthId() (route.ts:78)
+  ├─→ dashboardRepository.getUserDashboard() (route.ts:101)
+  ├─→ rewardService.claimReward() (route.ts:119)
+  │   ├─→ rewardRepository.getById() (rewardService.ts:959)
+  │   ├─→ rewardRepository.hasActiveRedemption() (rewardService.ts:988)
+  │   ├─→ rewardRepository.getUsageCount() (rewardService.ts:1002)
+  │   ├─→ rewardRepository.redeemReward() (rewardService.ts:1068)
+  │   │   ├─→ commissionBoostRepository.createBoostState() (rewardRepository.ts:552-582)
+  │   │   └─→ physicalGiftRepository.createGiftState() (rewardRepository.ts:583-616)
+  │   └─→ googleCalendar.createCommissionBoostScheduledEvent() (rewardService.ts:1133-1156)
+  └─→ Response (route.ts:134) OR formatErrorResponse() (route.ts:138)
+```
+
+**Request Body Interface (route.ts:27-41):**
+```typescript
+interface ClaimRequestBody {
+  scheduledActivationAt?: string;
+  sizeValue?: string;
+  shippingInfo?: {
+    firstName: string;
+    lastName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    phone: string;
+  };
+}
+```
+
+**Service Call (route.ts:119-130):**
+```typescript
+const claimResponse = await rewardService.claimReward({
+  userId: user.id,
+  clientId,
+  rewardId,
+  currentTier: dashboardData.currentTier.id,
+  tierAchievedAt: user.tierAchievedAt ?? null,
+  scheduledActivationAt: body.scheduledActivationAt,
+  shippingInfo,
+  sizeValue: body.sizeValue,
+  userHandle: user.tiktokHandle ?? '',
+  userEmail: user.email ?? authUser.email ?? '',
+});
+```
+
+**Error Handling:** Uses `formatErrorResponse(error)` (route.ts:138) to handle AppError types from service layer
+**Multi-Tenant Filter:** Line 90 `if (user.clientId !== clientId)` (verified with grep)
+**Response:** `ClaimRewardResponse` with redemption details and updatedRewards
+**Database Tables:** rewards (SchemaFinalv2.md:458-586), redemptions (SchemaFinalv2.md:590-661), commission_boost_redemptions (SchemaFinalv2.md:662-745), physical_gift_redemptions (SchemaFinalv2.md:820-887)
+
+---
+
+### GET /api/rewards/history (111 lines)
+
+**Location:** `appcode/app/api/rewards/history/route.ts`
+
+**Purpose:** Returns concluded redemptions for history page.
+
+**Function Call Chain:**
+```
+GET /api/rewards/history (route.ts:23)
+  ├─→ supabase.auth.getUser() (route.ts:27)
+  ├─→ userRepository.findByAuthId() (route.ts:53)
+  ├─→ dashboardRepository.getUserDashboard() (route.ts:76)
+  ├─→ rewardService.getRewardHistory() (route.ts:88)
+  │   ├─→ rewardRepository.getConcludedRedemptions() (rewardService.ts:1319)
+  │   └─→ generateName(), generateDisplayText() (rewardService.ts:1322-1323)
+  └─→ Response (route.ts:99)
+```
+
+**Service Call (route.ts:88-95):**
+```typescript
+const historyResponse = await rewardService.getRewardHistory({
+  userId: user.id,
+  clientId,
+  userHandle: user.tiktokHandle ?? '',
+  currentTier: dashboardData.currentTier.id,
+  tierName: dashboardData.currentTier.name,
+  tierColor: dashboardData.currentTier.color,
+});
+```
+
+**Multi-Tenant Filter:** Line 65 `if (user.clientId !== clientId)` (verified with grep)
+**Response:** `RedemptionHistoryResponse` with user and history[]
+**Sorting:** By `concluded_at DESC` (handled in repository, rewardRepository.ts:580)
+**Database Tables:** redemptions (SchemaFinalv2.md:590-661), rewards (SchemaFinalv2.md:458-586)
+
+---
+
+### GET /api/user/payment-info (89 lines)
+
+**Location:** `appcode/app/api/user/payment-info/route.ts`
+
+**Purpose:** Returns user's saved payment info for pre-filling payment modals.
+
+**Function Call Chain:**
+```
+GET /api/user/payment-info (route.ts:20)
+  ├─→ supabase.auth.getUser() (route.ts:24)
+  ├─→ userRepository.findByAuthId() (route.ts:50)
+  ├─→ rewardService.getPaymentInfo() (route.ts:73)
+  │   └─→ userRepository.getPaymentInfo() (rewardService.ts:1370)
+  │       └─→ safeDecrypt() (userRepository.ts:414-416)
+  └─→ Response (route.ts:77)
+```
+
+**Service Call (route.ts:73):**
+```typescript
+const paymentInfoResponse = await rewardService.getPaymentInfo(user.id, clientId);
+```
+
+**Multi-Tenant Filter:** Line 62 `if (user.clientId !== clientId)` (verified with grep)
+**Response:** `PaymentInfoResponse` with hasPaymentInfo, paymentMethod, paymentAccount
+**Decryption:** Handled in repository layer via Pattern 9 (AES-256-GCM), userRepository.ts:414-416
+**Database Tables:** users (SchemaFinalv2.md:123-155) - default_payment_method, default_payment_account fields
+
+---
+
+### POST /api/rewards/:id/payment-info (142 lines)
+
+**Location:** `appcode/app/api/rewards/[rewardId]/payment-info/route.ts`
+
+**Purpose:** Saves payment info for commission boost payout.
+
+**Function Call Chain:**
+```
+POST /api/rewards/:id/payment-info (route.ts:36)
+  ├─→ supabase.auth.getUser() (route.ts:45)
+  ├─→ userRepository.findByAuthId() (route.ts:71)
+  ├─→ PaymentInfoRequestSchema.safeParse() (route.ts:108) [Zod validation]
+  ├─→ rewardService.savePaymentInfo() (route.ts:124)
+  │   ├─→ Validation: account match (rewardService.ts:1406-1408)
+  │   ├─→ Validation: PayPal email format (rewardService.ts:1414-1420)
+  │   ├─→ Validation: Venmo @ prefix (rewardService.ts:1426-1430)
+  │   ├─→ commissionBoostRepository.getBoostStatus() (rewardService.ts:1436)
+  │   ├─→ commissionBoostRepository.savePaymentInfo() (rewardService.ts:1449)
+  │   │   └─→ encrypt() (commissionBoostRepository.ts:159)
+  │   └─→ userRepository.savePaymentInfo() (rewardService.ts:1459) [if saveAsDefault]
+  └─→ Response (route.ts:136) OR formatErrorResponse() (route.ts:140)
+```
+
+**Zod Schema (route.ts:29-34):**
+```typescript
+const PaymentInfoRequestSchema = z.object({
+  paymentMethod: z.enum(['paypal', 'venmo']),
+  paymentAccount: z.string().min(1, 'paymentAccount is required'),
+  paymentAccountConfirm: z.string().min(1, 'paymentAccountConfirm is required'),
+  saveAsDefault: z.boolean(),
+});
+```
+
+**Zod Validation (route.ts:108-120):**
+```typescript
+const parseResult = PaymentInfoRequestSchema.safeParse(rawBody);
+if (!parseResult.success) {
+  const firstError = parseResult.error.errors[0];
+  return NextResponse.json(
+    {
+      error: 'INVALID_REQUEST',
+      message: firstError.message || 'Invalid request body',
+    },
+    { status: 400 }
+  );
+}
+const body = parseResult.data;
+```
+
+**Service Call (route.ts:124-132):**
+```typescript
+const saveResponse = await rewardService.savePaymentInfo({
+  userId: user.id,
+  clientId,
+  redemptionId: rewardId,
+  paymentMethod: body.paymentMethod,
+  paymentAccount: body.paymentAccount,
+  paymentAccountConfirm: body.paymentAccountConfirm,
+  saveAsDefault: body.saveAsDefault,
+});
+```
+
+**Error Handling:** Uses `formatErrorResponse(error)` (route.ts:140) for AppError types from service layer
+**Multi-Tenant Filter:** Line 83 `if (user.clientId !== clientId)` (verified with grep)
+**Response:** `SavePaymentInfoResponse` with success, message, redemption, userPaymentUpdated
+**Encryption:** Pattern 9 (AES-256-GCM) applied in commissionBoostRepository.ts:159
+**Database Tables:** commission_boost_redemptions (SchemaFinalv2.md:662-745), users (SchemaFinalv2.md:123-155)
+
+---
+
+### Route Error Patterns
+
+All routes return consistent error responses:
+
+| Status | Error Code | When |
+|--------|------------|------|
+| 401 | UNAUTHORIZED | Missing/invalid JWT token or user not found |
+| 403 | FORBIDDEN | User doesn't belong to client (multi-tenant violation) |
+| 400 | INVALID_REQUEST | Zod validation failure or missing fields |
+| 500 | INTERNAL_ERROR | Server configuration or unexpected errors |
+
+**Business errors** (TIER_NOT_ELIGIBLE, LIMIT_REACHED, etc.) are thrown as AppError by service layer and converted via `formatErrorResponse()`.
+
+---
+
 ## Multi-Tenant Security
 
 ### All client_id Filters (Verified with grep)
@@ -730,10 +1302,29 @@ if (!data || data.length === 0) {
 
 ---
 
-**Document Version:** 1.1
-**Steps Completed:** 1 / 4 (Step 6.1 Repositories)
-**Last Updated:** 2025-12-04
-**Completeness:** Repositories ✅ | Services ⏳ | Routes ⏳ | Testing ⏳
+**Document Version:** 1.3
+**Steps Completed:** 3 / 4 (Step 6.1 Repositories, Step 6.2 Services, Step 6.3 Routes)
+**Last Updated:** 2025-12-05
+**Completeness:** Repositories ✅ | Services ✅ | Routes ✅ | Testing ⏳
+
+**Recent Changes (v1.3):**
+- Added Step 6.3 - Reward API Routes documentation
+- Documented 5 routes (596 total lines): GET /api/rewards, POST claim, GET history, GET payment-info, POST payment-info
+- Added Function Call Chains for all 5 routes (entry → exit with line numbers)
+- All line numbers verified with grep (multi-tenant filters, service calls, Zod schema)
+- Documented Presentation Layer Pattern (auth → user → tenant → service → response)
+- Documented Zod validation schema for POST payment-info (route.ts:29-34, 108-120)
+- Documented Route Error Patterns table (401/403/400/500)
+- Added Database Tables with SchemaFinalv2.md line references
+- Updated Quick Reference with route file paths and line counts
+
+**Recent Changes (v1.2):**
+- Added Step 6.2 - Reward Services documentation
+- Documented rewardService.ts (1,479 lines): listAvailableRewards, claimReward, getRewardHistory, getPaymentInfo, savePaymentInfo
+- Documented helper functions: generateName, generateDisplayText, computeStatus
+- Documented Google Calendar integration: createCommissionBoostScheduledEvent (claim-time calendar)
+- Documented commissionBoostRepository.getBoostStatus() addition
+- Updated Quick Reference with new files and line counts
 
 **Recent Changes (v1.1):**
 - Updated rewardRepository.ts line count (638 → 722 lines)

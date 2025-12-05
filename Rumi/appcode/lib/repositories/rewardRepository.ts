@@ -619,6 +619,38 @@ export const rewardRepository = {
   },
 
   /**
+   * Update redemption with Google Calendar event ID.
+   * Per Task 6.2.4: Store calendar event_id after creating event.
+   *
+   * Called after googleCalendar.create*Event() succeeds.
+   * Calendar event creation is non-blocking - redemption already exists.
+   *
+   * SECURITY: Validates client_id match (multitenancy)
+   */
+  async updateCalendarEventId(
+    redemptionId: string,
+    clientId: string,
+    eventId: string
+  ): Promise<void> {
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('redemptions')
+      .update({ google_calendar_event_id: eventId })
+      .eq('id', redemptionId)
+      .eq('client_id', clientId); // Multi-tenant filter
+
+    if (error) {
+      // Non-blocking: log error but don't throw
+      // Redemption already succeeded, calendar event_id is optional
+      console.error(
+        '[RewardRepository] Failed to update calendar event ID:',
+        error.message
+      );
+    }
+  },
+
+  /**
    * Get concluded redemptions for history.
    * Per API_CONTRACTS.md lines 5467-5483 (GET /api/rewards/history query)
    *

@@ -120,6 +120,34 @@ export const commissionBoostRepository = {
   },
 
   /**
+   * Get boost status for a redemption.
+   * Used to verify redemption is in 'pending_info' status before accepting payment info.
+   *
+   * @param redemptionId - Parent redemption ID
+   * @param clientId - Tenant ID for multi-tenant isolation
+   * @returns boost_status or null if not found
+   */
+  async getBoostStatus(
+    redemptionId: string,
+    clientId: string
+  ): Promise<string | null> {
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from('commission_boost_redemptions')
+      .select('boost_status')
+      .eq('redemption_id', redemptionId)
+      .eq('client_id', clientId)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.boost_status;
+  },
+
+  /**
    * Save payment information for a commission boost redemption.
    * Per Task 6.1.14 and API_CONTRACTS.md lines 5331-5451.
    *

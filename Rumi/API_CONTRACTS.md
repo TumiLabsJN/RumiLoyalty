@@ -3735,6 +3735,8 @@ Content-Type: application/json
 // Physical gifts (no size required)
 {
   "shippingAddress": {
+    "firstName": string,    // Recipient first name (required for carrier)
+    "lastName": string,     // Recipient last name (required for carrier)
     "line1": string,
     "line2": string,
     "city": string,

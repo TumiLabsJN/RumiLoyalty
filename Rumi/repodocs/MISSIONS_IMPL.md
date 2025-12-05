@@ -166,9 +166,9 @@ interface ClaimRequestBody {
   scheduledActivationDate?: string;  // For scheduled rewards
   scheduledActivationTime?: string;
   size?: string;                     // For physical gifts
-  shippingAddress?: {                // For physical gifts
-    firstName?: string;
-    lastName?: string;
+  shippingAddress?: {                // For physical gifts (all fields required when provided)
+    firstName: string;               // Required for carrier delivery
+    lastName: string;                // Required for carrier delivery
     line1: string;
     line2?: string;
     city: string;

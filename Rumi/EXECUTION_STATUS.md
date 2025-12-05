@@ -51,7 +51,7 @@ wc -l EXECUTION_STATUS.md  # Still under 250?
 
 **Executing Subtasks (X.Y.Z format):**
 1. Read EXECUTION_PLAN.md subtask (e.g., Task 6.1.1)
-2. Read referenced docs (API_CONTRACTS.md lines, SchemaFinalv2.md sections)
+2. Read referenced docs (API_CONTRACTS.md lines, SchemaFinalv2.md sections or any other document)
 3. **STOP - Validate alignment:** Compare task description vs. reference docs
    - If discrepancy found: Report to user, await clarification
    - If aligned: Proceed to implementation
@@ -182,44 +182,40 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**Step 6.1 - Reward Repositories** (2025-12-04)
-- `lib/repositories/rewardRepository.ts` - 638 lines, 8 functions (listAvailable, getUsageCount, getById, hasActiveRedemption, createRedemption, redeemReward, getConcludedRedemptions, getRedemptionCount)
-- `lib/repositories/commissionBoostRepository.ts` - 225 lines, 2 functions (createBoostState, savePaymentInfo)
-- `lib/repositories/physicalGiftRepository.ts` - 189 lines, 2 functions (createGiftState, markAsShipped)
-- `lib/repositories/userRepository.ts` - 485 lines, 2 payment functions (getPaymentInfo, savePaymentInfo)
-- **Total: 1,537 lines**, all 14 tasks (6.1.1-6.1.14) complete, REWARDS_IMPL.md created
+**Step 6.3 - Reward API Routes** (2025-12-05)
+- `app/api/rewards/route.ts` - 114 lines, GET /api/rewards
+- `app/api/rewards/[rewardId]/claim/route.ts` - 140 lines, POST /api/rewards/:id/claim
+- `app/api/rewards/history/route.ts` - 111 lines, GET /api/rewards/history
+- `app/api/user/payment-info/route.ts` - 89 lines, GET /api/user/payment-info
+- `app/api/rewards/[rewardId]/payment-info/route.ts` - 147 lines, POST /api/rewards/:id/payment-info (Zod validation)
+- **Total: 601 lines**, all 5 tasks (6.3.1-6.3.5) complete
 
 ---
 
 ## 🎯 CURRENT TASK
 
-**Task:** Step 6.2 - Reward Services (Tasks 6.2.1-6.2.3 DONE)
-**Next Step:** Continue with Task 6.2.4 (claimInstant + Google Calendar)
+**Task:** Step 6.4 - Reward Testing (IN PROGRESS)
+**Next Step:** Phase 7 - Tiers APIs
 
 **What's Left:**
-- [x] Task 6.2.1: Create rewardService.ts file
-- [x] Task 6.2.2: listAvailableRewards - status computation, formatting, sorting
-- [x] Task 6.2.3: claimReward - 11 pre-claim validation rules, type routing (1,106 lines total)
-- [ ] Task 6.2.4-6.2.7a: Claim functions by type + Google Calendar
-- [ ] Task 6.2.8: getRewardHistory
-- [ ] Task 6.2.9-6.2.10: Payment info service functions
+- [x] Task 6.4.1: Create reward service tests (7 passing)
+- [ ] Tasks 6.4.2-12: 11 reward test suites pending (gift_card, commission_boost, spark_ads, discount, physical_gift, experience, tier isolation, idempotency, encryption)
 
 ---
 
 ## ✅ RECENTLY COMPLETED (10 MAX - Delete oldest when adding #11)
 
-**Count:** 10/10 ✅ AT LIMIT
+**Count:** 9/10 ✅ UNDER LIMIT
 
-1. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with listAvailable (RPC), getUsageCount, createRedemption
-2. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 passing tests, 7 test files, multi-tenant + completion + claim + state + tier + history + raffle
-3. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes: GET /api/missions, POST claim, POST participate, GET history
-4. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts (1,295 lines), 14 statuses, 8 flippable cards, 12-priority sort
-5. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository.ts (1,252 lines), raffleRepository.ts (316 lines)
-6. [x] **Tasks 4.4.1-3** Dashboard Testing (2025-12-03) - 21 tests, multi-tenant isolation, congrats modal
+1. [x] **Tasks 6.3.1-5** Reward API Routes (2025-12-05) - 5 routes: GET /api/rewards, POST claim, GET history, GET payment-info, POST payment-info (Zod)
+2. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with listAvailable (RPC), getUsageCount, createRedemption
+3. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 passing tests, 7 test files, multi-tenant + completion + claim + state + tier + history + raffle
+4. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes: GET /api/missions, POST claim, POST participate, GET history
+5. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts (1,295 lines), 14 statuses, 8 flippable cards, 12-priority sort
+6. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository.ts (1,252 lines), raffleRepository.ts (316 lines)
 7. [x] **Tasks 4.3.1-2** Dashboard API Routes (2025-12-03) - GET /api/dashboard, GET /api/dashboard/featured-mission
 8. [x] **Tasks 4.2.1-4** Dashboard Services (2025-12-03) - dashboardService.ts (513 lines), VIP metric formatting
 9. [x] **Tasks 4.1.1-5** Dashboard Repositories (2025-12-03) - dashboardRepository.ts, missionRepository.ts
-10. [x] **Tasks 3.5.1-17** Security Infrastructure (2025-12-03) - Rate limiting, validation, admin/file/cron auth
 
 ---
 
