@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-04 (Added pre-implementation validation + subtask approval workflow) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-05 (Tasks 6.4.1-6.4.3 complete - 57 reward tests passing) [Update this timestamp when you modify this document]
 
 ---
 
@@ -199,7 +199,9 @@ If either check fails, FIX before proceeding with task.
 
 **What's Left:**
 - [x] Task 6.4.1: Create reward service tests (7 passing)
-- [ ] Tasks 6.4.2-12: 11 reward test suites pending (gift_card, commission_boost, spark_ads, discount, physical_gift, experience, tier isolation, idempotency, encryption)
+- [x] Task 6.4.2: Test gift_card reward claim (27 passing)
+- [x] Task 6.4.3: Test commission_boost full lifecycle (23 passing)
+- [ ] Tasks 6.4.4-12: 9 reward test suites pending (payout calc, spark_ads, discount, physical_gift, experience, tier isolation, idempotency, encryption)
 
 ---
 

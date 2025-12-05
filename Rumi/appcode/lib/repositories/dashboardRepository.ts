@@ -48,6 +48,12 @@ export interface UserDashboardData {
     salesThreshold: number;
     unitsThreshold: number;
   } | null;
+  allTiers: Array<{
+    id: string;
+    name: string;
+    color: string;
+    order: number;
+  }>;
   checkpointData: {
     salesCurrent: number;
     unitsCurrent: number;
@@ -96,7 +102,8 @@ export const dashboardRepository = {
    */
   async getUserDashboard(
     userId: string,
-    clientId: string
+    clientId: string,
+    options?: { includeAllTiers?: boolean }
   ): Promise<UserDashboardData | null> {
     const supabase = await createClient();
 
@@ -160,6 +167,18 @@ export const dashboardRepository = {
       .eq('tier_order', currentTier.tier_order + 1)
       .single();
 
+    // Get all tiers for client (only if requested)
+    let allTiersData: Array<{ id: string; tier_name: string; tier_color: string; tier_order: number }> = [];
+    if (options?.includeAllTiers) {
+      const { data: allTiers } = await supabase
+        .from('tiers')
+        .select('id, tier_name, tier_color, tier_order')
+        .eq('client_id', clientId)
+        .order('tier_order', { ascending: true });
+
+      allTiersData = allTiers ?? [];
+    }
+
     return {
       user: {
         id: user.id,
@@ -189,6 +208,12 @@ export const dashboardRepository = {
             unitsThreshold: nextTier.units_threshold ?? 0,
           }
         : null,
+      allTiers: allTiersData.map(tier => ({
+        id: tier.id,
+        name: tier.tier_name,
+        color: tier.tier_color,
+        order: tier.tier_order,
+      })),
       checkpointData: {
         salesCurrent: user.checkpoint_sales_current ?? 0,
         unitsCurrent: user.checkpoint_units_current ?? 0,

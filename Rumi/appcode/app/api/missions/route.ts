@@ -78,7 +78,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 4: Get dashboard data for tier info and VIP metric
-    const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId);
+    const dashboardData = await dashboardRepository.getUserDashboard(
+      user.id,
+      clientId,
+      { includeAllTiers: true }
+    );
     if (!dashboardData) {
       return NextResponse.json(
         {
@@ -96,6 +100,30 @@ export async function GET(request: NextRequest) {
       for (const tier of dashboardData.allTiers) {
         tierLookup.set(tier.id, { name: tier.name, color: tier.color });
       }
+    }
+
+    // Monitor for empty tierLookup (indicates data quality issues)
+    if (dashboardData.allTiers && tierLookup.size === 0) {
+      console.warn(
+        '[Missions] tierLookup is empty despite allTiers being present',
+        {
+          clientId,
+          allTiersCount: dashboardData.allTiers.length,
+          userId: user.id,
+        }
+      );
+    }
+
+    // Monitor for missing allTiers (shouldn't happen with opt-in, but defensive)
+    if (!dashboardData.allTiers || dashboardData.allTiers.length === 0) {
+      console.warn(
+        '[Missions] allTiers missing or empty - tier names will show as IDs',
+        {
+          clientId,
+          userId: user.id,
+          hasAllTiers: !!dashboardData.allTiers,
+        }
+      );
     }
 
     // Step 6: Get missions from service

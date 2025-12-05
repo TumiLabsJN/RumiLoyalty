@@ -3,7 +3,7 @@
 **Purpose:** Track and document all TypeScript compilation errors across the codebase
 **Created:** 2025-12-05
 **Last Updated:** 2025-12-05
-**Total Errors:** 21 (1 fixed, 21 remaining)
+**Total Errors:** 19 (3 fixed, 19 remaining)
 **Status:** In Progress
 
 ---
@@ -13,23 +13,23 @@
 | Category | Count | Status | Priority | Phase |
 |----------|-------|--------|----------|-------|
 | Mission Claim Route | 1 | ✅ FIXED | HIGH | Phase 5 |
-| Missions Route | 2 | ⏳ Pending | HIGH | Phase 5 |
+| Missions Route | 2 | ✅ FIXED | HIGH | Phase 5 |
 | Mission Service | 1 | ⏳ Pending | HIGH | Phase 5 |
 | Auth Service | 1 | ⏳ Pending | MEDIUM | Phase 3 |
 | Admin Components | 1 | ⏳ Pending | MEDIUM | Phase 12 |
 | Tiers Page | 5 | ⏳ Pending | MEDIUM | Frontend |
 | Test Files | 11 | ⏳ Pending | LOW | Testing |
-| **TOTAL** | **22 → 21** | **1 Fixed** | | |
+| **TOTAL** | **22 → 19** | **3 Fixed** | | |
 
 ---
 
 ## Fix Checklist
 
-**Progress:** 1 / 22 errors fixed (4.5%)
+**Progress:** 3 / 22 errors fixed (13.6%)
 
-### Phase 5: Mission System (4 errors)
+### Phase 5: Mission System (4 errors → 1 remaining)
 - [x] **Category 1:** Mission Claim Route - firstName/lastName type mismatch (1 error) ✅
-- [ ] **Category 2:** Missions Route - allTiers property missing (2 errors)
+- [x] **Category 2:** Missions Route - allTiers property missing (2 errors) ✅
 - [ ] **Category 3:** Mission Service - function arguments mismatch (1 error)
 
 ### Phase 3: Authentication (1 error)
@@ -87,26 +87,48 @@ npx tsc --noEmit 2>&1 | grep "app/api/missions/\[missionId\]/claim/route.ts(124"
 
 ---
 
-### Category 2: Missions Route (2 errors)
+### Category 2: Missions Route (2 errors) - ✅ FIXED
 
 **File:** `app/api/missions/route.ts`
-**Lines:** 95, 96
+**Lines:** 95, 96 (original error lines)
 **Error:** TS2339 - Property 'allTiers' does not exist on type 'UserDashboardData'
 
 ```
 error TS2339: Property 'allTiers' does not exist on type 'UserDashboardData'.
 ```
 
-**Root Cause:** Route code references `dashboardData.allTiers` but `UserDashboardData` interface doesn't include this property.
+**Root Cause:** Route code references `dashboardData.allTiers` but `UserDashboardData` interface didn't include this property.
 
-**Investigation Needed:**
-1. Check if `allTiers` was removed from interface
-2. Check if property should be added to interface
-3. Check if route should use different data source
+**Fix Documentation:** See `MissionsRouteAllTiersFix.md` and `MissionsRouteAllTiersDecision.md`
 
-**Fix Required:** TBD after investigation
+**Fix Implemented:** 2025-12-05 - Modified Option 1 (opt-in flag)
+1. ✅ `lib/repositories/dashboardRepository.ts` - Added `allTiers` property to UserDashboardData interface
+2. ✅ `lib/repositories/dashboardRepository.ts` - Added optional `options?: { includeAllTiers?: boolean }` parameter to getUserDashboard()
+3. ✅ `lib/repositories/dashboardRepository.ts` - Added conditional allTiers query (only executes if opted-in)
+4. ✅ `lib/repositories/dashboardRepository.ts` - Added allTiers to return statement with field mapping
+5. ✅ `app/api/missions/route.ts` - Updated to opt-in with `{ includeAllTiers: true }`
+6. ✅ `app/api/missions/route.ts` - Added monitoring logs for empty tierLookup
+7. ✅ `tests/integration/api/dashboard.test.ts` - Updated mock fixture to include `allTiers: []`
 
-**Status:** ⏳ Not investigated
+**Verification:**
+```bash
+npx tsc --noEmit 2>&1 | grep -i "allTiers"
+# Result: No output (errors resolved) ✅
+
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+# Result: 19 (reduced from 21) ✅
+```
+
+**Impact:**
+- Error count reduced from 21 to 19
+- Missions page now shows "Unlock at Gold" instead of "Unlock at tier_3"
+- Performance: Only missions route pays query cost (opt-in pattern)
+- Other 5 routes get empty array without extra database query
+
+**Multi-tenant Safety:**
+- ✅ allTiers query includes `.eq('client_id', clientId)` filter (line 176)
+
+**Status:** ✅ FIXED (2025-12-05)
 
 ---
 
@@ -268,9 +290,9 @@ error TS2741: Property 'count' is missing in type '{ type: "physical_gift"; isRa
 
 ## Fix Order Recommendation
 
-### Sprint 1: Phase 5 Mission Fixes (4 errors → 3 remaining)
+### Sprint 1: Phase 5 Mission Fixes (4 errors → 1 remaining)
 1. ✅ **COMPLETED** `MissionPageFix.md` - Applied documented fix (1 error) - 2025-12-05
-2. ⏳ `missions/route.ts` - Fix allTiers property (2 errors)
+2. ✅ **COMPLETED** `MissionsRouteAllTiersDecision.md` - Applied opt-in flag fix (2 errors) - 2025-12-05
 3. ⏳ `missionService.ts` - Fix function call arguments (1 error)
 
 ### Sprint 2: Phase 3/12 Fixes (2 errors)
@@ -313,7 +335,17 @@ sed -n '1118p' lib/services/missionService.ts
 
 ## Changelog
 
-### 2025-12-05 (Updated)
+### 2025-12-05 (Second Update - Category 2 Fixed)
+- ✅ **FIXED** Category 2: Missions Route allTiers property missing (2 errors)
+- Updated 3 files: dashboardRepository.ts (interface + query + opt-in), missions/route.ts (opt-in + monitoring), dashboard.test.ts (fixture)
+- Error count reduced from 21 to 19
+- Implemented Modified Option 1 with opt-in flag pattern
+- Verified multi-tenant safety (client_id filter present)
+- Added monitoring for empty tierLookup
+- Verified fix with TypeScript compilation (19 errors remaining)
+- Updated progress: 3 / 22 errors fixed (13.6%)
+
+### 2025-12-05 (First Update - Category 1 Fixed)
 - ✅ **FIXED** Category 1: Mission Claim Route firstName/lastName type mismatch
 - Updated 4 files: API_CONTRACTS.md, lib/types/api.ts, route.ts, MISSIONS_IMPL.md
 - Error count reduced from 22 to 21
@@ -329,6 +361,6 @@ sed -n '1118p' lib/services/missionService.ts
 
 ---
 
-**Document Version:** 1.1
-**Errors Fixed:** 1 / 22 (4.5%)
-**Next Action:** Continue Sprint 1 - Fix missions/route.ts allTiers property (2 errors)
+**Document Version:** 1.2
+**Errors Fixed:** 3 / 22 (13.6%)
+**Next Action:** Continue Sprint 1 - Fix missionService.ts function arguments mismatch (1 error)

@@ -98,6 +98,7 @@ const mockDashboardData: MockReturnValue = {
     salesThreshold: 5000,
     unitsThreshold: 5000,
   },
+  allTiers: [],
   checkpointData: {
     salesCurrent: 4000,
     unitsCurrent: 400,

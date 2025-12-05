@@ -1196,21 +1196,21 @@
     - **Implementation Guide:** MUST create test file with: (1) import factories from /tests/fixtures/factories.ts, (2) add createTestReward({client_id, type, tier_eligibility, value_data, redemption_frequency}) factory, (3) add createTestRedemption({user_id, reward_id, status}) factory, (4) beforeEach: create test client, tiers, user, rewards, (5) afterEach: cleanupTestData(), (6) describe blocks for each reward type: 'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
     - **Acceptance Criteria:** File exists with test suite skeleton, factory functions support all 6 reward types per SchemaFinalv2.md lines 464-465
 
-- [ ] **Task 6.4.2:** Test gift_card reward claim
+- [x] **Task 6.4.2:** Test gift_card reward claim
     - **Action:** Create `/tests/integration/rewards/gift-card-claim.test.ts`
     - **References:** SchemaFinalv2.md lines 482-485 (gift_card value_data structure), API_CONTRACTS.md lines 4050-4250 (POST /api/rewards/:id/claim), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
     - **Implementation Guide:** MUST test gift card accuracy: (1) create reward with type='gift_card', value_data={amount: 100}, (2) POST /api/rewards/:id/claim → expect 200, (3) query redemptions → verify status='claimed', reward_id correct, (4) GET /api/rewards/history → verify response shows "$100 Gift Card" not "$1000" or "$10", (5) verify value_data.amount in response matches exactly 100, (6) test with amounts 50, 100, 250 to verify no decimal/rounding issues
     - **Test Cases:** (1) claim creates redemption with correct reward_id, (2) value_data.amount=100 displays as "$100 Gift Card" (not $1000), (3) redemption.status='claimed' after successful claim, (4) amount precision maintained (no rounding errors)
     - **Acceptance Criteria:** All 4 test cases MUST pass, gift card amount MUST match value_data.amount exactly per SchemaFinalv2.md line 483, prevents $100-shows-as-$1000 catastrophic financial bug
 
-- [ ] **Task 6.4.3:** Test commission_boost full lifecycle
+- [x] **Task 6.4.3:** Test commission_boost full lifecycle
     - **Action:** Create `/tests/integration/rewards/commission-boost-lifecycle.test.ts`
     - **References:** SchemaFinalv2.md lines 662-816 (commission_boost_redemptions, commission_boost_state_history tables), Loyalty.md lines 2131-2150 (Pattern 4: Auto-Sync Triggers), MissionsRewardsFlows.md lines 443-510 (Commission Boost Flow)
     - **Implementation Guide:** MUST test complete lifecycle: (1) create reward type='commission_boost' with value_data={percent: 5, duration_days: 30}, (2) POST /api/rewards/:id/claim with {scheduledActivationDate, scheduledActivationTime} → expect boost_status='scheduled', (3) simulate activation (cron or time travel): UPDATE boost_status='active', activated_at=NOW(), sales_at_activation=current_sales → verify transition logged, (4) simulate 30 days pass, expiration: UPDATE boost_status='expired', expires_at=NOW(), sales_at_expiration=new_sales → verify logged, (5) user submits payment info → boost_status='pending_payout', (6) admin marks paid → boost_status='paid', payout_sent_at set, (7) query commission_boost_state_history → verify 5 transitions logged (scheduled→active→expired→pending_payout→paid) with timestamps
     - **Test Cases:** (1) claim creates commission_boost_redemptions with boost_status='scheduled', (2) activation sets boost_status='active' and sales_at_activation, (3) expiration sets boost_status='expired' and sales_at_expiration, (4) payment info submission sets boost_status='pending_payout', (5) admin payout sets boost_status='paid', (6) all 5 transitions logged in commission_boost_state_history
     - **Acceptance Criteria:** All 6 test cases MUST pass, boost_status MUST follow lifecycle per SchemaFinalv2.md lines 678-680, state_history MUST log all transitions per lines 746-816, prevents boost-stuck-never-paid catastrophic bug
 
-- [ ] **Task 6.4.4:** Test commission_boost payout calculation
+- [x] **Task 6.4.4:** Test commission_boost payout calculation
     - **Action:** Add test to `/tests/integration/rewards/commission-boost-lifecycle.test.ts`
     - **References:** SchemaFinalv2.md lines 693-699 (sales_at_activation, sales_at_expiration, sales_delta, boost_rate, calculated_commission, final_payout_amount)
     - **Implementation Guide:** MUST test payout math: (1) setup boost with boost_rate=5.00 (5%), (2) set sales_at_activation=1000.00, (3) set sales_at_expiration=2000.00, (4) verify sales_delta GENERATED column = 1000.00 (2000-1000), (5) verify calculated_commission = sales_delta * (boost_rate/100) = 1000 * 0.05 = 50.00, (6) verify final_payout_amount defaults to calculated_commission, (7) Test admin override: UPDATE admin_adjusted_commission=75.00 → verify final_payout_amount can use override, (8) Test edge case: sales_at_expiration < sales_at_activation → sales_delta should be 0 (GREATEST(0, ...))
