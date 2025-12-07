@@ -1217,56 +1217,56 @@
     - **Test Cases:** (1) sales_delta = sales_at_expiration - sales_at_activation calculated correctly, (2) calculated_commission = sales_delta × boost_rate, (3) final_payout_amount = calculated_commission by default, (4) admin_adjusted_commission overrides calculated if set, (5) negative sales_delta capped at 0
     - **Acceptance Criteria:** All 5 test cases MUST pass, sales_delta MUST use GREATEST(0, ...) per SchemaFinalv2.md line 695, payout calculation MUST be accurate, prevents wrong-payout-amount catastrophic bug
 
-- [ ] **Task 6.4.5:** Test spark_ads reward claim
+- [x] **Task 6.4.5:** Test spark_ads reward claim
     - **Action:** Create `/tests/integration/rewards/spark-ads-claim.test.ts`
     - **References:** SchemaFinalv2.md lines 486-487 (spark_ads value_data structure), API_CONTRACTS.md lines 4050-4250 (claim endpoint), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
     - **Implementation Guide:** MUST test spark ads: (1) create reward type='spark_ads', value_data={amount: 100}, redemption_type='instant', (2) POST /api/rewards/:id/claim → expect 200, (3) verify redemptions.redemption_type='instant', (4) verify redemptions.status='claimed' (instant fulfillment), (5) verify response includes correct amount display "$100 Ads Boost"
     - **Test Cases:** (1) claim creates redemption successfully, (2) value_data.amount=100 stored correctly, (3) redemption_type='instant' per reward config, (4) status='claimed' immediately (no scheduling needed)
     - **Acceptance Criteria:** All 4 test cases MUST pass, spark_ads MUST be instant redemption per SchemaFinalv2.md line 618
 
-- [ ] **Task 6.4.6:** Test discount max_uses enforced
+- [x] **Task 6.4.6:** Test discount max_uses enforced
     - **Action:** Create `/tests/integration/rewards/discount-max-uses.test.ts`
     - **References:** SchemaFinalv2.md lines 488-491 (discount value_data with max_uses), lines 563-574 (check_discount_value_data constraint)
     - **Implementation Guide:** MUST test usage limits: (1) create discount reward with value_data={percent: 15, max_uses: 3, coupon_code: 'TEST15'}, (2) create 4 test users, (3) user1 POST /api/rewards/:id/claim → expect 200, (4) user2 claim → expect 200, (5) user3 claim → expect 200, (6) user4 claim → expect 400 USAGE_LIMIT_EXCEEDED, (7) verify redemptions count = 3 (not 4), (8) Test null max_uses: create reward with max_uses=null → should allow unlimited claims
     - **Test Cases:** (1) discount with max_uses=3 allows exactly 3 claims, (2) 4th claim returns USAGE_LIMIT_EXCEEDED, (3) usage count tracked in redemptions table, (4) null max_uses allows unlimited
     - **Acceptance Criteria:** All 4 test cases MUST pass, max_uses MUST be enforced per SchemaFinalv2.md lines 563-574, prevents unlimited-coupon-revenue-loss catastrophic bug
 
-- [ ] **Task 6.4.7:** Test discount scheduled activation
+- [x] **Task 6.4.7:** Test discount scheduled activation
     - **Action:** Create `/tests/integration/rewards/discount-scheduled-activation.test.ts`
     - **References:** SchemaFinalv2.md lines 618-620 (redemption_type, scheduled_activation_date), API_CONTRACTS.md lines 4050-4250 (claim with scheduling)
     - **Implementation Guide:** MUST test scheduled discount: (1) create discount reward with redemption_type='scheduled', (2) POST /api/rewards/:id/claim with {scheduledActivationDate: '2025-02-15', scheduledActivationTime: '18:00:00'} → expect 200, (3) verify redemptions.scheduled_activation_date and scheduled_activation_time set, (4) verify redemptions.google_calendar_event_id populated (calendar event created), (5) verify redemptions.status='claimed' initially, (6) simulate activation time reached → status transitions to 'fulfilled', (7) verify activation_date timestamp set when status→fulfilled
     - **Test Cases:** (1) claim with scheduled date creates redemption correctly, (2) Google Calendar event created with correct datetime, (3) initial status='claimed' until activation, (4) status transitions to 'fulfilled' at activation time
     - **Acceptance Criteria:** All 4 test cases MUST pass, scheduled_activation_date/time MUST be stored per SchemaFinalv2.md lines 619-620, calendar event MUST be created, prevents discount-never-activates catastrophic bug
 
-- [ ] **Task 6.4.8:** Test physical_gift with shipping info
+- [x] **Task 6.4.8:** Test physical_gift with shipping info
     - **Action:** Create `/tests/integration/rewards/physical-gift-shipping.test.ts`
     - **References:** SchemaFinalv2.md lines 820-887 (physical_gift_redemptions table), API_CONTRACTS.md lines 4800-5000 (physical gift claim with shipping)
     - **Implementation Guide:** MUST test shipping validation: (1) create reward type='physical_gift', value_data={requires_size: true, size_category: 'clothing'}, (2) POST /api/rewards/:id/claim WITHOUT shippingInfo → expect 400 SHIPPING_INFO_REQUIRED, (3) POST with shippingInfo={firstName, lastName, addressLine1, city, state, postalCode, country, phone} → expect 200, (4) query physical_gift_redemptions → verify all fields stored: shipping_recipient_first_name, shipping_recipient_last_name, shipping_address_line1, shipping_city, shipping_state, shipping_postal_code, shipping_country, shipping_phone, (5) if requires_size=true, verify size_value required, (6) verify shipping_info_submitted_at timestamp set
     - **Test Cases:** (1) claim without shipping info returns 400 SHIPPING_INFO_REQUIRED, (2) claim with complete shipping creates physical_gift_redemptions record, (3) all 8 shipping fields stored correctly, (4) size_value required when requires_size=true
     - **Acceptance Criteria:** All 4 test cases MUST pass, shipping fields MUST match SchemaFinalv2.md lines 841-853, prevents gift-shipped-to-nowhere catastrophic bug
 
-- [ ] **Task 6.4.9:** Test experience reward claim
+- [x] **Task 6.4.9:** Test experience reward claim
     - **Action:** Create `/tests/integration/rewards/experience-claim.test.ts`
     - **References:** SchemaFinalv2.md lines 496-497 (experience value_data structure), MissionsRewardsFlows.md lines 388-440 (Instant Rewards Flow)
     - **Implementation Guide:** MUST test experience: (1) create reward type='experience', value_data={display_text: 'VIP Meet & Greet'}, redemption_type='instant', (2) POST /api/rewards/:id/claim → expect 200, (3) verify redemptions created with correct reward_id, (4) verify redemption_type='instant', status='claimed', (5) GET /api/rewards/history → verify display shows "VIP Meet & Greet" from value_data.display_text
     - **Test Cases:** (1) claim creates redemption successfully, (2) value_data.display_text shown in response, (3) redemption_type='instant', (4) status='claimed' immediately
     - **Acceptance Criteria:** All 4 test cases MUST pass, experience MUST use display_text from value_data per SchemaFinalv2.md line 497
 
-- [ ] **Task 6.4.10:** Test tier isolation for rewards
+- [x] **Task 6.4.10:** Test tier isolation for rewards
     - **Action:** Create `/tests/integration/rewards/tier-isolation.test.ts`
     - **References:** SchemaFinalv2.md lines 469-471 (rewards.tier_eligibility, preview_from_tier), Loyalty.md lines 2091-2130 (Pattern 8: Multi-Tenant Query Isolation)
     - **Implementation Guide:** MUST test tier restrictions: (1) create Gold user (tier_3), (2) create reward with tier_eligibility='tier_3', (3) create reward with tier_eligibility='tier_4' (Platinum), (4) create reward with tier_eligibility='tier_4' AND preview_from_tier='tier_3', (5) GET /api/rewards as Gold user → MUST see tier_3 reward, MUST NOT see tier_4 reward (unless preview), (6) if preview reward returned, verify marked as locked/preview, (7) POST /api/rewards/:tier4RewardId/claim as Gold user → expect 403 TIER_MISMATCH, (8) preview reward claim also returns 403 (preview doesn't grant access)
     - **Test Cases:** (1) Gold user can see and claim Gold (tier_3) reward, (2) Gold user CANNOT see Platinum (tier_4) reward in list, (3) Gold user sees preview reward but marked as locked, (4) Gold user cannot claim Platinum reward (403 TIER_MISMATCH)
     - **Acceptance Criteria:** All 4 test cases MUST pass, tier_eligibility MUST filter rewards per SchemaFinalv2.md line 469, prevents wrong-tier-content-shown bug
 
-- [ ] **Task 6.4.11:** Test idempotent reward claim
+- [x] **Task 6.4.11:** Test idempotent reward claim
     - **Action:** Add test to `/tests/integration/rewards/gift-card-claim.test.ts`
     - **References:** Loyalty.md lines 2031-2050 (Pattern 2: Idempotent Operations), SchemaFinalv2.md lines 635-643 (redemptions UNIQUE constraints)
     - **Implementation Guide:** MUST test idempotency for VIP rewards: (1) create VIP reward (reward_source='vip_tier'), (2) POST /api/rewards/:id/claim first time → expect 200, store redemptionId, (3) POST /api/rewards/:id/claim second time → expect 400 ALREADY_CLAIMED or 200 with same redemptionId, (4) query redemptions WHERE user_id=X AND reward_id=Y → COUNT MUST be 1, (5) Test "Once Per Tier": if redemption_frequency='one-time', verify UNIQUE(user_id, reward_id, tier_at_claim) enforced per line 640, (6) Test "Once Forever": verify cannot reclaim same reward even after tier change
     - **Test Cases:** (1) first VIP reward claim succeeds, (2) second claim returns ALREADY_CLAIMED, (3) exactly 1 redemption record exists, (4) Once Per Tier and Once Forever logic enforced
     - **Acceptance Criteria:** All 4 test cases MUST pass, UNIQUE constraints MUST prevent duplicates per SchemaFinalv2.md lines 635-643, prevents double-payout catastrophic bug
 
-- [ ] **Task 6.4.12:** Test payment info encryption
+- [x] **Task 6.4.12:** Test payment info encryption
     - **Action:** Create `/tests/integration/rewards/payment-info-encryption.test.ts`
     - **References:** Loyalty.md lines 2151-2182 (Pattern 9: Sensitive Data Encryption), SchemaFinalv2.md lines 700-703 (payment_account fields)
     - **Implementation Guide:** MUST test encryption: (1) create commission_boost redemption in 'pending_info' status, (2) POST /api/rewards/:id/payment-info with {paymentMethod: 'venmo', paymentAccount: '@userhandle', paymentAccountConfirm: '@userhandle'}, (3) query commission_boost_redemptions directly → payment_account column MUST contain ciphertext (not '@userhandle'), (4) verify ciphertext format matches encryption pattern (IV:authTag:encrypted or similar), (5) call decryption utility with stored value → MUST return '@userhandle', (6) Test different inputs produce different ciphertext (not deterministic), (7) Test tampered ciphertext fails decryption gracefully

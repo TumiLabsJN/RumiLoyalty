@@ -898,8 +898,6 @@ export const missionRepository = {
     redemptionId: string,
     userId: string,
     clientId: string,
-    currentTierId: string,
-    rewardType: string,
     claimData: ClaimRequestData
   ): Promise<ClaimResult> {
     const supabase = await createClient();

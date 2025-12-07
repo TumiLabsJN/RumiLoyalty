@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-05 (Tasks 6.4.1-6.4.3 complete - 57 reward tests passing) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-06 (Tasks 6.4.1-6.4.11 complete - 188 reward tests passing) [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,8 +8,8 @@
 
 **FILE SIZE LIMIT: 250 lines maximum**
 
-**Current size:** 248 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
-**Status:** ✅ UNDER LIMIT [✅ UNDER LIMIT / ⚠️ OVER LIMIT]
+**Current size:** 250 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
+**Status:** ✅ AT LIMIT [✅ UNDER LIMIT / ⚠️ OVER LIMIT]
 
 **PRE-MODIFICATION CHECK:**
 ```bash
@@ -199,25 +199,31 @@ If either check fails, FIX before proceeding with task.
 
 **What's Left:**
 - [x] Task 6.4.1: Create reward service tests (7 passing)
-- [x] Task 6.4.2: Test gift_card reward claim (27 passing)
-- [x] Task 6.4.3: Test commission_boost full lifecycle (23 passing)
-- [ ] Tasks 6.4.4-12: 9 reward test suites pending (payout calc, spark_ads, discount, physical_gift, experience, tier isolation, idempotency, encryption)
+- [x] Task 6.4.2: Test gift_card reward claim (34 passing - includes 6.4.11 idempotent tests)
+- [x] Task 6.4.3: Test commission_boost full lifecycle (28 passing - includes 6.4.4)
+- [x] Task 6.4.4: Test commission_boost payout calculation (5 tests added to 6.4.3)
+- [x] Task 6.4.5: Test spark_ads reward claim (21 passing)
+- [x] Task 6.4.6: Test discount max_uses enforced (19 passing)
+- [x] Task 6.4.7: Test discount scheduled activation (18 passing)
+- [x] Task 6.4.8: Test physical_gift with shipping info (25 passing)
+- [x] Task 6.4.9: Test experience reward claim (19 passing)
+- [x] Task 6.4.10: Test tier isolation for rewards (17 passing)
+- [x] Task 6.4.11: Test idempotent reward claim (7 tests added to 6.4.2)
+- [ ] Task 6.4.12: Test payment info encryption
 
 ---
 
 ## ✅ RECENTLY COMPLETED (10 MAX - Delete oldest when adding #11)
 
-**Count:** 9/10 ✅ UNDER LIMIT
+**Count:** 7/10 ✅ UNDER LIMIT
 
-1. [x] **Tasks 6.3.1-5** Reward API Routes (2025-12-05) - 5 routes: GET /api/rewards, POST claim, GET history, GET payment-info, POST payment-info (Zod)
-2. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with listAvailable (RPC), getUsageCount, createRedemption
-3. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 passing tests, 7 test files, multi-tenant + completion + claim + state + tier + history + raffle
-4. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes: GET /api/missions, POST claim, POST participate, GET history
-5. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts (1,295 lines), 14 statuses, 8 flippable cards, 12-priority sort
-6. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository.ts (1,252 lines), raffleRepository.ts (316 lines)
-7. [x] **Tasks 4.3.1-2** Dashboard API Routes (2025-12-03) - GET /api/dashboard, GET /api/dashboard/featured-mission
-8. [x] **Tasks 4.2.1-4** Dashboard Services (2025-12-03) - dashboardService.ts (513 lines), VIP metric formatting
-9. [x] **Tasks 4.1.1-5** Dashboard Repositories (2025-12-03) - dashboardRepository.ts, missionRepository.ts
+1. [x] **Tasks 6.4.8-11** Reward Testing (2025-12-06) - 68 tests: physical_gift, experience, tier-isolation, idempotent
+2. [x] **Tasks 6.3.1-5** Reward API Routes (2025-12-05) - 5 routes: rewards, claim, history, payment-info
+3. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with RPC
+4. [x] **Tasks 5.4.1-8** Mission Testing (2025-12-03) - 53 tests, 7 files
+5. [x] **Tasks 5.3.1-4** Mission API Routes (2025-12-03) - 4 routes
+6. [x] **Tasks 5.2.1-5** Mission Services (2025-12-03) - missionService.ts
+7. [x] **Tasks 5.1.1-6** Missions Repositories (2025-12-03) - missionRepository, raffleRepository
 
 ---
 
@@ -232,9 +238,8 @@ If either check fails, FIX before proceeding with task.
 | `API_CONTRACTS.md` | ✅ Complete | API specifications (source of truth) |
 | `ARCHITECTURE.md` | ✅ Complete | System architecture (source of truth) |
 | `Loyalty.md` | ✅ Complete | Business logic (source of truth) |
-| `supabase/migrations/20251128173733_initial_schema.sql` | ✅ Deployed | All 18 tables |
-| `supabase/seed.sql` | ✅ Deployed | Test data |
-| `appcode/lib/types/database.ts` | ✅ Generated | 1,447 lines, all tables typed |
+| `supabase/migrations/...initial_schema.sql` | ✅ Deployed | All 18 tables |
+| `appcode/lib/types/database.ts` | ✅ Generated | All tables typed |
 
 ---
 
@@ -243,5 +248,4 @@ If either check fails, FIX before proceeding with task.
 None.
 
 ---
-
 **END OF EXECUTION STATUS TRACKER**
