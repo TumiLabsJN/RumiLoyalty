@@ -2,8 +2,8 @@
 
 **Purpose:** Track and document all TypeScript compilation errors across the codebase
 **Created:** 2025-12-05
-**Last Updated:** 2025-12-06
-**Total Errors:** 20 (4 fixed from original 22, +2 new test errors)
+**Last Updated:** 2025-12-07
+**Total Errors:** 20 (5 fixed from original 22, +3 new test errors)
 **Status:** In Progress
 
 ---
@@ -15,25 +15,25 @@
 | Mission Claim Route | 1 | ✅ FIXED | HIGH | Phase 5 |
 | Missions Route | 2 | ✅ FIXED | HIGH | Phase 5 |
 | Mission Service | 1 | ✅ FIXED | HIGH | Phase 5 |
-| Auth Service | 1 | ⏳ Pending | MEDIUM | Phase 3 |
+| Auth Service | 1 | ✅ FIXED | MEDIUM | Phase 3 |
 | Admin Components | 1 | ⏳ Pending | MEDIUM | Phase 12 |
 | Tiers Page | 5 | ⏳ Pending | MEDIUM | Frontend |
-| Test Files | 11+2 | ⏳ Pending | LOW | Testing |
-| **TOTAL** | **22 → 20** | **4 Fixed** | | |
+| Test Files | 11+3 | ⏳ Pending | LOW | Testing |
+| **TOTAL** | **22 → 20** | **5 Fixed** | | |
 
 ---
 
 ## Fix Checklist
 
-**Progress:** 4 / 22 errors fixed (18.2%)
+**Progress:** 5 / 22 errors fixed (22.7%)
 
 ### Phase 5: Mission System (4 errors → 0 remaining) ✅ COMPLETE
 - [x] **Category 1:** Mission Claim Route - firstName/lastName type mismatch (1 error) ✅
 - [x] **Category 2:** Missions Route - allTiers property missing (2 errors) ✅
 - [x] **Category 3:** Mission Service - function arguments mismatch (1 error) ✅
 
-### Phase 3: Authentication (1 error)
-- [ ] **Category 4:** Auth Service - isAdmin property missing (1 error)
+### Phase 3: Authentication (1 error → 0 remaining) ✅ COMPLETE
+- [x] **Category 4:** Auth Service - isAdmin property missing (1 error) ✅
 
 ### Phase 12: Admin Components (1 error)
 - [ ] **Category 5:** Admin Table - generic type constraint (1 error)
@@ -171,26 +171,45 @@ npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
 
 ---
 
-### Category 4: Auth Service (1 error)
+### Category 4: Auth Service (1 error) - ✅ FIXED
 
 **File:** `lib/services/authService.ts`
-**Line:** 408
+**Line:** 408 (original error line)
 **Error:** TS2353 - Object literal specifies unknown property 'isAdmin'
 
 ```
 error TS2353: Object literal may only specify known properties, and 'isAdmin' does not exist in type '{ id: string; clientId: string; tiktokHandle: string; email: string; passwordHash: string; termsVersion?: string | undefined; }'.
 ```
 
-**Root Cause:** Code tries to set `isAdmin` property but the target type doesn't include it.
+**Root Cause:** Code attempted to pass `isAdmin: false` to `userRepository.create()`, but the function signature intentionally omits this parameter as a security constraint (userRepository.ts:180: "NO is_admin parameter allowed"). This prevents users from self-registering as administrators.
 
-**Investigation Needed:**
-1. Check if `isAdmin` should be added to the type
-2. Check if the code should use a different type
-3. Check database schema for `is_admin` column
+**Fix Documentation:** See `AuthServiceFix.md` v1.1 (1,500 lines, comprehensive analysis with Codex audit)
 
-**Fix Required:** TBD after investigation
+**Fix Implemented:** 2025-12-07 - Option 1 (Remove isAdmin Property)
+1. ✅ `lib/services/authService.ts` - Removed `isAdmin: false,` from line 408
+2. ✅ Applied Option 1 from AuthServiceFix.md (Remove isAdmin Property)
+3. ✅ Passed Codex audit 1 - all 6 verifications PASSED (database schema, RPC function, single caller, test mocks, admin creation, frontend impact)
+4. ✅ Passed Codex audit 2 - implementation plan hardened for brittleness (flexible baselines, migration-agnostic searches, re-run verification NOW)
 
-**Status:** ⏳ Not investigated
+**Verification:**
+```bash
+npx tsc --noEmit 2>&1 | grep "lib/services/authService.ts(408"
+# Result: No output (error resolved) ✅
+
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+# Result: 20 (reduced from 21) ✅
+```
+
+**Impact:**
+- Error count reduced from 21 to 20
+- Security constraint preserved (database defaults is_admin to false, RPC hardcodes is_admin = false)
+- No breaking changes (only 1 call site modified)
+- No test mocks affected
+- Zero frontend impact (monorepo architecture)
+
+**Quality Rating:** EXCELLENT (removes code violating security constraint)
+
+**Status:** ✅ FIXED (2025-12-07)
 
 ---
 
@@ -346,12 +365,27 @@ sed -n '1118p' lib/services/missionService.ts
 - `MissionPageFix.md` - Comprehensive fix for mission claim route firstName/lastName
 - `MissionServiceFix.md` - Comprehensive analysis of mission service claimReward error (1,662 lines)
 - `MissionServiceFixIMPL.md` - Implementation plan with Codex audit enhancements (754 lines)
+- `AuthServiceFix.md` - Comprehensive analysis of auth service isAdmin error (1,500 lines, Codex audit 1)
+- `AuthServiceFixIMPL.md` - Implementation plan with brittleness fixes (1,050 lines, Codex audit 2)
 - `TSErrorIMPL.md` - Reusable metaprompt template for implementation phase (976 lines)
 - `EXECUTION_STATUS.md` - Current implementation status
 
 ---
 
 ## Changelog
+
+### 2025-12-07 (Fourth Update - Category 4 Fixed)
+- ✅ **FIXED** Category 4: Auth Service isAdmin property error (1 error)
+- Updated 1 file: lib/services/authService.ts (removed `isAdmin: false,` from line 408)
+- Error count reduced from 21 to 20
+- Implemented Option 1 (Remove isAdmin Property) - respects security constraint
+- Created comprehensive analysis: AuthServiceFix.md (1,500 lines, 27 sections per FSTSFix.md template)
+- Created implementation plan: AuthServiceFixIMPL.md (1,050 lines per TSErrorIMPL.md template)
+- Passed Codex audit 1: All 6 verifications PASSED (database schema, RPC function, single caller, test mocks, admin creation, frontend impact)
+- Passed Codex audit 2: Implementation plan hardened for brittleness (flexible baselines, migration-agnostic searches, re-run verification NOW)
+- Verified: Security constraint preserved (database defaults is_admin to false, RPC hardcodes is_admin = false)
+- Phase 3 Authentication: **✅ COMPLETE** (1/1 errors fixed)
+- Updated progress: 5 / 22 errors fixed (22.7%)
 
 ### 2025-12-06 (Third Update - Category 3 Fixed)
 - ✅ **FIXED** Category 3: Mission Service function arguments mismatch (1 error)
@@ -392,6 +426,6 @@ sed -n '1118p' lib/services/missionService.ts
 
 ---
 
-**Document Version:** 1.3
-**Errors Fixed:** 4 / 22 (18.2%)
-**Next Action:** Sprint 2 - Phase 3/12 Fixes: authService.ts isAdmin property (1 error) and AdminTable.tsx generic type constraint (1 error)
+**Document Version:** 1.4
+**Errors Fixed:** 5 / 22 (22.7%)
+**Next Action:** Sprint 2 - Phase 12 Fixes: AdminTable.tsx generic type constraint (1 error), then Frontend Fixes: tiers/page.tsx count property (5 errors)

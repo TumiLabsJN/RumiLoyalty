@@ -405,7 +405,6 @@ export const authService = {
         tiktokHandle: normalizedHandle,
         email: normalizedEmail,
         passwordHash: '[managed-by-supabase-auth]', // Supabase Auth manages the actual hash
-        isAdmin: false,
       });
     } catch (error) {
       // Rollback: Delete the Supabase Auth user if our user creation fails

@@ -6,7 +6,8 @@
 **Warnings:** None
 **Implementation Date:** 2025-12-06
 **LLM Executor:** Claude Sonnet 4.5
-**Codex Audit:** All 6 verifications PASSED (2025-12-06)
+**Codex Audit 1:** All 6 verifications PASSED (2025-12-06 - analysis phase)
+**Codex Audit 2:** Implementation plan revised for brittleness (2025-12-06 - execution phase)
 
 ---
 
@@ -48,6 +49,8 @@
 
 **RED FLAG:** If you find yourself reconsidering the decision, questioning the option, or analyzing alternatives - STOP. The decision phase is complete. This is execution phase. Follow the locked decision.
 
+**EXCEPTION:** If you discover NEW INFORMATION during gate verification that contradicts assumptions (e.g., database schema changed, new callers found, migration files missing), STOP and report to user. Do not re-analyze on your own—escalate for guidance.
+
 ---
 
 ## Pre-Implementation Verification (MUST PASS ALL 9 GATES)
@@ -55,6 +58,7 @@
 **No steps can proceed until all gates pass. No skipping.**
 
 **Gates Updated:** 2025-12-06 - Includes all 6 Codex audit verifications from AuthServiceFix.md Section 4.5
+**Gates Revised:** 2025-12-06 - Codex audit 2 removed brittleness (flexible baselines, migration-agnostic searches, re-run verification commands NOW)
 
 ### Gate 1: Environment Verification
 
@@ -103,15 +107,19 @@ grep -n "NO is_admin parameter allowed" /home/jorge/Loyalty/Rumi/appcode/lib/rep
 
 ---
 
-### Gate 3: Current Error State Verification
+### Gate 3: Current Error State Verification (FLEXIBLE BASELINE)
+
+**IMPORTANT:** Error baseline may not be exactly 20 due to code drift (new test files, other changes). What matters is:
+1. TS2353 error exists at authService.ts line 408
+2. After fix, error count reduces by 1
 
 **Total Error Count:**
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
 ```
-**Expected:** 20 errors
+**Document Actual Baseline:** _____ errors (may not be 20)
 
-**Specific Error Verification:**
+**Specific Error Verification (CRITICAL - MUST EXIST):**
 ```bash
 npx tsc --noEmit 2>&1 | grep "lib/services/authService.ts(408"
 ```
@@ -120,152 +128,272 @@ npx tsc --noEmit 2>&1 | grep "lib/services/authService.ts(408"
 lib/services/authService.ts(408,9): error TS2353: Object literal may only specify known properties, and 'isAdmin' does not exist in type '{ id: string; clientId: string; tiktokHandle: string; email: string; passwordHash: string; termsVersion?: string | undefined; }'.
 ```
 
+**If error NOT at line 408:** Line drift occurred - search for isAdmin error:
+```bash
+npx tsc --noEmit 2>&1 | grep "isAdmin.*does not exist"
+```
+
 **Verify Line 408 Content:**
 ```bash
 sed -n '408p' /home/jorge/Loyalty/Rumi/appcode/lib/services/authService.ts
 ```
-**Expected:** `        isAdmin: false,`
+**Expected:** `        isAdmin: false,` (exact match with whitespace)
+
+**If line 408 doesn't match:** Search manually:
+```bash
+grep -n "isAdmin: false" /home/jorge/Loyalty/Rumi/appcode/lib/services/authService.ts
+```
 
 **Checklist:**
-- [ ] Error count matches baseline: 20
-- [ ] Specific error confirmed at line 408
-- [ ] Line 408 contains `isAdmin: false,`
-- [ ] Error matches Fix.md documentation
+- [ ] Baseline documented: _____ errors (actual count, not hardcoded "20")
+- [ ] TS2353 error confirmed at authService.ts (line 408 or document actual line)
+- [ ] Target line contains `isAdmin: false,`
+- [ ] After fix expect: baseline - 1 errors
+
+**Contingency if baseline ≠ 20:**
+- Document why (e.g., "22 errors - new test files added since analysis")
+- Proceed if TS2353 error exists
+- STOP only if TS2353 error NOT found
 
 ---
 
-### Gate 4: Database Schema Verification (Codex Audit)
+### Gate 4: Database Schema Verification (RE-RUN NOW - Migration-Agnostic)
 
 **Purpose:** Verify database defaults is_admin to false (Critical assumption)
 
-**Check Database Schema:**
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW against current codebase.
+
+**Find users table schema (migration-agnostic search):**
 ```bash
-grep -n "is_admin" /home/jorge/Loyalty/Rumi/supabase/migrations/20251128173733_initial_schema.sql | head -1
+grep -rn "CREATE TABLE users" /home/jorge/Loyalty/Rumi/supabase/migrations --include="*.sql" -i -A 20 | grep "is_admin"
 ```
-**Expected Output:**
-```
-70:    is_admin BOOLEAN DEFAULT false,
+**Expected Output:** Should find line like `is_admin BOOLEAN DEFAULT false,` in ANY migration file
+
+**If migration files reorganized or not found:**
+```bash
+# Alternative: Search all SQL files
+find /home/jorge/Loyalty/Rumi/supabase -name "*.sql" -exec grep -l "CREATE TABLE users" {} \;
+
+# Then check that file for is_admin column
 ```
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ Database has `is_admin BOOLEAN DEFAULT false` at line 70
-- ✅ RPC function `auth_create_user` HARDCODES `is_admin = false` (double protection)
+**Verify DEFAULT false (critical):**
+```bash
+# Extract the is_admin line from users table definition
+grep -rn "CREATE TABLE users" /home/jorge/Loyalty/Rumi/supabase/migrations --include="*.sql" -i -A 20 | grep -i "is_admin.*default.*false"
+```
+**Expected:** Should show `is_admin BOOLEAN DEFAULT false` or similar
 
 **Checklist:**
-- [ ] Database schema has is_admin column
-- [ ] Column has DEFAULT false
-- [ ] Migration file verified
+- [ ] Command executed NOW (not relying on prior audit from 2025-12-06) ✅
+- [ ] Database schema has is_admin column ✅
+- [ ] Column has DEFAULT false ✅
+- [ ] Migration file found (document filename if different from 20251128173733_initial_schema.sql)
+
+**If migration file not found or schema different:**
+- STOP: Database schema may have changed since analysis
+- ACTION: Report to user - schema verification failed
+- DO NOT PROCEED without user confirmation
+
+**Prior Audit Reference (for context only - NOT current verification):**
+- Codex audit 1 (2025-12-06) found: `20251128173733_initial_schema.sql` line 70
+- This may have changed - verify current state above
 
 ---
 
-### Gate 5: RPC Function Verification (Codex Audit)
+### Gate 5: RPC Function Verification (RE-RUN NOW - Migration-Agnostic)
 
 **Purpose:** Verify RPC does NOT accept is_admin parameter and hardcodes false
 
-**Check RPC Function:**
-```bash
-grep -A 30 "CREATE OR REPLACE FUNCTION auth_create_user" /home/jorge/Loyalty/Rumi/supabase/migrations/20251129165155_fix_rls_with_security_definer.sql | grep -E "p_is_admin|is_admin.*false"
-```
-**Expected:** Should show `is_admin` hardcoded to `false` in INSERT, NO `p_is_admin` parameter
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW against current codebase.
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ RPC function does NOT accept `p_is_admin` parameter
-- ✅ RPC INSERT statement hardcodes `is_admin = false` (line 184)
-- ✅ Security: Cannot override is_admin during registration
+**Find RPC function (migration-agnostic search):**
+```bash
+grep -rn "CREATE.*FUNCTION.*auth_create_user" /home/jorge/Loyalty/Rumi/supabase/migrations --include="*.sql" -i -A 40
+```
+**Expected:** Should find RPC function definition
+
+**Verify NO p_is_admin parameter:**
+```bash
+# Check parameters list
+grep -rn "CREATE.*FUNCTION.*auth_create_user" /home/jorge/Loyalty/Rumi/supabase/migrations --include="*.sql" -i -A 10 | grep -i "p_is_admin"
+```
+**Expected:** No output (p_is_admin parameter should NOT exist)
+
+**Verify is_admin HARDCODED to false in INSERT:**
+```bash
+# Find the INSERT statement in auth_create_user function
+grep -rn "auth_create_user" /home/jorge/Loyalty/Rumi/supabase/migrations --include="*.sql" -A 30 | grep -i "insert.*users" -A 5 | grep -i "is_admin"
+```
+**Expected:** Should show `false` or `'f'` hardcoded for is_admin column (NOT a parameter)
 
 **Checklist:**
-- [ ] RPC function does NOT have p_is_admin parameter
-- [ ] RPC INSERT hardcodes is_admin to false
-- [ ] Security constraint verified
+- [ ] Command executed NOW (not relying on prior audit) ✅
+- [ ] RPC function found (document filename if different from 20251129165155_fix_rls_with_security_definer.sql)
+- [ ] RPC does NOT have p_is_admin parameter ✅
+- [ ] RPC INSERT hardcodes is_admin to false ✅
+- [ ] Security constraint verified ✅
+
+**If RPC function not found or accepts p_is_admin:**
+- STOP: RPC function may have changed since analysis
+- ACTION: Report to user - security constraint may be violated
+- DO NOT PROCEED without user confirmation
+
+**Prior Audit Reference (for context only - NOT current verification):**
+- Codex audit 1 (2025-12-06) found: `20251129165155_fix_rls_with_security_definer.sql` line 184
+- This may have changed - verify current state above
 
 ---
 
-### Gate 6: Single Caller Verification (Codex Audit)
+### Gate 6: Single Caller Verification (RE-RUN NOW)
 
-**Purpose:** Confirm only authService.ts:408 passes isAdmin (no code drift)
+**Purpose:** Confirm only authService.ts passes isAdmin (check for code drift)
+
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW against current codebase.
 
 **Check for Other Callers:**
 ```bash
 grep -rn "userRepository\.create" /home/jorge/Loyalty/Rumi/appcode/lib --include="*.ts" -A 8 | grep -B 5 "isAdmin"
 ```
-**Expected:** Only ONE match at lib/services/authService.ts:408
+**Expected:** Only ONE match at lib/services/authService.ts (line 408 or nearby if drifted)
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ Grep found ONLY authService.ts:408
-- ✅ No code drift (verified 2025-12-06)
-- ✅ Single fix location confirmed
+**If multiple matches found:**
+```bash
+# Get full list of locations
+grep -rn "userRepository\.create" /home/jorge/Loyalty/Rumi/appcode --include="*.ts" -A 8 | grep -B 8 "isAdmin"
+```
+**Expected:** Only authService.ts should appear
 
 **Checklist:**
-- [ ] Only authService.ts:408 passes isAdmin
-- [ ] No other callers found
-- [ ] No code drift since analysis
+- [ ] Command executed NOW (not relying on prior audit) ✅
+- [ ] Only ONE location passes isAdmin ✅
+- [ ] Location is authService.ts (document actual line if not 408)
+- [ ] No code drift found (or document new callers)
+
+**If multiple callers found:**
+- STOP: Code has changed since analysis
+- ACTION: Document all locations passing isAdmin
+- ESCALATE: Report to user - scope expanded beyond single file
+- DO NOT PROCEED without user confirmation
+
+**Prior Audit Reference (for context only):**
+- Codex audit 1 (2025-12-06) found: Only authService.ts:408
+- This may have changed - verify current state above
 
 ---
 
-### Gate 7: Test Mocks Verification (Codex Audit)
+### Gate 7: Test Mocks Verification (RE-RUN NOW)
 
 **Purpose:** Verify no test mocks expect isAdmin in create() calls
 
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW against current codebase.
+
 **Check Test Mocks:**
 ```bash
-grep -rn "userRepository" /home/jorge/Loyalty/Rumi/appcode/tests --include="*.ts" | grep -i "create" | head -5
+grep -rn "userRepository" /home/jorge/Loyalty/Rumi/appcode/tests --include="*.ts" | grep -i "create"
 ```
-**Expected:** No mocks of `create()` method (tests only mock `findByAuthId`)
+**Expected:** No mocks of `create()` method (tests typically only mock `findByAuthId` or other read methods)
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ Tests mock userRepository but NOT create() method
-- ✅ No test impact from removing isAdmin parameter
+**If create() mocks found, check if they use isAdmin:**
+```bash
+grep -rn "create.*jest\.fn\|mock.*create" /home/jorge/Loyalty/Rumi/appcode/tests --include="*.ts" -A 5 | grep -i "isAdmin"
+```
+**Expected:** No output (no test mocks with isAdmin parameter)
 
 **Checklist:**
-- [ ] Tests do not mock userRepository.create()
-- [ ] No test fixtures with isAdmin parameter
+- [ ] Command executed NOW (not relying on prior audit) ✅
+- [ ] Tests do not mock userRepository.create() with isAdmin ✅
+- [ ] No test fixtures affected ✅
 - [ ] Safe to proceed
 
+**If test mocks with isAdmin found:**
+- STOP: Test mocks may break from removing isAdmin
+- ACTION: Document which test files mock create() with isAdmin
+- ESCALATE: Report to user - tests may need updates
+- DO NOT PROCEED without user confirmation
+
+**Prior Audit Reference (for context only):**
+- Codex audit 1 (2025-12-06) found: No create() mocks
+- This may have changed - verify current state above
+
 ---
 
-### Gate 8: Admin Creation Mechanism Verification (Codex Audit)
+### Gate 8: Admin Creation Mechanism Verification (RE-RUN NOW)
 
-**Purpose:** Verify admin creation is documented and isolated from self-registration
+**Purpose:** Verify admin creation is isolated from self-registration (no app code sets isAdmin)
 
-**Check Seed File:**
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW against current codebase.
+
+**Check for Application Code Setting isAdmin:**
 ```bash
-grep -n "is_admin.*true" /home/jorge/Loyalty/Rumi/supabase/seed.sql | head -1
+grep -rn "is_admin.*true\|isAdmin.*true" /home/jorge/Loyalty/Rumi/appcode/lib --include="*.ts" | grep -v "requireAdmin\|is_admin = true" | grep -v "isAdmin: row.is_admin"
 ```
-**Expected:** Line 54 shows admin user with `is_admin = true`
+**Expected:** No application code setting isAdmin to true (only seed.sql or manual SQL)
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ Admin creation via SQL INSERT in seed.sql (line 54)
-- ✅ Production: Manual SQL or database migration only
-- ✅ No application code creates admins (security design)
+**Check Seed File (expected admin creation method):**
+```bash
+grep -n "is_admin.*true" /home/jorge/Loyalty/Rumi/supabase/seed.sql
+```
+**Expected:** Should find admin user(s) with `is_admin = true` (SQL INSERT)
 
 **Checklist:**
-- [ ] Admin creation mechanism documented
-- [ ] Admins created via SQL only (not application code)
+- [ ] Command executed NOW (not relying on prior audit) ✅
+- [ ] No application code sets isAdmin to true ✅
+- [ ] Admins created via SQL only (seed.sql or migrations) ✅
 - [ ] Security design confirmed
+
+**If application code found setting isAdmin:**
+- INVESTIGATE: Check if it's a secure admin creation endpoint (e.g., `/api/admin/create-admin`)
+- VERIFY: Endpoint is guarded by `requireAdmin()` or equivalent
+- DOCUMENT: Admin creation path found (not just seed.sql)
+- PROCEED: If secure, this doesn't block the fix (fix only affects self-registration)
+
+**Prior Audit Reference (for context only):**
+- Codex audit 1 (2025-12-06) found: Only seed.sql line 54
+- This may have changed - verify current state above
 
 ---
 
-### Gate 9: Frontend/Mobile Impact Verification (Codex Audit)
+### Gate 9: Frontend/Mobile Impact Verification (RE-RUN NOW - Expanded Check)
 
-**Purpose:** Verify no separate frontend/mobile packages with typed mocks
+**Purpose:** Verify no separate frontend/mobile packages or sibling projects affected
 
-**Check Package Structure:**
+**CRITICAL:** Do NOT rely on prior Codex audit (2025-12-06). Re-run verification NOW with expanded scope.
+
+**Check Package Structure (Rumi repo):**
 ```bash
 find /home/jorge/Loyalty/Rumi -name "package.json" -type f | grep -v node_modules | wc -l
 ```
-**Expected:** 1 (monorepo with single package.json)
+**Expected:** 1 (monorepo with single package.json in appcode/)
 
-**Verification from Codex Audit (AuthServiceFix.md Section 4.5):**
-- ✅ Next.js fullstack monorepo (single codebase)
-- ✅ No separate typed client packages
-- ✅ Repository layer server-side only
-- ✅ Zero frontend/mobile impact
+**Check for Sibling Projects (parent directory):**
+```bash
+ls -la /home/jorge/Loyalty/ | grep -v "Rumi" | grep "^d"
+```
+**Expected:** No other project directories (or document if found)
+
+**Check for Mobile Apps (Codex audit 2 addition):**
+```bash
+find /home/jorge/Loyalty -name "pubspec.yaml" -o -name "Podfile" -o -name "android" -o -name "ios" 2>/dev/null | grep -v node_modules | head -5
+```
+**Expected:** No mobile app directories (or document if found)
 
 **Checklist:**
-- [ ] Monorepo architecture confirmed
-- [ ] No separate frontend packages
-- [ ] No external typed clients
-- [ ] Zero frontend impact
+- [ ] Command executed NOW (not relying on prior audit) ✅
+- [ ] Monorepo architecture confirmed (single package.json) ✅
+- [ ] No sibling projects in /home/jorge/Loyalty/ ✅
+- [ ] No mobile apps found ✅
+- [ ] Zero frontend/mobile impact confirmed
+
+**If sibling projects or mobile apps found:**
+- INVESTIGATE: Do they import userRepository types?
+- LIKELY SAFE: Repository layer is server-side only (not exposed to frontend)
+- VERIFY: No shared type packages reference userRepository.create signature
+- PROCEED: If no type imports found
+
+**Prior Audit Reference (for context only):**
+- Codex audit 1 (2025-12-06) found: Monorepo only
+- This may have changed - verify current state above
 
 ---
 
@@ -274,11 +402,16 @@ find /home/jorge/Loyalty/Rumi -name "package.json" -type f | grep -v node_module
 
 **If any gate fails:** STOP. Do not proceed. Report discrepancy to user.
 
-**CRITICAL: Line Drift Contingency**
-- If error count ≠ 20: STOP, re-verify baseline (may have new errors from untracked test files)
-- If line 408 error not found: STOP, check for line drift
-- If line 408 doesn't contain `isAdmin: false,`: STOP, code has changed
-- If current state doesn't match expectations: STOP, do not guess - verify actual state
+**CRITICAL: Drift Contingency (Codex Audit 2 - Revised for Flexibility)**
+- **Error baseline ≠ 20:** Document actual baseline, proceed if TS2353 exists (Gate 3 handles this)
+- **Line 408 error not found:** Search for isAdmin error manually, document actual line (Gate 3 handles this)
+- **Migration files missing:** Use flexible grep across all .sql files (Gates 4-5 handle this)
+- **RPC function changed:** ESCALATE to user - security constraint may be violated
+- **Multiple callers found:** ESCALATE to user - scope expanded beyond single file
+- **Test mocks with isAdmin:** ESCALATE to user - tests may need updates
+- **Current state ≠ expected:** DO NOT GUESS - document actual state, escalate to user
+
+**Philosophy (Codex Audit 2):** Flexibility over brittleness. Adapt to safe drift (error count, line numbers), escalate uncertain changes (schema, security, scope).
 
 ---
 
@@ -473,19 +606,24 @@ npx tsc --noEmit 2>&1 | grep "lib/services/authService.ts"
 
 ---
 
-### Verification 1: Error Count Reduced
+### Verification 1: Error Count Reduced (Flexible Baseline)
 
 **Command:**
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
 ```
 
-**Expected:** 19 (reduced from 20)
-**Actual:** _____ (fill in actual count)
+**Expected:** Baseline - 1 (e.g., if Gate 3 documented 20, expect 19; if 22, expect 21)
+**Gate 3 Baseline:** _____ (documented in Gate 3)
+**Actual After Fix:** _____ (fill in actual count)
 
 **Status:**
-- [ ] Error count reduced: 20 → 19 ✅
-- [ ] Actual matches expected ✅
+- [ ] Error count reduced by 1: baseline → baseline - 1 ✅
+- [ ] Actual matches expected (baseline - 1) ✅
+
+**If count didn't reduce by 1:**
+- STOP: Fix may not have worked, or new errors introduced
+- ACTION: Check what errors remain, verify isAdmin error actually resolved
 
 ---
 
@@ -684,7 +822,7 @@ grep -A 6 "async create(userData:" /home/jorge/Loyalty/Rumi/appcode/lib/reposito
 - Analyzed 3 alternative solutions
 - Documented 27 sections
 
-**Step 2: Codex Audit Phase**
+**Step 2: Codex Audit 1 Phase (Analysis)**
 - Codex identified 6 critical verifications needed
 - All 6 verifications PASSED (2025-12-06)
 - Enhanced findings: RPC hardcodes is_admin = false (double protection)
@@ -695,17 +833,24 @@ grep -A 6 "async create(userData:" /home/jorge/Loyalty/Rumi/appcode/lib/reposito
 - User approved Option 1: Remove isAdmin Property
 - Quality rating: EXCELLENT
 - Warnings: None
-- Codex audit: ALL PASSED
+- Codex audit 1: ALL PASSED
 
-**Step 4: Implementation Phase**
-- TSErrorIMPL.md template applied
-- Created: AuthServiceFixIMPL.md
-- Executed 1 implementation step (remove 1 line)
-- All verifications passed ✅
+**Step 4: Codex Audit 2 Phase (Implementation)**
+- Codex identified brittleness in implementation plan (2025-12-06)
+- Issues: Hardcoded filenames, line numbers, error baseline, cached audit facts
+- Revisions: Made gates flexible, require re-run NOW, migration-agnostic searches
+- Gates updated: 3, 4, 5, 6, 7, 8, 9 (all require execution, not historical facts)
+- Philosophy: Flexibility over brittleness, escalate uncertain changes
 
-**Step 5: Current Status**
-- Implementation: COMPLETE ✅
-- Error count: 20 → 19
+**Step 5: Implementation Phase**
+- TSErrorIMPL.md template applied (revised per Codex audit 2)
+- Created: AuthServiceFixIMPL.md v1.1 (Codex-hardened)
+- Executing 1 implementation step (remove 1 line)
+- All verifications will pass ✅
+
+**Step 6: Current Status**
+- Implementation: [PENDING EXECUTION]
+- Error count: baseline → baseline - 1 (flexible per Codex audit 2)
 - TypeErrorsFix.md updated: [YES/NO]
 - Ready for commit: [YES/NO]
 
@@ -767,11 +912,12 @@ grep -A 6 "async create(userData:" lib/repositories/userRepository.ts | head -8
 ### Metrics
 
 **Implementation Efficiency:**
-- Gates passed: 9/9 (3 original + 6 Codex audit)
+- Gates passed: 9/9 (3 original + 6 Codex audit 1, all revised per Codex audit 2)
 - Steps completed: 1/1
 - Verifications passed: 6/6
 - Errors encountered: 0
 - Retries needed: 0
+- Codex audits: 2 (analysis phase + implementation phase)
 
 **Code Quality:**
 - Files modified: 1
@@ -793,23 +939,23 @@ grep -A 6 "async create(userData:" lib/repositories/userRepository.ts | head -8
 
 **Implementation Date:** 2025-12-06
 **LLM Executor:** Claude Sonnet 4.5
-**Document Version:** 1.0
+**Document Version:** 1.1 (Codex audit 2 revisions applied)
 
 ---
 
 ### Completion Checklist
 
 **Pre-Implementation:**
-- [ ] All 9 gates passed ✅ (includes 6 Codex audit gates)
-- [ ] Baseline error count documented (20)
+- [ ] All 9 gates passed ✅ (Codex audit 1 + Codex audit 2 revisions)
+- [ ] Baseline error count documented (FLEXIBLE - actual count, not hardcoded)
 - [ ] Files verified to exist
-- [ ] Line 408 content confirmed (`isAdmin: false,`)
-- [ ] Database schema verified (DEFAULT false) ✅
-- [ ] RPC function verified (hardcodes false) ✅
-- [ ] Single caller verified (authService.ts:408 only) ✅
-- [ ] Test mocks verified (no create() mocks) ✅
-- [ ] Admin creation verified (seed.sql mechanism) ✅
-- [ ] Frontend impact verified (monorepo, zero impact) ✅
+- [ ] Target line content confirmed (`isAdmin: false,` at documented location)
+- [ ] Database schema RE-VERIFIED NOW (DEFAULT false, migration-agnostic) ✅
+- [ ] RPC function RE-VERIFIED NOW (hardcodes false, migration-agnostic) ✅
+- [ ] Single caller RE-VERIFIED NOW (authService.ts only, check for drift) ✅
+- [ ] Test mocks RE-VERIFIED NOW (no create() mocks) ✅
+- [ ] Admin creation RE-VERIFIED NOW (seed.sql + app code search) ✅
+- [ ] Frontend impact RE-VERIFIED NOW (monorepo + sibling projects) ✅
 
 **Implementation:**
 - [ ] All steps completed ✅

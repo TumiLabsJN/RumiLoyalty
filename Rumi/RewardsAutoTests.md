@@ -1,7 +1,7 @@
 # Rewards System Automated Tests
 
-**Last Updated:** 2025-12-06
-**Total Tests:** 164 passing (Tasks 6.4.1-6.4.9) + more pending (Tasks 6.4.10-6.4.12)
+**Last Updated:** 2025-12-07
+**Total Tests:** 229 passing (Tasks 6.4.1-6.4.12 COMPLETE)
 **Test Framework:** Jest with mocked API routes
 
 ---
@@ -11,13 +11,16 @@
 | Test File | Tests | Task | Run Command |
 |-----------|-------|------|-------------|
 | `rewardService.test.ts` | 7 passing + 23 todo | 6.4.1 | `npm test -- --testPathPatterns=rewardService` |
-| `gift-card-claim.test.ts` | 27 passing | 6.4.2 | `npm test -- --testPathPatterns=gift-card-claim` |
+| `gift-card-claim.test.ts` | 34 passing | 6.4.2, 6.4.11 | `npm test -- --testPathPatterns=gift-card-claim` |
 | `commission-boost-lifecycle.test.ts` | 28 passing | 6.4.3, 6.4.4 | `npm test -- --testPathPatterns=commission-boost-lifecycle` |
 | `spark-ads-claim.test.ts` | 21 passing | 6.4.5 | `npm test -- --testPathPatterns=spark-ads-claim` |
 | `discount-max-uses.test.ts` | 19 passing | 6.4.6 | `npm test -- --testPathPatterns=discount-max-uses` |
 | `discount-scheduled-activation.test.ts` | 18 passing | 6.4.7 | `npm test -- --testPathPatterns=discount-scheduled-activation` |
 | `physical-gift-shipping.test.ts` | 25 passing | 6.4.8 | `npm test -- --testPathPatterns=physical-gift-shipping` |
 | `experience-claim.test.ts` | 19 passing | 6.4.9 | `npm test -- --testPathPatterns=experience-claim` |
+| `tier-isolation.test.ts` | 17 passing | 6.4.10 | `npm test -- --testPathPatterns=tier-isolation` |
+| `payment-info-encryption.test.ts` | 33 passing | 6.4.12 | `npm test -- --testPathPatterns=payment-info-encryption` |
+| `payment-info-repository-encryption.test.ts` | 8 passing | 6.4.12 | `npm test -- --testPathPatterns=payment-info-repository` |
 
 **Run all reward tests:**
 ```bash
@@ -57,7 +60,7 @@ Organized by reward type for future implementation:
 
 ---
 
-## 2. gift-card-claim.test.ts (27 tests)
+## 2. gift-card-claim.test.ts (34 tests)
 
 **File:** `tests/integration/rewards/gift-card-claim.test.ts`
 **Task:** 6.4.2 - Test gift_card reward claim
@@ -107,6 +110,18 @@ Organized by reward type for future implementation:
 | # | Test Name | What It Verifies | Real-World Scenario |
 |---|-----------|------------------|---------------------|
 | 27 | `should return 403 when user client_id does not match tenant` | Returns 403 FORBIDDEN when user.clientId !== env.CLIENT_ID | Brand A user can't claim Brand B rewards |
+
+### Idempotent Reward Claim - Task 6.4.11 (7 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 28 | `should allow first claim for VIP reward` | First claim succeeds with 200 | User claims VIP reward first time |
+| 29 | `should return ACTIVE_CLAIM_EXISTS on second claim attempt` | Second claim returns 400 | Prevents double-claiming |
+| 30 | `should include activeRedemptionId in error details` | Error details show existing redemption ID | User can track existing claim |
+| 31 | `should include activeRedemptionStatus in error details` | Error details show current status | User sees claim status |
+| 32 | `should not create duplicate redemption on second claim` | Only one redemption exists | Database integrity |
+| 33 | `should still block claim when existing redemption is fulfilled` | Fulfilled redemptions block new claims | Can't reclaim fulfilled reward |
+| 34 | `should block claim when existing redemption is concluded` | Concluded redemptions block new claims | Can't reclaim concluded reward |
 
 ---
 
@@ -473,13 +488,150 @@ Organized by reward type for future implementation:
 
 ---
 
-## Pending Test Files (Tasks 6.4.10-6.4.12)
+## 9. tier-isolation.test.ts (17 tests)
 
-| Task | Test File | Description |
-|------|-----------|-------------|
-| 6.4.10 | `tier-isolation.test.ts` | Tier eligibility filtering, preview rewards |
-| 6.4.11 | `idempotent-claim.test.ts` | Double-claim prevention |
-| 6.4.12 | `payment-info-encryption.test.ts` | AES-256-GCM encryption/decryption |
+**File:** `tests/integration/rewards/tier-isolation.test.ts`
+**Task:** 6.4.10 - Test tier isolation for rewards
+**Protects Against:** Users seeing/claiming rewards above their tier level
+
+### Test Case 1: User sees only rewards matching their tier (4 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 1 | `should return only Gold-eligible rewards for Gold user` | Filters by tier_eligibility | Gold user sees Gold rewards only |
+| 2 | `should not return Platinum rewards for Gold user` | Higher tier rewards hidden | Gold can't see Platinum rewards |
+| 3 | `should return preview rewards with isLocked=true` | Preview from higher tier shown locked | Gold sees locked Platinum preview |
+| 4 | `should show requiredTierName for locked preview rewards` | Shows tier needed to unlock | "Unlock at Platinum" message |
+
+### Test Case 2: Claim blocked for wrong tier (4 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 5 | `should allow Gold user to claim Gold reward` | Matching tier succeeds | Gold claims Gold reward |
+| 6 | `should return TIER_INELIGIBLE when Gold claims Platinum` | Wrong tier blocked | Gold can't claim Platinum reward |
+| 7 | `should include requiredTier in error details` | Error shows required tier | User knows what tier needed |
+| 8 | `should include currentTier in error details` | Error shows current tier | User knows their tier |
+
+### Test Case 3: Preview rewards locked but visible (5 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 9 | `should return isPreview=true for preview rewards` | Preview flag set | UI shows preview badge |
+| 10 | `should return canClaim=false for preview rewards` | Claim button disabled | Can't claim locked rewards |
+| 11 | `should return status=locked for preview rewards` | Status correctly set | Shows locked state |
+| 12 | `should show unlockMessage for preview rewards` | Unlock message shown | "Upgrade to Platinum to unlock" |
+| 13 | `should not block preview visibility for lower tier users` | Preview still visible | Teaser for higher tiers |
+
+### Additional: Tier Filtering Edge Cases (4 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 14 | `should return empty rewards array if no matching tier rewards` | Graceful empty state | New tier has no rewards yet |
+| 15 | `should filter by both tier and client_id` | Multi-tenant + tier filter | Complete isolation |
+| 16 | `should return 401 when not authenticated` | Auth required | Unauthenticated blocked |
+| 17 | `should return 403 when user client_id mismatch` | Multi-tenant isolation | Brand A can't see Brand B |
+
+---
+
+## 10. payment-info-encryption.test.ts (33 tests)
+
+**File:** `tests/integration/rewards/payment-info-encryption.test.ts`
+**Task:** 6.4.12 - Test payment info encryption
+**Protects Against:** PII breach - payment accounts stored as plaintext
+
+### API Route Flow (2 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 1 | `should accept payment info when boost is in pending_info status` | POST succeeds | Creator submits payment info |
+| 2 | `should reject payment info when boost is not in pending_info status` | Wrong status blocked | Can't submit before boost expires |
+
+### Test Case 1: payment_account stored as ciphertext (7 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 3 | `should call repository.savePaymentInfo with plaintext` | Service passes to repository | Flow through layers |
+| 4 | `should encrypt PayPal email before database storage` | Email becomes ciphertext | john@paypal.com → encrypted |
+| 5 | `should encrypt Venmo handle before database storage` | Handle becomes ciphertext | @johndoe → encrypted |
+| 6 | `should produce ciphertext in iv:authTag:ciphertext format` | Correct encryption format | Per Loyalty.md Pattern 9 |
+| 7 | `should produce base64-encoded IV, authTag, and ciphertext` | Parts are base64 | Valid encoding |
+| 8 | `should use AES-256-GCM algorithm (12-byte IV)` | Correct IV size | Standard GCM |
+| 9 | `should use 16-byte auth tag for tamper detection` | Correct auth tag | Tamper protection |
+
+### Test Case 2: decryption returns original value (5 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 10 | `should decrypt PayPal email back to original value` | Round-trip works | Admin can read payment info |
+| 11 | `should decrypt Venmo handle back to original value` | Round-trip works | Admin can process payment |
+| 12 | `should handle special characters in PayPal email` | Special chars preserved | user+test@domain.com works |
+| 13 | `should handle unicode characters` | Unicode preserved | International emails work |
+| 14 | `should handle maximum VARCHAR(255) length` | Long values work | Edge case covered |
+
+### Test Case 3: different inputs produce different ciphertext (5 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 15 | `should produce different ciphertext for different accounts` | Different input → different output | Each account unique |
+| 16 | `should produce different ciphertext for same input (random IV)` | Non-deterministic | Protects against rainbow tables |
+| 17 | `should produce different IVs for each encryption` | Random IV per encryption | Cryptographic security |
+| 18 | `should decrypt both to same original value` | Both decrypt correctly | Consistency |
+| 19 | `should protect against rainbow table attacks` | Unique ciphertext each time | Security best practice |
+
+### Test Case 4: tampered ciphertext fails decryption (7 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 20 | `should fail when ciphertext portion is modified` | Tamper detected | Data integrity |
+| 21 | `should fail when IV is modified` | Tamper detected | Data integrity |
+| 22 | `should fail when auth tag is modified` | Tamper detected | GCM authentication |
+| 23 | `should fail with malformed format (missing parts)` | Format validated | Invalid data rejected |
+| 24 | `should fail when ciphertext from one account swapped` | Cross-account attack blocked | Security |
+| 25 | `should fail with completely invalid base64 content` | Invalid data rejected | Input validation |
+| 26 | `should fail when decrypted with wrong encryption key` | Wrong key fails | Key security |
+
+### Pattern 9 Security Requirements (4 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 27 | `should throw if ENCRYPTION_KEY is missing` | Key required | Config validation |
+| 28 | `should throw if ENCRYPTION_KEY is wrong length` | Key format validated | Security |
+| 29 | `should correctly identify encrypted vs plaintext strings` | Format detection | isEncrypted() utility |
+| 30 | `should never expose plaintext in encrypted output` | No plaintext leak | Security audit |
+
+### Repository Integration (3 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 31 | `should pass correct parameters to repository` | Params passed correctly | Integration works |
+| 32 | `should not call userRepository when saveAsDefault=false` | Optional save works | User preference |
+| 33 | `should verify boost status is pending_info before saving` | Status check | Business logic |
+
+---
+
+## 11. payment-info-repository-encryption.test.ts (8 tests)
+
+**File:** `tests/integration/rewards/payment-info-repository-encryption.test.ts`
+**Task:** 6.4.12 - Test actual repository encrypts before database
+**Protects Against:** Repository passing plaintext to Supabase (Implementation Guide Step 3)
+
+### Repository Encryption Tests (6 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 1 | `should pass ENCRYPTED payment_account to Supabase update (Venmo)` | Supabase receives ciphertext | @userhandle stored encrypted |
+| 2 | `should pass ENCRYPTED payment_account to Supabase update (PayPal)` | Supabase receives ciphertext | email@paypal.com stored encrypted |
+| 3 | `should produce different ciphertext for same input (non-deterministic)` | Random IV used | Security best practice |
+| 4 | `should set boost_status to pending_payout after saving` | Status transition | Workflow continues |
+| 5 | `should update redemptions.status to fulfilled` | Parent status updated | Auto-sync works |
+| 6 | `should include client_id filter for tenant isolation` | Multi-tenant | Security |
+
+### Plaintext Protection (2 tests)
+
+| # | Test Name | What It Verifies | Real-World Scenario |
+|---|-----------|------------------|---------------------|
+| 7 | `should NEVER pass plaintext Venmo handle to database` | No plaintext in any payload | PII protection |
+| 8 | `should NEVER pass plaintext PayPal email to database` | No plaintext in any payload | PII protection |
 
 ---
 
@@ -509,6 +661,13 @@ Organized by reward type for future implementation:
 | **Size Validation** | Wrong size shipped | User gets unwearable clothing |
 | **Experience Display** | display_text not shown | User doesn't see experience name |
 | **Instant Redemption** | Experience requires scheduling | UX confusion, claim fails |
+| **Tier Isolation** | Higher tier rewards visible | Users see rewards they can't claim |
+| **Tier Claim Block** | Wrong tier can claim | Unauthorized reward access |
+| **Preview Visibility** | Preview not shown locked | Users confused about locked rewards |
+| **Idempotent Claims** | Double-claiming allowed | Duplicate redemptions, financial loss |
+| **Payment Encryption** | Plaintext stored in DB | PII breach, legal liability |
+| **Tamper Detection** | Modified ciphertext accepted | Data integrity compromised |
+| **Key Management** | Missing/invalid encryption key | System crash, data loss |
 
 ---
 
@@ -533,9 +692,12 @@ npm test -- --testPathPatterns=discount-max-uses
 npm test -- --testPathPatterns=discount-scheduled-activation
 npm test -- --testPathPatterns=physical-gift-shipping
 npm test -- --testPathPatterns=experience-claim
+npm test -- --testPathPatterns=tier-isolation
+npm test -- --testPathPatterns=payment-info-encryption
+npm test -- --testPathPatterns=payment-info-repository
 ```
 
 ---
 
-**Document Version:** 1.6
-**Last Updated:** 2025-12-06
+**Document Version:** 2.0
+**Last Updated:** 2025-12-07
