@@ -262,7 +262,7 @@ describe('Claim Creates Redemption Tests', () => {
         .single();
 
       expect(joinedData?.mission_progress_id).toBe(progress.id);
-      const linkedProgress = joinedData?.mission_progress as Record<string, unknown>;
+      const linkedProgress = joinedData?.mission_progress as unknown as Record<string, unknown>;
       expect(linkedProgress?.id).toBe(progress.id);
       expect(linkedProgress?.user_id).toBe(testUser.id);
       expect(linkedProgress?.mission_id).toBe(testMission.id);

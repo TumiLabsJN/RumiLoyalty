@@ -9,7 +9,7 @@ import { ReactNode } from 'react'
 export interface Column<T> {
   key: string
   header: string
-  render?: (item: T) => ReactNode
+  render: (item: T) => ReactNode
   className?: string
 }
 
@@ -79,9 +79,7 @@ export function AdminTable<T extends object>({
                         key={column.key}
                         className={`px-3 py-4 text-sm whitespace-nowrap first:pl-4 first:sm:pl-0 last:pr-4 last:sm:pr-0 ${column.className || ''}`}
                       >
-                        {column.render
-                          ? column.render(item)
-                          : (item[column.key] as ReactNode) ?? '-'}
+                        {column.render(item)}
                       </td>
                     ))}
                   </tr>

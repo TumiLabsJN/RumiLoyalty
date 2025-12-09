@@ -213,7 +213,7 @@ describe('History Completeness Tests', () => {
       expect(history?.claimed_at).not.toBeNull();
 
       // Verify reward info
-      const rewardInfo = history?.rewards as Record<string, unknown>;
+      const rewardInfo = history?.rewards as unknown as Record<string, unknown>;
       expect(rewardInfo?.name).toBe('Test Gift Card');
       expect(rewardInfo?.type).toBe('gift_card');
     });
@@ -254,7 +254,7 @@ describe('History Completeness Tests', () => {
 
       // Active mission should NOT appear in history
       const activeInHistory = history?.some(h => {
-        const mp = h.mission_progress as Record<string, unknown> | null;
+        const mp = h.mission_progress as unknown as Record<string, unknown> | null;
         return mp?.mission_id === activeMission.id;
       });
 
@@ -333,7 +333,7 @@ describe('History Completeness Tests', () => {
       // Verify each mission appears
       for (const mission of missions) {
         const found = history?.some(h => {
-          const mp = h.mission_progress as Record<string, unknown> | null;
+          const mp = h.mission_progress as unknown as Record<string, unknown> | null;
           return mp?.mission_id === mission.id;
         });
         expect(found).toBe(true);

@@ -354,12 +354,14 @@
               type: "physical_gift",
               isRaffle: true,
               displayText: "Chance to win Smartwatch!",
+              count: 1,
               sortPriority: 1
             },
             {
               type: "physical_gift",
               isRaffle: false,
               displayText: "Gift Drop: Premium Backpack",
+              count: 1,
               sortPriority: 5
             },
             {
@@ -395,18 +397,21 @@
               type: "experience",
               isRaffle: true,
               displayText: "Chance to win Creator Retreat!",
+              count: 1,
               sortPriority: 2
             },
             {
               type: "physical_gift",
               isRaffle: true,
               displayText: "Chance to win Laptop!",
+              count: 1,
               sortPriority: 1
             },
             {
               type: "experience",
               isRaffle: false,
               displayText: "VIP Brand Event",
+              count: 1,
               sortPriority: 4
             },
             {

@@ -44,8 +44,8 @@
 - [ ] Phase 3: Authentication System (Repos, Services, Routes, Testing, Security Infrastructure)
 - [ ] Phase 4: Dashboard APIs
 - [ ] Phase 5: Missions System
-- [ ] Phase 6: Rewards System
-- [ ] Phase 7: History & Tiers APIs
+- [x] Phase 6: Rewards System
+- [ ] Phase 7: History & Tiers APIs (Step 7.1 complete)
 - [ ] Phase 8: Automation & Cron Jobs
 - [ ] Phase 9: Frontend Integration (MSW → Real APIs)
 - [ ] Phase 10: Testing & CI/CD
@@ -1280,24 +1280,24 @@
 **Objective:** Implement mission/reward history and tier listing endpoints.
 
 ## Step 7.1: History Endpoints
-- [ ] **Task 7.1.1:** Verify mission history (already implemented in Phase 5.3.4)
+- [x] **Task 7.1.1:** Verify mission history (already implemented in Phase 5.3.4)
     - **Command:** `curl -H "Authorization: Bearer [token]" http://localhost:3000/api/missions/history`
     - **Acceptance Criteria:** Returns 200 with mission history
 
-- [ ] **Task 7.1.2:** Verify reward history (already implemented in Phase 6.3.3)
+- [x] **Task 7.1.2:** Verify reward history (already implemented in Phase 6.3.3)
     - **Command:** `curl -H "Authorization: Bearer [token]" http://localhost:3000/api/rewards/history`
     - **Acceptance Criteria:** Returns 200 with reward history
 
 ## Step 7.2: Tiers API
-- [ ] **Task 7.2.1:** Create tier repository file
+- [x] **Task 7.2.1:** Create tier repository file
     - **Action:** Create `/lib/repositories/tierRepository.ts`
     - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers), ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 7 (Naming Conventions, lines 932-938)
     - **Acceptance Criteria:** File exists with repository object pattern, includes functions for querying vip_tiers with rewards/missions aggregation per Section 5
 
 - [ ] **Task 7.2.2:** Implement tier repository query functions
-    - **Action:** Add functions for tier data with rewards aggregation
-    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response schema and business logic), SchemaFinalv2.md (vip_tiers, rewards, missions tables), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), queries vip_tiers with tier_level filtering (lines 6043-6050), includes rewards aggregation with priority sorting (lines 6062-6084), calculates total perks count (lines 6105-6125), returns tier data ordered by tier_level ASC
+    - **Action:** Add functions for raw tier/reward/mission data queries
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response schema), SchemaFinalv2.md (tiers, rewards, missions tables), ARCHITECTURE.md Section 5 (Repository Layer, lines 528-640), Section 9 (Multitenancy Enforcement, lines 1104-1137)
+    - **Acceptance Criteria:** MUST filter by client_id (Section 9 Critical Rule #1), returns raw tier data ordered by tier_level ASC, returns raw VIP tier rewards (reward_source='vip_tier'), returns raw mission data for perks calculation. NOTE: tier_level filtering (lines 6043-6050), rewards aggregation with priority sorting (lines 6062-6084), and totalPerksCount calculation (lines 6105-6125) moved to Task 7.2.4 per ARCHITECTURE.md Section 5 (Service Layer handles business logic, computed values)
 
 - [ ] **Task 7.2.3:** Create tier service file
     - **Action:** Create `/lib/services/tierService.ts`
@@ -1308,7 +1308,7 @@
     - **Action:** Add function with business logic for tier progression calculations
     - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response schema with user progress and tier filtering)
     - **Implementation Guide:** MUST implement complex response structure with 4 sections (lines 5573-5640): user progress (9 fields including VIP metric-aware formatting), progress to next tier (6 calculated fields: nextTierName, nextTierTarget, nextTierTargetFormatted, amountRemaining, amountRemainingFormatted, progressPercentage, progressText), vipSystem config (metric field), tiers array (user-scoped filtered). VIP metric-aware formatting (lines 6086-6098): if metric='sales_dollars' format as "$2,100" and "$680 to go", if metric='sales_units' format as "2,100 units" and "680 units to go". Tier filtering: only return tiers where tier_level >= user's current tier_level (lines 6043-6050). Progress calculations: amountRemaining = nextTierTarget - currentSales, progressPercentage = (currentSales / nextTierTarget) * 100. Expiration logic (lines 6052-6061): tierLevel=1 Bronze never expires (expirationDate=null, showExpiration=false), tierLevel>1 6-month checkpoint (expirationDate ISO 8601, showExpiration=true)
-    - **Acceptance Criteria:** Returns complete response matching lines 5573-5640, implements tier_level filtering (user sees only current+higher tiers), calculates all progress fields, applies VIP metric formatting to ALL numeric fields, implements expiration logic, calls repository for tier/rewards data
+    - **Acceptance Criteria:** Returns complete response matching lines 5573-5640, implements tier_level filtering per lines 6043-6050 (user sees only current+higher tiers), implements rewards aggregation with priority sorting per lines 6062-6084 (group by type+isRaffle, apply 9-priority: 1=physical_gift raffle, 2=experience raffle, 3=gift_card raffle, 4=experience, 5=physical_gift, 6=gift_card, 7=commission_boost, 8=spark_ads, 9=discount, max 4 per tier), calculates totalPerksCount per lines 6105-6125 (sum of reward uses + mission reward uses), calculates all progress fields, applies VIP metric formatting to ALL numeric fields, implements expiration logic, calls repository for tier/rewards data
 
 - [ ] **Task 7.2.5:** Create tiers route
     - **Action:** Create `/app/api/tiers/route.ts` with GET handler

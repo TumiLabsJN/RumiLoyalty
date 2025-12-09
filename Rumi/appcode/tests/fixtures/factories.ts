@@ -639,12 +639,16 @@ export async function createTestRedemption(options: {
   status?: string;
   redemptionType?: string;
   claimedAt?: Date | null;
+  concludedAt?: Date | null;
+  rejectedAt?: Date | null;
 }): Promise<{ redemption: TestRedemption; cleanup: () => Promise<void> }> {
   const id = randomUUID();
   const missionProgressId = options.missionProgressId ?? null;
   const status = options.status ?? 'claimable';
   const redemptionType = options.redemptionType ?? 'instant';
   const claimedAt = options.claimedAt ?? null;
+  const concludedAt = options.concludedAt ?? null;
+  const rejectedAt = options.rejectedAt ?? null;
 
   const db = getSupabaseClient();
   const { data, error } = await db
@@ -659,6 +663,8 @@ export async function createTestRedemption(options: {
       tier_at_claim: options.tierAtClaim,
       redemption_type: redemptionType,
       claimed_at: claimedAt?.toISOString() ?? null,
+      concluded_at: concludedAt?.toISOString() ?? null,
+      rejected_at: rejectedAt?.toISOString() ?? null,
     })
     .select()
     .single();

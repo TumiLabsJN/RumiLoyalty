@@ -301,8 +301,8 @@ describe('Tier Filtering Tests', () => {
       });
 
       // Verify the tier validation logic
-      const userTier = 'tier_3';
-      const missionTierEligibility = 'tier_4';
+      const userTier: string = 'tier_3';
+      const missionTierEligibility: string = 'tier_4';
 
       // Business logic: user can only claim if tier matches OR eligibility is 'all'
       const canClaim = missionTierEligibility === userTier ||
@@ -363,8 +363,8 @@ describe('Tier Filtering Tests', () => {
       });
 
       // Verify the tier validation logic
-      const userTier = 'tier_3';
-      const missionTierEligibility = 'all';
+      const userTier: string = 'tier_3';
+      const missionTierEligibility: string = 'all';
 
       // Business logic: tier_eligibility='all' allows any tier
       const canClaim = missionTierEligibility === userTier ||

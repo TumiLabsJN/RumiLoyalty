@@ -69,10 +69,10 @@ const TEST_REWARD_ID = 'reward-discount-15pct';
 
 // Multiple test users for max_uses testing
 const TEST_USERS = [
-  { id: 'user-1', authId: 'auth-1', clientId: TEST_CLIENT_ID, tiktokHandle: '@user1', email: 'user1@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z' },
-  { id: 'user-2', authId: 'auth-2', clientId: TEST_CLIENT_ID, tiktokHandle: '@user2', email: 'user2@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z' },
-  { id: 'user-3', authId: 'auth-3', clientId: TEST_CLIENT_ID, tiktokHandle: '@user3', email: 'user3@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z' },
-  { id: 'user-4', authId: 'auth-4', clientId: TEST_CLIENT_ID, tiktokHandle: '@user4', email: 'user4@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z' },
+  { id: 'user-1', authId: 'auth-1', clientId: TEST_CLIENT_ID, tiktokHandle: '@user1', email: 'user1@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z', emailVerified: true, totalSales: 0, isAdmin: false, lastLoginAt: null, createdAt: '2025-01-01T00:00:00Z' },
+  { id: 'user-2', authId: 'auth-2', clientId: TEST_CLIENT_ID, tiktokHandle: '@user2', email: 'user2@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z', emailVerified: true, totalSales: 0, isAdmin: false, lastLoginAt: null, createdAt: '2025-01-01T00:00:00Z' },
+  { id: 'user-3', authId: 'auth-3', clientId: TEST_CLIENT_ID, tiktokHandle: '@user3', email: 'user3@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z', emailVerified: true, totalSales: 0, isAdmin: false, lastLoginAt: null, createdAt: '2025-01-01T00:00:00Z' },
+  { id: 'user-4', authId: 'auth-4', clientId: TEST_CLIENT_ID, tiktokHandle: '@user4', email: 'user4@test.com', currentTier: 'tier_3', tierAchievedAt: '2025-01-01T00:00:00Z', emailVerified: true, totalSales: 0, isAdmin: false, lastLoginAt: null, createdAt: '2025-01-01T00:00:00Z' },
 ];
 
 const mockDashboardData: MockReturnValue = {

@@ -320,7 +320,7 @@ describe('Completion Detection Tests', () => {
 
       expect(joinedData).toBeDefined();
       expect(joinedData?.mission_progress).toBeDefined();
-      const missionProgress = joinedData?.mission_progress as Record<string, unknown>;
+      const missionProgress = joinedData?.mission_progress as unknown as Record<string, unknown>;
       expect(missionProgress?.current_value).toBe(TARGET_VALUE + 10);
       expect(missionProgress?.status).toBe('completed');
     });

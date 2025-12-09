@@ -686,7 +686,7 @@ describe('Tier Isolation Tests (API Routes)', () => {
       mockUserRepo.findByAuthId.mockResolvedValue(mockSilverUser);
       mockDashboardRepo.getUserDashboard.mockResolvedValue(mockSilverDashboard);
       mockRewardService.listAvailableRewards.mockResolvedValue({
-        user: { currentTier: 'tier_2' },
+        user: { id: 'user-silver', handle: '@silveruser', currentTier: 'tier_2', currentTierName: 'Silver', currentTierColor: '#C0C0C0' },
         rewards: [], // Silver tier might have different rewards
         redemptionCount: 0,
       });
