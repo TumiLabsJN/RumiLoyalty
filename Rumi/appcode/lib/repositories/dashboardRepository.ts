@@ -151,7 +151,7 @@ export const dashboardRepository = {
     const { data: currentTier, error: tierError } = await supabase
       .from('tiers')
       .select('*')
-      .eq('id', user.current_tier)
+      .eq('tier_id', user.current_tier)  // tier_id stores 'tier_1', 'tier_2', etc.
       .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
       .single();
 
@@ -193,7 +193,7 @@ export const dashboardRepository = {
         supportEmail: clientData.primary_color, // TODO: Add support_email to clients table
       },
       currentTier: {
-        id: currentTier.id,
+        id: currentTier.tier_id,  // tier_id ('tier_1', 'tier_2') - used for tier_eligibility comparisons
         name: currentTier.tier_name,
         color: currentTier.tier_color,
         order: currentTier.tier_order,

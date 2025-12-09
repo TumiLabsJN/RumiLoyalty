@@ -1021,6 +1021,15 @@ Change: 'id' → 'tier_id'
 
 ## Changelog
 
+### 2025-12-09 (Version 1.2) - IMPLEMENTATION COMPLETE
+- ✅ **IMPLEMENTED** Bug 1: Line 154 `.eq('tier_id', user.current_tier)`
+- ✅ **IMPLEMENTED** Bug 2: Line 196 `id: currentTier.tier_id`
+- TypeScript compilation verified: 0 errors
+- Validated against actual implementation code:
+  - Frontend (missions/page.tsx:66): `currentTier: "tier_3"`
+  - Backend (MISSIONS_IMPL.md:421): `p_current_tier` compared with `tier_eligibility`
+  - RPC SQL: `tier_eligibility = p_current_tier` (stores 'tier_1', 'tier_2')
+
 ### 2025-12-09 (Version 1.1) - Codex Audit Response
 - Added Codex Audit Response section with evidence verification
 - **DISCOVERED SECOND BUG:** Line 196 returns `currentTier.id` (UUID) but downstream expects `tier_id` ('tier_1')
@@ -1043,9 +1052,9 @@ Change: 'id' → 'tier_id'
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Line Count:** ~1000 lines
-**Implementation Status:** Not yet implemented
-**Severity:** CRITICAL
-**Bugs Documented:** 2 (Line 154 query + Line 196 return)
-**Next Action:** User audit, then implement both fixes together
+**Implementation Status:** ✅ IMPLEMENTED (2025-12-09)
+**Severity:** CRITICAL (now resolved)
+**Bugs Fixed:** 2 (Line 154 query + Line 196 return)
+**Verification:** TypeScript compilation passes (0 errors)

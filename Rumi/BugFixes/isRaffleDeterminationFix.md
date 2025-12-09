@@ -30,6 +30,42 @@ The bug affects the **Tiers page** (`/tiers`) which displays a marketing overvie
 
 ---
 
+## 2a. Scope Clarification
+
+> **IMPORTANT:** This document was updated based on external LLM audit feedback.
+
+### What This Document Covers
+- **Repository layer fix only** - Enhancing `tierRepository.ts` to return mission data with `isRaffle` derivation
+
+### What This Document Does NOT Cover
+- Service layer implementation (`tierService.ts`)
+- API route implementation (`/api/tiers/route.ts`)
+
+### Dependencies for Complete User-Visible Fix
+
+| Task | Description | Status |
+|------|-------------|--------|
+| **This fix** | Repository returns mission data with isRaffle | Pending |
+| **Task 7.2.3** | Create `tierService.ts` (will consume `getTierMissions()`) | Not Started |
+| **Task 7.2.4** | Implement `getTiersPageData` (will aggregate with isRaffle) | Not Started |
+| **Task 7.2.5** | Create `/api/tiers` route (will return response to frontend) | Not Started |
+
+**Bug is fully resolved when:** All tasks 7.2.3-7.2.5 complete and use this repository function.
+
+### Audit Feedback Addressed
+
+| Issue | Resolution |
+|-------|------------|
+| Bug not actually fixed (repository-only) | Clarified scope, linked to dependent tasks |
+| Multi-tenant gap on join | Added `rewards.client_id` filter to query |
+| Usage claim inaccurate | Corrected - function has zero callers |
+| Missing reward_source | Added to query for consistency |
+| Missing rewards.enabled filter | Added `.eq('rewards.enabled', true)` for consistency with getVipTierRewards |
+| Tests are aspirational | Clarified tests created in Task 7.3.1 |
+| Schema verification incomplete | Added client_id, reward_source, enabled to rewards columns |
+
+---
+
 ## 3. Discovery Evidence
 
 ### Source Documents Analyzed
@@ -156,9 +192,11 @@ rewards table ──────────► getVipTierRewards() ────
                                │                         │
                                └── isRaffle = false ─────┘
 
-missions table ─────────► getMissionsWithRewardUses() ──► [ONLY used for perks count]
+missions table ─────────► getMissionsWithRewardUses() ──► [ZERO CALLERS - function unused]
                                │
                                └── mission_type NOT queried ──► isRaffle CANNOT be derived
+
+**Note:** The function `getMissionsWithRewardUses()` was created during Task 7.2.1 but has **zero callers** in the codebase. It is not yet integrated into any service or route.
 ```
 
 ---
@@ -200,6 +238,7 @@ export interface TierMissionData {
     description: string | null;
     valueData: Record<string, unknown> | null;
     uses: number;
+    rewardSource: string;  // Added for consistency with getVipTierRewards()
   };
   isRaffle: boolean;  // Derived: missionType === 'raffle'
 }
@@ -233,7 +272,7 @@ async getMissionsWithRewardUses(clientId: string): Promise<TierMissionData[]> {
  * - isRaffle derivation (mission_type)
  * - totalPerksCount calculation (uses)
  *
- * SECURITY: Validates client_id match (multitenancy)
+ * SECURITY: Validates client_id match on BOTH missions AND rewards (multitenancy)
  */
 async getTierMissions(clientId: string): Promise<TierMissionData[]> {
   const supabase = await createClient();
@@ -251,11 +290,15 @@ async getTierMissions(clientId: string): Promise<TierMissionData[]> {
         name,
         description,
         value_data,
-        redemption_quantity
+        redemption_quantity,
+        reward_source,
+        client_id
       )
     `)
     .eq('client_id', clientId)
-    .eq('enabled', true);
+    .eq('enabled', true)
+    .eq('rewards.client_id', clientId)   // SECURITY: Multi-tenant filter on joined rewards
+    .eq('rewards.enabled', true);        // Consistency: Only enabled rewards (matches getVipTierRewards)
 
   if (error) {
     console.error('[TierRepository] Error fetching tier missions:', error);
@@ -270,6 +313,8 @@ async getTierMissions(clientId: string): Promise<TierMissionData[]> {
       description: string | null;
       value_data: Record<string, unknown> | null;
       redemption_quantity: number | null;
+      reward_source: string;
+      client_id: string;
     };
     return {
       id: mission.id,
@@ -283,6 +328,7 @@ async getTierMissions(clientId: string): Promise<TierMissionData[]> {
         description: reward.description,
         valueData: reward.value_data,
         uses: reward.redemption_quantity ?? 1,
+        rewardSource: reward.reward_source ?? 'mission',
       },
       isRaffle: mission.mission_type === 'raffle',
     };
@@ -292,9 +338,11 @@ async getTierMissions(clientId: string): Promise<TierMissionData[]> {
 
 **Explanation:** The enhanced function:
 1. Queries `mission_type` to enable isRaffle derivation
-2. Queries full reward data (`type`, `name`, `description`, `value_data`) for aggregation
-3. Derives `isRaffle` in the repository layer (consistent with dashboardService pattern)
-4. Renamed to `getTierMissions()` to reflect broader purpose
+2. Queries full reward data (`type`, `name`, `description`, `value_data`, `reward_source`) for aggregation
+3. **SECURITY:** Filters rewards by `client_id` to prevent cross-tenant data leakage (defense in depth)
+4. **CONSISTENCY:** Filters rewards by `enabled` to match `getVipTierRewards()` behavior
+5. Derives `isRaffle` in the repository layer (consistent with dashboardService pattern)
+6. Renamed to `getTierMissions()` to reflect broader purpose
 
 ---
 
@@ -404,7 +452,7 @@ GET /api/tiers (route.ts) - FUTURE Task 7.2.5
 | Table | Relevant Columns | Notes |
 |-------|------------------|-------|
 | missions | id, mission_type, tier_eligibility, reward_id, client_id, enabled | `mission_type='raffle'` determines isRaffle |
-| rewards | id, type, name, description, value_data, redemption_quantity | Linked via missions.reward_id |
+| rewards | id, type, name, description, value_data, redemption_quantity, reward_source, client_id, enabled | Linked via missions.reward_id. `client_id` for multi-tenant filter, `enabled` for consistency with getVipTierRewards, `reward_source` for aggregation |
 
 ### Schema Check
 
@@ -484,6 +532,9 @@ LIMIT 10;
 | JOIN fails silently | Low | High | Error handling, logging |
 | tier_eligibility='all' not handled | Medium | Medium | Service layer filter logic |
 | Performance degradation | Low | Low | Query is simple, indexed columns |
+| ~~Cross-tenant data via join~~ | ~~Medium~~ | ~~High~~ | ~~FIXED: Added `.eq('rewards.client_id', clientId)`~~ |
+
+> **Audit Fix:** The multi-tenant security gap identified in audit has been addressed by adding explicit `rewards.client_id` filtering on the join.
 
 ### Breaking Change Analysis
 
@@ -497,9 +548,12 @@ LIMIT 10;
 
 ## 15. Testing Strategy
 
+> **Note:** Tests are created in **Task 7.3.1** (EXECUTION_PLAN.md Step 7.3: Tiers Testing).
+> The examples below show WHAT tests should verify, not claiming they exist now.
+
 ### Unit Tests
 
-**File:** `/tests/integration/api/tiers.test.ts` (future)
+**File:** `/tests/integration/api/tiers.test.ts` (created in Task 7.3.1)
 
 ```typescript
 describe('tierRepository.getTierMissions', () => {
@@ -633,13 +687,21 @@ npm run build
 
 ## 18. Definition of Done
 
-- [ ] `TierMissionData` interface updated with missionType, reward object, isRaffle
+### Repository Fix (This Document)
+- [ ] `TierMissionData` interface updated with missionType, reward object (including rewardSource), isRaffle
 - [ ] Function renamed to `getTierMissions()`
-- [ ] Query enhanced to select mission_type and full reward data
+- [ ] Query enhanced to select mission_type, full reward data, and reward_source
+- [ ] **SECURITY:** Multi-tenant filter added on rewards join (`.eq('rewards.client_id', clientId)`)
 - [ ] isRaffle derived as `mission.mission_type === 'raffle'`
 - [ ] Type checker passes with no errors
 - [ ] All existing tests pass
 - [ ] Build completes successfully
+
+### Full Bug Resolution (Dependent Tasks)
+> Bug is NOT fully resolved until these complete:
+- [ ] Task 7.2.3: `tierService.ts` created and calls `getTierMissions()`
+- [ ] Task 7.2.4: `getTiersPageData` aggregates rewards using isRaffle
+- [ ] Task 7.2.5: `/api/tiers` route returns response with isRaffle field
 - [ ] This document status updated to "Implemented"
 
 ---
@@ -669,7 +731,15 @@ npm run build
 
 ---
 
-**Document Version:** 2.0
-**Last Updated:** 2025-12-08
+**Document Version:** 3.1
+**Last Updated:** 2025-12-09
 **Author:** Claude Code
-**Status:** Analysis Complete
+**Status:** Analysis Complete (Audit Feedback Addressed - APPROVE WITH CHANGES)
+
+### Revision History
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2025-12-08 | Initial analysis |
+| 2.0 | 2025-12-08 | Reformatted to StandardBugFix.md template |
+| 3.0 | 2025-12-09 | Addressed external audit feedback: scope clarification, multi-tenant security fix, usage claim correction, added reward_source |
+| 3.1 | 2025-12-09 | Addressed second audit: added rewards.enabled filter, clarified test strategy, expanded schema verification |
