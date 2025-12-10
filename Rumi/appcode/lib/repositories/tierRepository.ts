@@ -52,14 +52,25 @@ export interface TierRewardData {
 }
 
 /**
- * Mission data for perks count
- * Per API_CONTRACTS.md lines 6105-6125 (totalPerksCount includes mission reward uses)
+ * Mission with linked reward data for tier aggregation.
+ * Includes mission_type for isRaffle derivation.
+ * Per API_CONTRACTS.md GET /api/tiers → Reward Aggregation section
  */
 export interface TierMissionData {
   id: string;
+  missionType: string;
   tierEligibility: string;
   rewardId: string;
-  rewardUses: number;
+  reward: {
+    id: string;
+    type: string;
+    name: string | null;
+    description: string | null;
+    valueData: Record<string, unknown> | null;
+    uses: number;
+    rewardSource: string;
+  };
+  isRaffle: boolean;
 }
 
 /**
@@ -239,37 +250,73 @@ export const tierRepository = {
   },
 
   /**
-   * Get missions with their reward uses for totalPerksCount calculation.
-   * Per API_CONTRACTS.md lines 6105-6125 (totalPerksCount = reward uses + mission reward uses)
+   * Get tier-eligible missions with their linked rewards.
+   * Returns complete data for:
+   * - Reward aggregation (type, name, valueData for displayText)
+   * - isRaffle derivation (mission_type === 'raffle')
+   * - totalPerksCount calculation (uses)
    *
-   * SECURITY: Validates client_id match (multitenancy)
+   * Per API_CONTRACTS.md GET /api/tiers → Reward Aggregation section
+   *
+   * SECURITY: Validates client_id match on BOTH missions AND rewards (multitenancy)
    */
-  async getMissionsWithRewardUses(clientId: string): Promise<TierMissionData[]> {
+  async getTierMissions(clientId: string): Promise<TierMissionData[]> {
     const supabase = await createClient();
 
     const { data, error } = await supabase
       .from('missions')
       .select(`
         id,
+        mission_type,
         tier_eligibility,
         reward_id,
-        rewards!inner (redemption_quantity)
+        rewards!inner (
+          id,
+          type,
+          name,
+          description,
+          value_data,
+          redemption_quantity,
+          reward_source,
+          client_id
+        )
       `)
       .eq('client_id', clientId)
-      .eq('enabled', true);
+      .eq('enabled', true)
+      .eq('rewards.client_id', clientId)
+      .eq('rewards.enabled', true);
 
     if (error) {
-      console.error('[TierRepository] Error fetching missions:', error);
-      throw new Error('Failed to fetch missions');
+      console.error('[TierRepository] Error fetching tier missions:', error);
+      throw new Error('Failed to fetch tier missions');
     }
 
     return (data || []).map((mission) => {
-      const reward = mission.rewards as unknown as { redemption_quantity: number | null };
+      const reward = mission.rewards as unknown as {
+        id: string;
+        type: string;
+        name: string | null;
+        description: string | null;
+        value_data: Record<string, unknown> | null;
+        redemption_quantity: number | null;
+        reward_source: string;
+        client_id: string;
+      };
       return {
         id: mission.id,
+        missionType: mission.mission_type,
         tierEligibility: mission.tier_eligibility,
         rewardId: mission.reward_id,
-        rewardUses: reward?.redemption_quantity ?? 1,
+        reward: {
+          id: reward.id,
+          type: reward.type,
+          name: reward.name,
+          description: reward.description,
+          valueData: reward.value_data,
+          uses: reward.redemption_quantity ?? 1,
+          rewardSource: reward.reward_source ?? 'mission',
+        },
+        isRaffle: mission.mission_type === 'raffle',
       };
     });
   },

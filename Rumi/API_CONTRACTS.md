@@ -5695,14 +5695,14 @@ Backend generates `displayText` (clean reward name) and `count` (quantity) separ
 
 | Reward Type | Raffle? | displayText Format | count | UI Display |
 |-------------|---------|-------------------|-------|------------|
-| physical_gift | Yes | `"Chance to win {value_data.name}!"` | 1 | `"Chance to win AirPods Pro!"` (no ×1) |
-| experience | Yes | `"Chance to win {description}!"` | 1 | `"Chance to win Mystery Trip!"` (no ×1) |
+| physical_gift | Yes | `"Chance to win {value_data.display_text \|\| description}!"` | 1 | `"Chance to win AirPods Pro!"` (no ×1) |
+| experience | Yes | `"Chance to win {value_data.display_text \|\| description}!"` | 1 | `"Chance to win Mystery Trip!"` (no ×1) |
 | gift_card | Yes | `"Chance to win {name}!"` | 1 | `"Chance to win $200 Gift Card!"` (no ×1) |
-| experience | No | `"{description}"` | 1 | `"VIP Event Access"` (no ×1) |
-| physical_gift | No | `"Gift Drop: {value_data.name}"` | 1 | `"Gift Drop: Branded Hoodie"` (no ×1) |
+| experience | No | `"{value_data.display_text \|\| description}"` | 1 | `"VIP Event Access"` (no ×1) |
+| physical_gift | No | `"Gift Drop: {value_data.display_text \|\| description}"` | 1 | `"Gift Drop: Branded Hoodie"` (no ×1) |
 | gift_card | No | `"{name}"` | 3 | `"$100 Gift Card ×3"` |
 | commission_boost | No | `"{name}"` | 4 | `"10% Pay Boost ×4"` |
-| spark_ads | No | `"{displayText}"` | 2 | `"$50 Ads Boost ×2"` |
+| spark_ads | No | `"$" + {value_data.amount} + " Ads Boost"` | 2 | `"$50 Ads Boost ×2"` |
 | discount | No | `"{name}"` | 3 | `"15% Deal Boost ×3"` |
 
 **Count Calculation:**

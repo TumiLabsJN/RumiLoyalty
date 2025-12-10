@@ -12,9 +12,9 @@ CTA_STRATEGY: AI analysis of the transcripts ending, classifies the closing tech
 PAIN_POINT: Audience problems/frustrations mentioned in videos. AI extracts pain points explicitly or implicitly mentioned in
 transcripts
 
-CONTENT_TACTIC: Execution style of the video content
+~~CONTENT_TACTIC: Execution style of the video content~~
 
-CAPTION_CTA_STRATEGY: Call-to-action type in the caption text
+~~CAPTION_CTA_STRATEGY: Call-to-action type in the caption text~~
 
 Keyword: Trending/relevant keywords in the content
 
@@ -41,6 +41,19 @@ REPOSTED_AFFILIATE_PCT{} (LOC 168)
 
 
 # Golinutrition | @golinutrition
+PAGE_2_CONTENT_STRATEGY	
+
+BUCKET_0_3S_PCT	2
+BUCKET_3_9S_PCT	8
+BUCKET_9_13S_PCT	16
+BUCKET_13_18S_PCT	14
+BUCKET_18_33S_PCT	46
+BUCKET_33_60S_PCT	11
+BUCKET_60_90S_PCT	2
+BUCKET_90_120S_PCT	1
+    
+PRIMARY_FOCUS_BUCKET	18-33s
+
 CONTENT_CATEGORY_1	Live Sale Announcement
 CONTENT_CATEGORY_1_PCT	68
 CONTENT_CATEGORY_1_DESC	Real-time notifications inviting viewers to join ongoing live shopping events with exclusive deals and flash sales on Goli products
@@ -151,6 +164,19 @@ REPOSTED_AFFILIATE_PCT	23
 
 
 # Micro ingredients | @microingredients
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	0
+BUCKET_3_9S_PCT	1
+BUCKET_9_13S_PCT	6
+BUCKET_13_18S_PCT	10
+BUCKET_18_33S_PCT	31
+BUCKET_33_60S_PCT	35
+BUCKET_60_90S_PCT	15
+BUCKET_90_120S_PCT	2
+    
+PRIMARY_FOCUS_BUCKET	33-60s
+
 CONTENT_CATEGORY_1	Problem Solution Narrative
 CONTENT_CATEGORY_1_PCT	30
 CONTENT_CATEGORY_1_DESC	Content addressing specific health concerns, solving customer confusion, and answering common questions about supplements
@@ -268,6 +294,20 @@ ORIGINAL_CONTENT_PCT	87
 REPOSTED_AFFILIATE_PCT	13
 
 # Physician's Choice | @physicianschoice
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	1
+BUCKET_3_9S_PCT	15
+BUCKET_9_13S_PCT	10
+BUCKET_13_18S_PCT	8
+BUCKET_18_33S_PCT	21
+BUCKET_33_60S_PCT	25
+BUCKET_60_90S_PCT	15
+BUCKET_90_120S_PCT	5
+    
+PRIMARY_FOCUS_BUCKET	33-60s
+
+
 CONTENT_CATEGORY_1	Product Education
 CONTENT_CATEGORY_1_PCT	63
 CONTENT_CATEGORY_1_DESC	Videos explaining product differences, formulations, ingredients, and how to use supplements
@@ -384,6 +424,19 @@ REPOSTED_AFFILIATE_PCT	52
 
 
 # Bella All Natural | @bella.allnatural
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	1
+BUCKET_3_9S_PCT	25
+BUCKET_9_13S_PCT	12
+BUCKET_13_18S_PCT	17
+BUCKET_18_33S_PCT	21
+BUCKET_33_60S_PCT	17
+BUCKET_60_90S_PCT	6
+BUCKET_90_120S_PCT	1
+    
+PRIMARY_FOCUS_BUCKET	3-9s
+
 CONTENT_CATEGORY_1	Product Showcase
 CONTENT_CATEGORY_1_PCT	85
 CONTENT_CATEGORY_1_DESC	Videos showcasing products including collagen, probiotics, and ice coffee with visual demonstrations
@@ -500,6 +553,17 @@ REPOSTED_AFFILIATE_PCT	15
 
 
 # Snap Supplements | @snap_supplements
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	3
+BUCKET_3_9S_PCT	6
+BUCKET_9_13S_PCT	14
+BUCKET_13_18S_PCT	14
+BUCKET_18_33S_PCT	36
+BUCKET_33_60S_PCT	18
+BUCKET_60_90S_PCT	8
+BUCKET_90_120S_PCT	1
+
 CONTENT_CATEGORY_1	Product Education
 CONTENT_CATEGORY_1_PCT	37
 CONTENT_CATEGORY_1_DESC	explaining what nitric oxide does, listing supplement benefits, describing how ingredients work
@@ -615,6 +679,19 @@ ORIGINAL_CONTENT_PCT	74
 REPOSTED_AFFILIATE_PCT	26
 
 # O positiv	| @opositiv
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	0
+BUCKET_3_9S_PCT	23
+BUCKET_9_13S_PCT	19
+BUCKET_13_18S_PCT	18
+BUCKET_18_33S_PCT	36
+BUCKET_33_60S_PCT	3
+BUCKET_60_90S_PCT	0
+BUCKET_90_120S_PCT	1
+    
+PRIMARY_FOCUS_BUCKET	18-33s
+
 CONTENT_CATEGORY_1	Social Experiment Prank
 CONTENT_CATEGORY_1_PCT	44
 CONTENT_CATEGORY_1_DESC	Videos featuring social experiments testing stranger reactions to awkward or unexpected requests related to women's health
@@ -731,6 +808,19 @@ REPOSTED_AFFILIATE_PCT	27
 
 
 # Neurogum | @neurogum
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	3
+BUCKET_3_9S_PCT	19
+BUCKET_9_13S_PCT	13
+BUCKET_13_18S_PCT	11
+BUCKET_18_33S_PCT	28
+BUCKET_33_60S_PCT	18
+BUCKET_60_90S_PCT	7
+BUCKET_90_120S_PCT	1
+    
+PRIMARY_FOCUS_BUCKET	18-33s
+
 CONTENT_CATEGORY_1	Product Announcement
 CONTENT_CATEGORY_1_PCT	28
 CONTENT_CATEGORY_1_DESC	announcing new flavors, launching with Steve Aoki, back in stock notification
@@ -847,6 +937,19 @@ REPOSTED_AFFILIATE_PCT	32
 
 
 # Drink Nello |	@nellosupercalm
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	4
+BUCKET_3_9S_PCT	33
+BUCKET_9_13S_PCT	26
+BUCKET_13_18S_PCT	11
+BUCKET_18_33S_PCT	12
+BUCKET_33_60S_PCT	9
+BUCKET_60_90S_PCT	4
+BUCKET_90_120S_PCT	1
+    
+PRIMARY_FOCUS_BUCKET	3-9s
+
 CONTENT_CATEGORY_1	Comedic Sound Mashup
 CONTENT_CATEGORY_1_PCT	68
 CONTENT_CATEGORY_1_DESC	Videos using pop culture audio clips, meme formats, or trending sounds for comedic effect
@@ -959,6 +1062,19 @@ REPOSTED_AFFILIATE_PCT	31
 
 
 # Kind Patches USA | @kindpatches_us
+PAGE_2_CONTENT_STRATEGY	
+    
+BUCKET_0_3S_PCT	1
+BUCKET_3_9S_PCT	23
+BUCKET_9_13S_PCT	20
+BUCKET_13_18S_PCT	18
+BUCKET_18_33S_PCT	17
+BUCKET_33_60S_PCT	18
+BUCKET_60_90S_PCT	3
+BUCKET_90_120S_PCT	0
+    
+PRIMARY_FOCUS_BUCKET	3-9s
+
 CONTENT_CATEGORY_1	Product Demonstration
 CONTENT_CATEGORY_1_PCT	43
 CONTENT_CATEGORY_1_DESC	Videos showing how patches work, explaining ingredients, and demonstrating application
@@ -1067,3 +1183,15 @@ HASHTAG_10_PCT	5
 TOTAL_UNIQUE_HASHTAGS	59
 AVG_HASHTAGS_PER_VIDEO	4
 STRATEGY_TYPE	Diversified
+
+ORIGINAL_CONTENT_PCT	93
+REPOSTED_AFFILIATE_PCT	7
+
+
+# Content Duration Analysis
+| Category    | Duration   | Goli Nutrition | Micro Ingr. | Physicians Choice | Bella | Snap | OPositiv | Neurogum | Drink Nello | Kind Patches USA |
+|-------------|------------|----------------|-------------|-------------------|-------|------|----------|----------|-------------|-------------------|
+| Very Short  | 0 to 9s    | 10             | 1           | 16                | 26    | 9    | 23       | 22       | 37          | 24                |
+| Short       | 9 to 18s   | 30             | 16          | 18                | 29    | 28   | 37       | 24       | 37          | 38                |
+| Middle      | 18 to 60s  | 57             | 66          | 46                | 38    | 54   | 39       | 46       | 21          | 35                |
+| Long        | 60 to 120s | 3              | 17          | 20                | 7     | 9    | 1        | 8        | 5           | 3                 |
