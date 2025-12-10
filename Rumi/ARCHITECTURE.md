@@ -125,7 +125,7 @@ The platform uses **two different strategies** based on data characteristics:
 
 **What gets precomputed:**
 
-User dashboard metrics are calculated once daily during Cruva CSV sync (3 PM EST):
+User dashboard metrics are calculated once daily during Cruva CSV sync (2 PM EST / 7 PM UTC):
 
 **Leaderboard (5 fields):**
 - `leaderboard_rank` - Position among all creators
@@ -298,10 +298,10 @@ All **user-triggered actions** that require immediate feedback:
 
 | Data Type | Update Method | Frequency |
 |-----------|--------------|-----------|
-| Video data | Daily Cruva CSV sync | Once at 3 PM EST |
-| Precomputed user metrics | Daily cron job | Once at 3 PM EST |
-| Mission progress | Daily cron job | Once at 3 PM EST |
-| Tier calculations | Daily cron job | Once at 3 PM EST |
+| Video data | Daily Cruva CSV sync | Once at 2 PM EST |
+| Precomputed user metrics | Daily cron job | Once at 2 PM EST |
+| Mission progress | Daily cron job | Once at 2 PM EST |
+| Tier calculations | Daily cron job | Once at 2 PM EST |
 | User actions | Compute on request | Immediate |
 | Profile updates | Compute on request | Immediate |
 | Reward claims | Compute on request | Immediate |
@@ -401,8 +401,8 @@ All **user-triggered actions** that require immediate feedback:
 │   └── integration/
 │       └── api/
 │
-└── cron/                         # Background Jobs
-    └── daily-sync.ts             # Daily TikTok sync
+└── app/api/cron/                 # Background Jobs (Vercel Cron)
+    └── daily-automation/route.ts # Combined data sync + tier calculation
 ```
 
 ---

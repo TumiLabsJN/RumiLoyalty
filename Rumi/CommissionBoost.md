@@ -36,7 +36,7 @@
 - No payment tracking, no scheduling
 
 **After (Scheduled with Payment Tracking):**
-- Creator schedules commission_boost activation (6 PM EST slots only)
+- Creator schedules commission_boost activation (2 PM EST slots only)
 - System scrapes sales data at D0 (activation) and D(X) (expiration)
 - System calculates: Tier commission + Boost commission = Total payout
 - Creator provides payment info (Venmo/PayPal) after boost expires
@@ -57,13 +57,13 @@
    - CAN have 1 discount + 1 commission_boost scheduled concurrently
 
 2. **Time Slots:**
-   - **6 PM EST only** (aligned with Cruda scraping)
-   - Modal shows only "6:00 PM EST" as available time slot
+   - **2 PM EST only** (aligned with Cruda scraping)
+   - Modal shows only "2:00 PM EST" as available time slot
    - Date range: Tomorrow through +7 days (no same-day scheduling)
 
 3. **Duration:**
    - Commission boost still has `duration_days` (e.g., 30 days)
-   - Tracked from D0 (6 PM activation) to D(X) (6 PM + duration_days)
+   - Tracked from D0 (2 PM activation) to D(X) (2 PM + duration_days)
 
 4. **Payment Info Collection:**
    - Collected AFTER boost expires (not during scheduling)
@@ -72,7 +72,7 @@
    - Double-entry verification
 
 5. **Scraping Changes:**
-   - Change from midnight UTC to **6 PM EST** (10 PM UTC)
+   - Change from midnight UTC to **2 PM EST** (10 PM UTC)
    - Single daily scrape (no additional scraping needed)
    - This aligns with commission_boost activation times
 
@@ -391,7 +391,7 @@ try {
     await sendAlertEmail(
       '🚨 URGENT: Scraping failed with active commission boosts',
       `
-Scraping failed at 3 PM EST today.
+Scraping failed at 2 PM EST today.
 
 ${activeBoosts.length} commission boost(s) are currently active:
 ${creatorList}
@@ -405,7 +405,7 @@ Action needed:
 1. Check Cruda status
 2. If Cruda is down, wait for recovery
 3. If selector changed, update scraping script
-4. Boosts will auto-retry tomorrow at 3 PM EST
+4. Boosts will auto-retry tomorrow at 2 PM EST
 
 No manual intervention needed unless issue persists >24 hours.
       `
@@ -1099,14 +1099,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
 **Changes:**
 - Add scheduling logic for `commission_boost` type rewards
-- Validate time slots: Only 3 PM EST (changed from 6 PM per Q1.2 decision)
+- Validate time slots: Only 2 PM EST (changed from 6 PM per Q1.2 decision)
 - Check for existing scheduled boost: `SELECT COUNT(*) FROM redemptions WHERE user_id = X AND reward_type = 'commission_boost' AND status = 'pending'`
 
 ```typescript
 // Request body for scheduled commission_boost
 POST /api/rewards/550e8400-e29b-41d4-a716-446655440000/claim
 {
-  "scheduled_activation_at": "2025-02-15T15:00:00-05:00" // 3 PM EST
+  "scheduled_activation_at": "2025-02-15T14:00:00-05:00" // 2 PM EST
 }
 
 // Response
@@ -1115,10 +1115,10 @@ POST /api/rewards/550e8400-e29b-41d4-a716-446655440000/claim
     "id": "uuid",
     "status": "pending",
     "redemption_type": "scheduled",
-    "scheduled_activation_at": "2025-02-15T15:00:00-05:00",
+    "scheduled_activation_at": "2025-02-15T14:00:00-05:00",
     "claimed_at": "2025-02-08T10:30:00Z"
   },
-  "message": "Pay Boost scheduled for February 15, 2025 at 3 PM EST"
+  "message": "Pay Boost scheduled for February 15, 2025 at 2 PM EST"
 }
 
 // Error: Already have scheduled boost
@@ -1153,13 +1153,13 @@ Authorization: Bearer <token>
       "status": "active",
 
       // Timestamps
-      "activated_at": "2025-02-01T15:00:00Z",
-      "expires_at": "2025-03-03T15:00:00Z",
+      "activated_at": "2025-02-01T19:00:00Z",
+      "expires_at": "2025-03-03T19:00:00Z",
 
       // Computed fields (backend calculates)
       "hours_remaining": 672,
       "days_remaining": 28,
-      "expires_formatted": "March 3, 2025 at 3 PM EST"
+      "expires_formatted": "March 3, 2025 at 2 PM EST"
     }
   ],
   "scheduled": [
@@ -1172,12 +1172,12 @@ Authorization: Bearer <token>
       "status": "scheduled",
 
       // Timestamps
-      "scheduled_activation_at": "2025-02-15T15:00:00Z",
+      "scheduled_activation_at": "2025-02-15T19:00:00Z",
 
       // Computed fields
       "hours_until_activation": 120,
       "days_until_activation": 5,
-      "activates_formatted": "February 15, 2025 at 3 PM EST"
+      "activates_formatted": "February 15, 2025 at 2 PM EST"
     }
   ]
 }
@@ -1279,8 +1279,8 @@ Authorization: Bearer <token>
   "your_payout": 762.50, // boost_commission only
 
   "boost_details": {
-    "activated_at": "2025-02-01T15:00:00Z",
-    "expired_at": "2025-03-03T15:00:00Z",
+    "activated_at": "2025-02-01T19:00:00Z",
+    "expired_at": "2025-03-03T19:00:00Z",
     "duration_days": 30
   }
 }
@@ -1375,7 +1375,7 @@ Authorization: Bearer <admin-token>
 **Rationale:**
 - **MVP timeline:** Zero migration, ~30 minutes implementation
 - **Single client:** No need for per-client customization yet
-- **Fixed requirement:** 3 PM EST for commission_boost unlikely to change
+- **Fixed requirement:** 2 PM EST for commission_boost unlikely to change
 - **Easy upgrade path:** Can migrate to database JSONB post-MVP if needed (1 hour)
 
 
@@ -2074,7 +2074,7 @@ await supabase.from('payout_adjustments').insert({
 **Decision:** Option A - Existing idempotency check is sufficient
 
 **Scenario:**
-- Cron job runs at 3 PM EST
+- Cron job runs at 2 PM EST
 - Network hiccup, job times out after 5 minutes
 - Vercel retries job automatically
 - Job runs AGAIN at 3:05 PM
@@ -2234,8 +2234,8 @@ sales_during_boost: $40,000     -- D30 - D0
 2. **User clicks on Redeem button:**
    - Modal appears: Schedule activation
    - Date picker: Tomorrow through +7 days
-   - Time picker: Only "6:00 PM EST" button
-   - Info banner: "Activation is scheduled for 6 PM EST to align with our daily sales tracking"
+   - Time picker: Only "2:00 PM EST" button
+   - Info banner: "Activation is scheduled for 2 PM EST to align with our daily sales tracking"
 
 3. **When reward is activated at selected time:**
    - Creator logs in
@@ -2276,11 +2276,11 @@ sales_during_boost: $40,000     -- D30 - D0
 **From brainstorm:**
 
 1. **Additional scraping from Cruda:**
-   - Change cron from midnight UTC to 6 PM EST (10 PM UTC)
+   - Change cron from midnight UTC to 2 PM EST (10 PM UTC)
    - Single daily scrape (no additional scraping needed)
 
 2. **If user activates commission boost:**
-   - Cron job at 6 PM EST detects pending scheduled activation
+   - Cron job at 2 PM EST detects pending scheduled activation
    - Captures baseline sales: `sales_at_activation = current GMV`
    - Marks redemption as `activated_at = NOW()`
    - Sets `expires_at = NOW() + duration_days`
@@ -2290,7 +2290,7 @@ sales_during_boost: $40,000     -- D30 - D0
    - Or rely on D0 and D(X) values only
 
 4. **Once time limit is up:**
-   - Cron job at 6 PM EST detects expiration
+   - Cron job at 2 PM EST detects expiration
    - Captures final sales: `sales_at_expiration = current GMV`
    - Calculates: `sales_during_boost = sales_at_expiration - sales_at_activation`
    - Calculates: `tier_commission_amount = sales_during_boost * tier_commission_rate`

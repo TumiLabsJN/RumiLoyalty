@@ -1,5 +1,7 @@
 # SLIDE 1: How Supplement Brands Create content [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide1_ContentStrategies.png 
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Meta-Category Mapping | Meta-Category Summary | Brand Matrix
 
 ## Text: Aprox 2 Mins (without questions)
 So before we dive into strategy, I want to show you what we found when we analyzed the 9 highest-performing supplement brands on TikTok.
@@ -22,6 +24,8 @@ What does Salad Pack want to be known for?
 
 # SLIDE 2: Content Mix by brand [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide2_BrandMatrix.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Meta-Category Mapping | Meta-Category Summary | Brand Matrix
 
 ## Text Aprox 2 Mins (without questions)
 [Transition — Data reveal]
@@ -57,6 +61,9 @@ Before we move on—any reactions so far? Anything surprising, or anything that 
 
 # SLIDE 3: Why Top Content Works [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide3_EngagementDrivers_Horizontal.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Engagement Driver Mapping | Engagement Driver Summary | 
+
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition from Slide 2]
@@ -87,6 +94,8 @@ Does this framework make sense as a way to evaluate content?
 
 # SLIDE 4: How Top Content Opens [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide4_HookStrategy.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Hook Strategy Mapping | Hook Strategy Summary
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition from Slide 3]
@@ -119,6 +128,8 @@ Any hooks here that feel especially right—or wrong—for your brand?
 
 # SLIDE 5: How Top Content Closes [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide5_CTAStrategy.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: CTA Strategy Mapping | CTA Strategy Summary | CTA Strategy Brand Matrix | 
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition from Slide 4]
@@ -150,6 +161,8 @@ Any of these closing styles feel especially right or wrong for Salad Pack's cont
 
 # SLIDE 6: What Pain Points Top Brands Address [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide6_PainPoints.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Pain Point Mapping | Pain Point Summary | Pain Point Brand Matrix | 
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition — Shift Gears]
@@ -180,6 +193,8 @@ So here's the strategic question: Which of these pain points does Salad Pack wan
 
 # SLIDE 7: What Keywords Top Brands Use [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide7_Keywords.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Keyword Mapping | Keyword Summary | Keyword Brand Matrix
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition — Connect to Pain Points]
@@ -209,6 +224,8 @@ Are there specific ingredients or benefits in Salad Pack's formula that you'd wa
 
 # SLIDE 8: What Hashtags Top Brands Use [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide8_Hashtags.png
+**Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
+    - Excel Tab: Hashtag Cross-Brand | Hashtag Mapping | Hashtag Summary | Hashtag Strategy
 
 ## Text: Aprox 2 Mins (without questions)
 [Transition from Keywords]

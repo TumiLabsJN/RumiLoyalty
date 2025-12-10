@@ -607,7 +607,7 @@ CREATE INDEX idx_rewards_lookup ON rewards(client_id, enabled, tier_eligibility,
 | redemption_type | VARCHAR(50) | NOT NULL | redemptions | Workflow type (locked at claim) | Options: 'instant', 'scheduled' - Locked from reward.redemption_type, determines fulfillment workflow |
 | claimed_at | TIMESTAMP | | redemptions | When creator clicked "Claim" | |
 | scheduled_activation_date | DATE | | redemptions | Date to activate | For discounts and commission boosts |
-| scheduled_activation_time | TIME | | redemptions | Time in EST to activate | Discounts: 9 AM-4 PM EST, Boosts: 6 PM EST |
+| scheduled_activation_time | TIME | | redemptions | Time in EST to activate | Discounts: 9 AM-4 PM EST, Boosts: 2 PM EST |
 | activation_date | TIMESTAMP | | redemptions | When discount/boost activated | Set when status='fulfilled' for discounts (cron job activates at scheduled time) |
 | expiration_date | TIMESTAMP | | redemptions | When discount/boost expires | For discounts: activation_date + duration_minutes, For boosts: see commission_boost_redemptions.expires_at |
 | google_calendar_event_id | VARCHAR(255) | | redemptions | Calendar reminder link | For scheduled rewards |
@@ -692,7 +692,7 @@ WHERE cb.boost_status = 'pending_payout'
 | client_id | UUID | NOT NULL REFERENCES clients(id) | commission_boost_redemptions | Multi-tenant isolation | Required for RLS, constrained to match redemptions.client_id |
 | boost_status | VARCHAR(50) | NOT NULL DEFAULT 'scheduled' | commission_boost_redemptions | Sub-state lifecycle | Options: 'scheduled', 'active', 'expired', 'pending_info', 'pending_payout', 'paid' |
 | scheduled_activation_date | DATE | NOT NULL | commission_boost_redemptions | Date to activate | |
-| activated_at | TIMESTAMP | | commission_boost_redemptions | Actual activation time | 6 PM EST |
+| activated_at | TIMESTAMP | | commission_boost_redemptions | Actual activation time | 2 PM EST |
 | expires_at | TIMESTAMP | | commission_boost_redemptions | Expiration time | activated_at + duration_days |
 | duration_days | INTEGER | NOT NULL DEFAULT 30 | commission_boost_redemptions | Boost duration | From reward config, locked at claim |
 | boost_rate | DECIMAL(5,2) | NOT NULL | commission_boost_redemptions | Commission boost percentage | Locked at claim time (e.g., 5.00 = 5%) |

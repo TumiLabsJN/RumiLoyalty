@@ -84,7 +84,7 @@ export const claimLimiter = new Ratelimit({
 
 /**
  * Cron rate limiter: 1 request per day per route
- * Used on: /api/cron/data-sync, /api/cron/checkpoint-eval
+ * Used on: /api/cron/daily-automation (single combined route for data sync + tier calculation)
  */
 export const cronLimiter = new Ratelimit({
   redis,

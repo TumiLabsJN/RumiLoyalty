@@ -497,8 +497,8 @@ const mockData: RewardsPageResponse = {
 {
   status: "scheduled",
   statusDetails: {
-    scheduledDate: "Jan 20, 2025 at 6:00 PM",
-    scheduledDateRaw: "2025-01-20T23:00:00Z"
+    scheduledDate: "Jan 20, 2025 at 2:00 PM",
+    scheduledDateRaw: "2025-01-20T19:00:00Z"
   }
 }
 ```
@@ -1214,8 +1214,8 @@ rewards: [
     requiredTierName: null,
     displayOrder: 4,
     statusDetails: {
-      scheduledDate: "Jan 20, 2025 at 6:00 PM",
-      scheduledDateRaw: "2025-01-20T23:00:00Z"
+      scheduledDate: "Jan 20, 2025 at 2:00 PM",
+      scheduledDateRaw: "2025-01-20T19:00:00Z"
     },
     redemptionFrequency: "monthly",
     redemptionType: "scheduled"

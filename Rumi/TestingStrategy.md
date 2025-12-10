@@ -639,7 +639,7 @@ describe('Pattern 9: Sensitive data encryption', () => {
       auth: user.authToken,
       body: {
         scheduledActivationDate: '2025-02-15',
-        scheduledActivationTime: '18:00:00',
+        scheduledActivationTime: '19:00:00',
         paymentMethod: 'venmo',
         paymentAccount
       }

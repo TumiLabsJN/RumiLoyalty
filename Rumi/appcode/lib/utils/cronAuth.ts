@@ -8,8 +8,7 @@
  *
  * Validates cron job requests using constant-time comparison to prevent timing attacks.
  * Used on:
- * - /api/cron/data-sync
- * - /api/cron/checkpoint-eval
+ * - /api/cron/daily-automation (single combined route for data sync + tier calculation)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -81,8 +80,8 @@ export function validateCronSecret(request: NextRequest): boolean {
  * @param handler - The actual cron route handler function
  *
  * @example
- * // In /api/cron/data-sync/route.ts
- * export const POST = withCronAuth(async (request) => {
+ * // In /api/cron/daily-automation/route.ts
+ * export const GET = withCronAuth(async (request) => {
  *   // Cron job logic here
  * });
  */

@@ -137,7 +137,7 @@ Organized by reward type for future implementation:
 |---|-----------|------------------|---------------------|
 | 1 | `should create commission_boost_redemptions with boost_status=scheduled on claim` | POST returns 200, boostDetails.boostStatus='scheduled' | Creator schedules commission boost for future date |
 | 2 | `should set redemptions.status to claimed when boost_status=scheduled` | redemption.status='claimed' per auto-sync trigger | Parent redemption tracks claim correctly |
-| 3 | `should return nextSteps.action=scheduled_confirmation` | nextSteps shows "6 PM ET" activation time | Creator sees confirmation of scheduled activation |
+| 3 | `should return nextSteps.action=scheduled_confirmation` | nextSteps shows "2 PM ET" activation time | Creator sees confirmation of scheduled activation |
 
 ### Test Case 2: Activation sets status=active and sales_at_activation (3 tests)
 

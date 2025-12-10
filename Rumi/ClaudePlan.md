@@ -275,7 +275,7 @@ Indexes (critical for performance):
   - Log to `tier_checkpoints` audit table
 
 **Step 23: Vercel Cron Configuration**
-- `/vercel.json` - Configure cron schedule (6:00 PM EST daily)
+- `/vercel.json` - Configure cron schedule (2:00 PM EST daily)
 - `/app/api/cron/daily-sync/route.ts` - API route for sync
 - `/app/api/cron/daily-tier-calc/route.ts` - API route for tier calc
 

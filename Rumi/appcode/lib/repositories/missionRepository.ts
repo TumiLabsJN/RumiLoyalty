@@ -968,7 +968,7 @@ export const missionRepository = {
     // Add scheduling data for scheduled rewards
     if (reward.redemption_type === 'scheduled' && claimData.scheduledActivationDate) {
       updateData.scheduled_activation_date = claimData.scheduledActivationDate;
-      updateData.scheduled_activation_time = claimData.scheduledActivationTime ?? '18:00:00';
+      updateData.scheduled_activation_time = claimData.scheduledActivationTime ?? '19:00:00';
     }
 
     const { error: updateError } = await supabase

@@ -120,11 +120,11 @@ export interface MissionValueData {
 export interface MissionScheduling {
   scheduledActivationDate: string   // Date only (YYYY-MM-DD)
   scheduledActivationTime: string   // Time only (HH:MM:SS) in EST
-  scheduledActivationFormatted: string  // Backend-formatted "Feb 15, 2025 6:00 PM EST"
+  scheduledActivationFormatted: string  // Backend-formatted "Feb 15, 2025 2:00 PM EST"
   activationDate: string | null     // ISO 8601, set when activated
-  activationDateFormatted: string | null  // Backend-formatted "Started: Feb 15, 6:00 PM"
+  activationDateFormatted: string | null  // Backend-formatted "Started: Feb 15, 2:00 PM"
   expirationDate: string | null     // ISO 8601
-  expirationDateFormatted: string | null  // Backend-formatted "Expires: Mar 17, 6:00 PM"
+  expirationDateFormatted: string | null  // Backend-formatted "Expires: Mar 17, 2:00 PM"
   durationText: string              // Backend-formatted "Active for 30 days"
 }
 

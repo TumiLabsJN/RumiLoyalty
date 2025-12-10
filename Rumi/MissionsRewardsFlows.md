@@ -5,7 +5,7 @@
 | Step | Action | Type | missions | mission_progress | redemptions | raffle_participations |
 |------|--------|------|----------|------------------|-------------|----------------------|
 | **0** | Admin creates raffle | **Manual** | `mission_type='raffle'`<br>`reward_id` set (can be ANY reward type)<br>`raffle_end_date` set<br>`activated=false`<br>`enabled=true` | - | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST - see Loyalty.md Flow 1 Step 6) | **Automatic** | `enabled=true` ← Trigger for cron<br>`activated=false` OR `true` ← Determines status | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true) | - | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST - see Loyalty.md Flow 1 Step 6) | **Automatic** | `enabled=true` ← Trigger for cron<br>`activated=false` OR `true` ← Determines status | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true) | - | - |
 | **1a** | Raffle dormant (not accepting entries) | **Automatic** | `activated=false` | `status='dormant'` | - | - |
 | **1b** | Admin activates raffle | **Manual** | `activated=true` | **UPDATED:** `status='active'` | - | - |
 | **2** | User participates | **Manual** | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` | **ROW CREATED:**<br>`is_winner=NULL`<br>`participated_at` set |
@@ -150,7 +150,7 @@ rewards (the prize):
 | Step | Action | Type | missions | mission_progress | redemptions |
 |------|--------|------|----------|------------------|-------------|
 | **0** | Admin creates standard mission | **Manual** | `mission_type='sales_dollars'` (or sales_units/videos/views/likes)<br>`target_value` set (e.g., 1000 = $1000 or 50 units)<br>`reward_id` set<br>`activated=false`<br>`enabled=true` | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST - see Loyalty.md Flow 1 Step 6) | **Automatic** | `enabled=true` ← Trigger for cron<br>`activated=false` OR `true` ← Determines status | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST - see Loyalty.md Flow 1 Step 6) | **Automatic** | `enabled=true` ← Trigger for cron<br>`activated=false` OR `true` ← Determines status | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
 | **1a** | Mission dormant | **Automatic** | `activated=false` | `status='dormant'`<br>`current_value=0` | - |
 | **1b** | Mission active | **Manual** | `activated=true` | `status='active'`<br>`current_value=0` | - |
 | **2** | User making progress<br>(Daily cron updates from Cruva CSV) | **Automatic** | `target_value` (goal) | `current_value` incrementing<br>e.g., 0 → 3 → 7 → 10 | - |
@@ -331,7 +331,7 @@ for (const mp of missionProgress) {
 | Step | Action | missions | rewards | mission_progress | redemptions | physical_gift_redemptions |
 |------|--------|----------|---------|------------------|-------------|--------------------------|
 | **0** | Admin creates mission with physical gift reward | `mission_type='sales_dollars'` (or sales_units/videos/views/likes)<br>`target_value` set<br>`reward_id` set<br>`activated=false`<br>`enabled=true` | `type='physical_gift'`<br>`value_data.requires_size` set<br>`value_data.size_category` set (if needed)<br>`value_data.size_options` set (if needed) | - | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - | - |
 | **1a** | Mission dormant | `activated=false` | - | `status='dormant'` | - | - |
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` | - |
@@ -396,7 +396,7 @@ for (const mp of missionProgress) {
 | Step | Action | missions | rewards | mission_progress | redemptions |
 |------|--------|----------|---------|------------------|-------------|
 | **0** | Admin creates mission with instant reward | `mission_type='sales_dollars'` (or sales_units/videos/views/likes)<br>`target_value` set<br>`reward_id` set<br>`activated=false`<br>`enabled=true` | `type='gift_card'` OR `'spark_ads'` OR `'experience'`<br>`value_data` set | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST - see Loyalty.md Flow 1 Step 6) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST - see Loyalty.md Flow 1 Step 6) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
 | **1a** | Mission dormant | `activated=false` | - | `status='dormant'` | - |
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='instant'` |
@@ -449,12 +449,12 @@ for (const mp of missionProgress) {
 | Step | Action | missions | rewards | mission_progress | redemptions | commission_boost_redemptions |
 |------|--------|----------|---------|------------------|-------------|------------------------------|
 | **0** | Admin creates mission with commission boost reward | `mission_type='sales_dollars'` (or sales_units/videos/views/likes)<br>`target_value` set<br>`reward_id` set<br>`activated=false`<br>`enabled=true` | `type='commission_boost'`<br>`value_data={"percent": 5, "duration_days": 30}`<br>`redemption_type='scheduled'` | - | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - | - |
 | **1a** | Mission dormant | `activated=false` | - | `status='dormant'` | - | - |
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='scheduled'` | - |
-| **3** | User claims & schedules activation date | - | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set<br>`scheduled_activation_date` set<br>`scheduled_activation_time='18:00:00'` (6 PM EST) | **ROW CREATED:**<br>`boost_status='scheduled'`<br>`scheduled_activation_date` set |
-| **4** | Boost activates (6 PM EST on scheduled date) | - | `value_data.duration_days` | `status='completed'` | `scheduled_activation_date` reached | `boost_status='active'`<br>`scheduled_activation_date` set<br>`sales_at_activation` set (GMV at D0) |
+| **3** | User claims & schedules activation date | - | - | `status='completed'` | `status='claimed'`<br>`claimed_at` set<br>`scheduled_activation_date` set<br>`scheduled_activation_time='19:00:00'` (2 PM EST) | **ROW CREATED:**<br>`boost_status='scheduled'`<br>`scheduled_activation_date` set |
+| **4** | Boost activates (2 PM EST on scheduled date) | - | `value_data.duration_days` | `status='completed'` | `scheduled_activation_date` reached | `boost_status='active'`<br>`scheduled_activation_date` set<br>`sales_at_activation` set (GMV at D0) |
 | **5** | Boost expires (after duration_days) | - | `value_data.duration_days` elapsed | `status='completed'` | - | `boost_status='expired'`<br>`sales_at_expiration` set (GMV at DX)<br>`sales_delta` calculated<br>`final_payout_amount` calculated |
 | **6** | System requests payment info | - | - | `status='completed'` | - | `boost_status='pending_info'` |
 | **7** | User submits payment info | - | - | `status='completed'` | `status='fulfilled'` (auto-updated) | `boost_status='pending_payout'`<br>`payment_method` set<br>`payment_account` set<br>`payment_account_confirm` set<br>`payment_info_collected_at` set |
@@ -484,7 +484,7 @@ for (const mp of missionProgress) {
 - `mission_progress_id` - Links to mission_progress.id (which mission completion created this redemption)
 - `status` - 'claimable' → 'claimed' → 'fulfilled' → 'concluded'
 - `scheduled_activation_date` - When boost will activate
-- `scheduled_activation_time` - Fixed at 6 PM EST
+- `scheduled_activation_time` - Fixed at 2 PM EST
 
 #### commission_boost_redemptions (Sub-State: 6-State Lifecycle + Payment)
 - `boost_status` - 'scheduled' → 'active' → 'expired' → 'pending_info' → 'pending_payout' → 'paid'
@@ -519,7 +519,7 @@ See SchemaFinal.md commission_boost_state_history table for audit trail and Loya
 | Step | Action | missions | rewards | mission_progress | redemptions |
 |------|--------|----------|---------|------------------|-------------|
 | **0** | Admin creates mission with discount reward | `mission_type='sales_dollars'` (or sales_units/videos/views/likes)<br>`target_value` set<br>`reward_id` set<br>`activated=false`<br>`enabled=true` | `type='discount'`<br>`value_data={"percent": 10, "duration_minutes": 1440, "coupon_code": "GOLD10", "max_uses": 100}`<br>`redemption_type='scheduled'` | - | - |
-| **0.5** | System creates mission_progress rows<br>(Daily cron at 3 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
+| **0.5** | System creates mission_progress rows<br>(Daily cron at 2 PM EST) | `enabled=true` ← Trigger<br>`activated` ← Determines status | - | **ROW CREATED:**<br>`status='dormant'` (if activated=false)<br>`status='active'` (if activated=true)<br>`current_value=0` | - |
 | **1a** | Mission dormant | `activated=false` | - | `status='dormant'` | - |
 | **1b** | Mission active | `activated=true` | - | `status='active'`<br>`current_value` updating | - |
 | **2** | User completes mission (hits target) | - | - | `status='completed'`<br>`completed_at` set | **ROW CREATED:**<br>`status='claimable'`<br>`mission_progress_id` set<br>`redemption_type='scheduled'` |

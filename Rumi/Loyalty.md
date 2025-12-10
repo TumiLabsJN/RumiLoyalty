@@ -55,7 +55,7 @@ Loyalty program platform for content creators based on TikTok video performance 
 - **Multi-tenant ready:** Single codebase, client_id isolation via RLS policies
 - **LLM-optimized:** Stack chosen for Claude Code generation efficiency
 - **Daily automation:** Single cron job (sequential execution) for data sync + tier calculation
-  - Runs at 6:00 PM EST daily (`"schedule": "0 23 * * *"`) - 11:00 PM UTC
+  - Runs at 2:00 PM EST daily (`"schedule": "0 19 * * *"`) - 7:00 PM UTC
   - Data updates once per day (24-hour max delay)
   - Performance: ~2 minutes total at 1000 creators
   - **Timing rationale:** Aligns with commission boost activation time for accurate sales snapshots
@@ -80,7 +80,7 @@ Loyalty program platform for content creators based on TikTok video performance 
                  │ ① Daily CSV Download
                  │    (Puppeteer automation)
                  │    videos.csv
-                 │    6 PM EST / 11 PM UTC
+                 │    2 PM EST / 7 PM UTC
                  ▼
 ┌─────────────────────────────────────────────────┐
 │  Next.js Application                            │
@@ -226,8 +226,7 @@ Loyalty program platform for content creators based on TikTok video performance 
 - `/api/admin/users/[id]` PUT - Manual tier adjustments
 
 #### **System Routes (Cron Secret)**
-- `/api/cron/data-sync` POST - **Rate limit: 1/day**
-- `/api/cron/checkpoint-eval` POST - **Rate limit: 1/day**
+- `/api/cron/daily-automation` GET - **Rate limit: 1/day** (combined data sync + tier calculation)
 
 ### Rate Limiting Implementation
 
@@ -410,14 +409,14 @@ Day 4: Admin marks complete
 
 ### Flow 1: Daily Metrics Sync (Automated)
 
-**Trigger:** Vercel cron job at 6:00 PM EST daily (`0 23 * * *`) - 11:00 PM UTC
+**Trigger:** Vercel cron job at 2:00 PM EST daily (`0 19 * * *`) - 7:00 PM UTC
 
 **Frequency:** Once per 24 hours
 
-**Timing Rationale:** Aligned with commission boost activation (6 PM EST) to ensure accurate sales snapshots for boost payout calculations.
+**Timing Rationale:** Aligned with commission boost activation (2 PM EST) to ensure accurate sales snapshots for boost payout calculations.
 
 **Data Freshness:**
-- Creator makes sale at 1:00 AM → Appears in dashboard at 23:00 UTC same day (11 PM UTC)
+- Creator makes sale at 1:00 AM → Appears in dashboard at 19:00 UTC same day (7 PM UTC)
 - Maximum delay: 23 hours 59 minutes
 - Average delay: 12 hours
 - User-facing indicator: Dashboard displays "Last updated: X hours ago" with tooltip explaining daily updates
@@ -429,7 +428,7 @@ Day 4: Admin marks complete
 
 2. **Parse CSV file:**
    - Use `csv-parse` library to convert CSV → JSON
-   - Extract from videos.csv: Handle, Video URL, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title
+   - Extract from videos.csv: Handle, Video, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title
 
 3. **Process videos:**
    - For each row in videos.csv:
@@ -1452,7 +1451,7 @@ ALTERNATIVE PATH: Password Reset
 
 ### Flow 7: Daily Tier Calculation (Automated)
 
-**Trigger:** Runs immediately after data sync completes (part of single cron job at 6:00 PM EST / 11:00 PM UTC)
+**Trigger:** Runs immediately after data sync completes (part of single cron job at 2:00 PM EST / 7:00 PM UTC)
 
 **Steps:**
 

@@ -121,7 +121,7 @@
 │                      COMMISSION BOOST SUB-STATE LIFECYCLE                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
 
-┌───────────┐   6 PM EST on    ┌────────┐   duration_days   ┌─────────┐   System prompts   ┌──────────────┐
+┌───────────┐   2 PM EST on    ┌────────┐   duration_days   ┌─────────┐   System prompts   ┌──────────────┐
 │ scheduled │───scheduled_date─→│ active │─────elapsed──────→│ expired │───for payment───→│ pending_info │
 └───────────┘                   └────────┘                   └─────────┘                    └──────────────┘
                                     │                                                              │
@@ -138,7 +138,7 @@
 **Valid Transitions:**
 | From | To | Trigger | Auto-Updates Parent |
 |------|-----|---------|---------------------|
-| scheduled | active | 6 PM EST cron on scheduled_activation_date | redemptions.status stays 'claimed' |
+| scheduled | active | 2 PM EST cron on scheduled_activation_date | redemptions.status stays 'claimed' |
 | active | expired | duration_days elapsed | redemptions.status stays 'claimed' |
 | expired | pending_info | System prompts user for payment info | redemptions.status stays 'claimed' |
 | pending_info | pending_payout | User submits payment_method + payment_account | redemptions.status → 'fulfilled' |
@@ -317,7 +317,7 @@ redemptions.status = 'claimed'
          │
 commission_boost_redemptions.boost_status = 'scheduled'
          │
-         ↓ [6 PM EST on scheduled date]
+         ↓ [2 PM EST on scheduled date]
          │
 boost_status = 'active', sales_at_activation recorded
          │

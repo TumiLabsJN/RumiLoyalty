@@ -3033,11 +3033,11 @@ interface MissionsPageResponse {
     scheduling: {
       scheduledActivationDate: string   // Date only (YYYY-MM-DD)
       scheduledActivationTime: string   // Time only (HH:MM:SS) in EST
-      scheduledActivationFormatted: string  // Backend-formatted "Feb 15, 2025 6:00 PM EST"
+      scheduledActivationFormatted: string  // Backend-formatted "Feb 15, 2025 2:00 PM EST"
       activationDate: string | null     // ISO 8601, set when activated
-      activationDateFormatted: string | null  // Backend-formatted "Started: Feb 15, 6:00 PM"
+      activationDateFormatted: string | null  // Backend-formatted "Started: Feb 15, 2:00 PM"
       expirationDate: string | null     // ISO 8601
-      expirationDateFormatted: string | null  // Backend-formatted "Expires: Mar 17, 6:00 PM"
+      expirationDateFormatted: string | null  // Backend-formatted "Expires: Mar 17, 2:00 PM"
       durationText: string              // Backend-formatted "Active for 30 days"
     } | null
 
@@ -3164,8 +3164,8 @@ interface MissionsPageResponse {
       "valueData": {"percent": 5, "durationDays": 30},
       "scheduling": {
         "scheduledActivationDate": "2025-02-15",
-        "scheduledActivationTime": "18:00:00",
-        "scheduledActivationFormatted": "Feb 15, 2025 6:00 PM EST",
+        "scheduledActivationTime": "19:00:00",
+        "scheduledActivationFormatted": "Feb 15, 2025 2:00 PM EST",
         "activationDate": null,
         "activationDateFormatted": null,
         "expirationDate": null,
@@ -3178,7 +3178,7 @@ interface MissionsPageResponse {
         "backContentType": "dates",
         "message": null,
         "dates": [
-          {"label": "Scheduled", "value": "Feb 15, 2025 6:00 PM EST"},
+          {"label": "Scheduled", "value": "Feb 15, 2025 2:00 PM EST"},
           {"label": "Duration", "value": "Active for 30 days"}
         ]
       }
@@ -3358,7 +3358,7 @@ flippableCard: {
   dates: [
     {
       label: "Scheduled",
-      value: scheduledActivationFormatted  // "Jan 25, 2025 at 6:00 PM"
+      value: scheduledActivationFormatted  // "Jan 25, 2025 at 2:00 PM"
     },
     {
       label: "Duration",
@@ -3436,7 +3436,7 @@ flippableCard: {
   dates: [
     {
       label: "Scheduled",
-      value: scheduledActivationFormatted  // "Jan 25, 2025 at 6:00 PM"
+      value: scheduledActivationFormatted  // "Jan 25, 2025 at 2:00 PM"
     },
     {
       label: "Duration",
@@ -3729,7 +3729,7 @@ Content-Type: application/json
 // Scheduled rewards (commission_boost, discount)
 {
   "scheduledActivationDate": "2025-02-15",  // Date (YYYY-MM-DD)
-  "scheduledActivationTime": "18:00:00"     // Time (HH:MM:SS) in EST
+  "scheduledActivationTime": "19:00:00"     // Time (HH:MM:SS) in UTC (2 PM EST)
 }
 
 // Physical gifts (no size required)
@@ -4298,8 +4298,8 @@ The backend generates `name` and `displayText` fields dynamically based on rewar
       "rewardSource": "vip_tier",
       "displayOrder": 4,
       "statusDetails": {
-        "scheduledDate": "Jan 20, 2025 at 6:00 PM",
-        "scheduledDateRaw": "2025-01-20T23:00:00Z"
+        "scheduledDate": "Jan 20, 2025 at 2:00 PM",
+        "scheduledDateRaw": "2025-01-20T19:00:00Z"
       },
       "redemptionFrequency": "monthly",
       "redemptionType": "scheduled"
@@ -4925,10 +4925,10 @@ interface ClaimRewardRequest {
 }
 ```
 
-**Commission Boost (Requires activation date, time auto-set to 6 PM EST):**
+**Commission Boost (Requires activation date, time auto-set to 2 PM EST):**
 ```json
 {
-  "scheduledActivationAt": "2025-01-20T23:00:00Z"
+  "scheduledActivationAt": "2025-01-20T19:00:00Z"
 }
 ```
 
@@ -4975,7 +4975,7 @@ interface ClaimRewardRequest {
    - Date must be in future
 10. **Scheduling Validation (Commission Boost):**
     - Date must be in future
-    - Time automatically set to 18:00:00 EST (6 PM) regardless of input
+    - Time automatically set to 14:00:00 EST (2 PM) regardless of input
 11. **Physical Gift Requirements:**
     - `shippingInfo` must be provided
     - If `value_data.requires_size = true`, `sizeValue` must be provided
@@ -5102,7 +5102,7 @@ interface ClaimRewardResponse {
 ```json
 {
   "success": true,
-  "message": "Commission boost scheduled to activate on Jan 20 at 6:00 PM ET",
+  "message": "Commission boost scheduled to activate on Jan 20 at 2:00 PM ET",
   "redemption": {
     "id": "redemption-boost-456",
     "status": "claimed",
@@ -5119,12 +5119,12 @@ interface ClaimRewardResponse {
         "durationDays": 30
       }
     },
-    "scheduledActivationAt": "2025-01-20T23:00:00Z",
+    "scheduledActivationAt": "2025-01-20T19:00:00Z",
     "usedCount": 1,
     "totalQuantity": 3,
     "nextSteps": {
       "action": "scheduled_confirmation",
-      "message": "Your boost will activate automatically at 6 PM ET on Jan 20!"
+      "message": "Your boost will activate automatically at 2 PM ET on Jan 20!"
     }
   },
   "updatedRewards": [

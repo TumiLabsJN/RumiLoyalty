@@ -642,7 +642,7 @@ function generateFlippableCard(
   ) {
     const scheduledFormatted = formatDateTimeEST(
       commissionBoost.scheduledActivationDate,
-      '18:00:00' // 6 PM EST
+      '19:00:00' // 2 PM EST (19:00 UTC)
     );
     const durationDays = commissionBoost.durationDays ?? 30;
 
@@ -810,7 +810,7 @@ function transformMission(
     (reward.type === 'commission_boost' || reward.type === 'discount')
   ) {
     const scheduledDate = commissionBoost?.scheduledActivationDate ?? redemption?.scheduledActivationDate;
-    const scheduledTime = redemption?.scheduledActivationTime ?? '18:00:00';
+    const scheduledTime = redemption?.scheduledActivationTime ?? '19:00:00';
     const activationDate = commissionBoost?.activatedAt ?? redemption?.activationDate;
     const expirationDate = commissionBoost?.expiresAt ?? redemption?.expirationDate;
     const durationDays = commissionBoost?.durationDays ?? ((valueData?.duration_minutes as number ?? 1440) / 1440);

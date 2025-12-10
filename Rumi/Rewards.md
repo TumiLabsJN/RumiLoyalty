@@ -355,7 +355,7 @@ description = "VIP Event" // Max 15 chars (VARCHAR(15))
 - Creator selects activation date (up to 7 days ahead, weekdays only)
 - Creator selects time slot (9:00 AM - 4:00 PM EST, weekdays only)
 - Time picker shows: "Times shown in Eastern Time (EST/EDT)"
-- **Note:** Discount scheduling is different from Commission Boost (which activates at 6:00 PM EST daily)
+- **Note:** Discount scheduling is different from Commission Boost (which activates at 2:00 PM EST daily)
 
 **Step 3: Create Redemption Record**
 - Insert to `redemptions` table:
@@ -419,7 +419,7 @@ description = "VIP Event" // Max 15 chars (VARCHAR(15))
 **Step 2: Creator Clicks "Schedule"**
 - Modal appears with date picker
 - Creator selects activation date (1-7 days ahead)
-- Time is fixed: 6:00 PM EST (aligned with daily scraping)
+- Time is fixed: 2:00 PM EST (aligned with daily scraping)
 
 **Step 3: Create Redemption + Commission Boost Sub-State Record**
 - Insert to `redemptions` table:
@@ -448,12 +448,12 @@ description = "VIP Event" // Max 15 chars (VARCHAR(15))
   ```
 
 **Step 4: UI Feedback**
-- Success message: "Success! Your boost will activate on Jan 15 at 6:00 PM EST"
+- Success message: "Success! Your boost will activate on Jan 15 at 2:00 PM EST"
 - Reward card shows: "Boost scheduled for Jan 15"
 - Limit counter updates
 
-**Step 5: Cron Activates Boost (Jan 15, 6:00 PM EST)**
-- Daily cron runs after scraping completes (3 PM EST scraping → 6 PM EST activation)
+**Step 5: Cron Activates Boost (Jan 15, 2:00 PM EST)**
+- Daily cron runs after scraping completes (3 PM EST scraping → 2 PM EST activation)
 - System captures baseline sales (D0):
   ```sql
   UPDATE commission_boost_redemptions SET
@@ -474,7 +474,7 @@ description = "VIP Event" // Max 15 chars (VARCHAR(15))
 - **Redemption status:** Still `'claimed'`
 - **Boost status:** `'active'`
 
-**Step 7: Boost Expires (Feb 14, 6:00 PM EST)**
+**Step 7: Boost Expires (Feb 14, 2:00 PM EST)**
 - Daily cron detects expiration and calculates payout:
   ```sql
   UPDATE commission_boost_redemptions SET
@@ -842,7 +842,7 @@ payment_info_submitted_at TIMESTAMP
 | @creator1 | Gift Card: $50 | Instant | Jan 5, 2:00 PM | 18h | Claimed |
 | @creator2 | Spark Ads: $100 | Instant | Jan 5, 3:00 PM | 17h | Claimed |
 | @creator3 | Follower Discount: 10% | Scheduled | Jan 12, 2:00 PM | 156h | Claimed (Scheduled) |
-| @creator4 | Pay Boost: 5% | Commission Boost | Jan 1, 6:00 PM | - | Pending Payout |
+| @creator4 | Pay Boost: 5% | Commission Boost | Jan 1, 2:00 PM | - | Pending Payout |
 
 **Fulfillment Actions:**
 
@@ -875,7 +875,7 @@ payment_info_submitted_at TIMESTAMP
 **For Scheduled Discounts:**
 1. Google Calendar reminder fires 30 minutes before (5:30 PM EST)
 2. Admin prepares to activate discount
-3. At scheduled time (6:00 PM EST), admin activates in TikTok Seller Center
+3. At scheduled time (2:00 PM EST), admin activates in TikTok Seller Center
 4. Admin marks as fulfilled (same as instant rewards above)
 5. After discount period expires, admin marks as `'concluded'`
 
@@ -1128,7 +1128,7 @@ Export for client billing:
   status: 'claimable' | 'claimed' | 'fulfilled' | 'concluded' | 'rejected',  -- 5-state lifecycle
   tier_at_claim: 'gold',                              -- Locked at claim time
   claimed_at: '2025-01-05 14:00:00',
-  scheduled_activation_date: '2025-01-12',            -- Date only (time always 6 PM EST)
+  scheduled_activation_date: '2025-01-12',            -- Date only (time always 2 PM EST)
   fulfilled_at: '2025-01-06 10:00:00',                -- When admin fulfilled
   concluded_at: '2025-01-07 14:00:00',                -- When delivery confirmed or auto-concluded
   fulfilled_by: admin_id,
@@ -1150,8 +1150,8 @@ commission_boost_redemptions {
   redemption_id: UUID,                                -- FK to redemptions table
   boost_status: 'scheduled' | 'active' | 'expired' | 'pending_info' | 'pending_payout' | 'paid',
   scheduled_activation_date: '2025-01-15',
-  activated_at: '2025-01-15 18:00:00',                -- 6 PM EST
-  expires_at: '2025-02-14 18:00:00',                  -- 6 PM EST + duration_days
+  activated_at: '2025-01-15 19:00:00',                -- 2 PM EST (19:00 UTC)
+  expires_at: '2025-02-14 19:00:00',                  -- 2 PM EST + duration_days
   duration_days: 30,
   boost_commission_rate: 5.0,                         -- Locked at claim time
   tier_commission_rate: 10.0,                         -- Locked at claim time (for display)
@@ -2015,7 +2015,7 @@ Fulfillment Queue:
 
 **Scheduling Constraints:**
 - **Discounts:** Weekdays only, 9:00 AM - 4:00 PM EST time slots
-- **Commission Boosts:** Daily at 6:00 PM EST (automated, no manual scheduling)
+- **Commission Boosts:** Daily at 2:00 PM EST (automated, no manual scheduling)
 
 ### 7.5 Commission Boost Auto-Sync (Sub-State Schema)
 
@@ -2218,7 +2218,7 @@ CREATE INDEX idx_rewards_tier ON rewards(tier_eligibility);
 | redemption_type | VARCHAR(50) | NOT NULL | redemptions | Workflow type (locked at claim) | Options: 'instant', 'scheduled' - Locked from reward.redemption_type, determines fulfillment workflow |
 | claimed_at | TIMESTAMP | | redemptions | When creator clicked "Claim" | |
 | scheduled_activation_date | DATE | | redemptions | Date to activate | For discounts and commission boosts |
-| scheduled_activation_time | TIME | | redemptions | Time in EST to activate | Discounts: 9 AM-4 PM EST, Boosts: 6 PM EST |
+| scheduled_activation_time | TIME | | redemptions | Time in EST to activate | Discounts: 9 AM-4 PM EST, Boosts: 2 PM EST |
 | google_calendar_event_id | VARCHAR(255) | | redemptions | Calendar reminder link | For scheduled rewards |
 | fulfilled_at | TIMESTAMP | | redemptions | When admin marked fulfilled | |
 | fulfilled_by | UUID | REFERENCES users(id) | redemptions | Which admin fulfilled | |
@@ -2618,7 +2618,7 @@ Day 1:  Gold creator (tier_3) claims "Pay Boost: 5%" (commission_boost, tier rat
           - tier_commission_rate = 10.0
           - boost_commission_rate = 5.0
 
-Day 15: Daily cron activates boost at 6 PM EST
+Day 15: Daily cron activates boost at 2 PM EST
         Boost runs with locked rates
 
 Day 20: Creator demoted to Silver (tier_2, tier rate = 7%)

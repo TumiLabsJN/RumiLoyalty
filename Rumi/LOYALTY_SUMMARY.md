@@ -86,7 +86,7 @@
 **Source:** Loyalty.md lines 374-2017
 
 ### Flow 1: Daily Metrics Sync (Automated)
-- **Trigger:** Vercel cron job at 6:00 PM EST daily (11:00 PM UTC)
+- **Trigger:** Vercel cron job at 2:00 PM EST daily (7:00 PM UTC)
 - **Steps:**
   1. Puppeteer downloads CSV from Cruva (TikTok analytics platform)
   2. Parse CSV with csv-parse library
@@ -144,7 +144,7 @@
 - **Security Features:** 5-min expiration, 3 attempt limit, rate limiting (1 resend/60 sec)
 
 ### Flow 7: Daily Tier Calculation (Automated)
-- **Trigger:** Runs immediately after data sync (6:00 PM EST)
+- **Trigger:** Runs immediately after data sync (2:00 PM EST)
 - **Steps:**
   0. Apply pending sales adjustments first
   1. Query users due for checkpoint (WHERE next_checkpoint_at <= TODAY)

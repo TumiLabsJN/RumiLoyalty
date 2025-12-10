@@ -715,7 +715,7 @@ function getNextSteps(rewardType: string): NextSteps {
         message:
           rewardType === 'discount'
             ? 'Your discount will activate at the scheduled time!'
-            : 'Your boost will activate automatically at 6 PM ET on the scheduled date!',
+            : 'Your boost will activate automatically at 2 PM ET on the scheduled date!',
       };
     default:
       // gift_card, spark_ads, experience
@@ -768,7 +768,7 @@ function getSuccessMessage(
         : 'Discount scheduled!';
     case 'commission_boost':
       return scheduledDate
-        ? `Commission boost scheduled to activate on ${formatDateForMessage(scheduledDate)} at 6:00 PM ET`
+        ? `Commission boost scheduled to activate on ${formatDateForMessage(scheduledDate)} at 2:00 PM ET`
         : 'Commission boost scheduled!';
     default:
       return 'Reward claimed successfully!';
@@ -936,7 +936,7 @@ export const rewardService = {
    * 7. Usage limit check
    * 8. Scheduling required for discount/commission_boost
    * 9. Discount scheduling: weekday Mon-Fri, 09:00-16:00 EST
-   * 10. Commission boost: future date, auto-set to 18:00:00 EST
+   * 10. Commission boost: future date, auto-set to 14:00:00 EST (19:00 UTC)
    * 11. Physical gift: shippingInfo required, sizeValue if requires_size
    *
    * @param params - Claim parameters
@@ -1069,9 +1069,9 @@ export const rewardService = {
         scheduledDate = scheduledDateTime.toISOString().split('T')[0];
         scheduledTime = scheduledDateTime.toISOString().split('T')[1].split('.')[0];
       } else {
-        // Rule 10: Commission boost - auto-set to 18:00:00 EST (23:00 UTC)
+        // Rule 10: Commission boost - auto-set to 14:00:00 EST (19:00 UTC)
         scheduledDate = scheduledDateTime.toISOString().split('T')[0];
-        scheduledTime = '23:00:00'; // 18:00 EST = 23:00 UTC
+        scheduledTime = '19:00:00'; // 14:00 EST = 19:00 UTC
       }
     }
 
@@ -1219,8 +1219,8 @@ export const rewardService = {
       const boostPercent = (valueData?.percent as number) ?? 0;
       const boostDurationDays = (valueData?.duration_days as number) ?? (valueData?.durationDays as number) ?? 30;
 
-      // Build activation date from scheduled date and time (time is always 23:00 UTC = 6 PM EST)
-      const activationDateTime = new Date(`${scheduledDate}T${scheduledTime || '23:00:00'}`);
+      // Build activation date from scheduled date and time (time is always 19:00 UTC = 2 PM EST)
+      const activationDateTime = new Date(`${scheduledDate}T${scheduledTime || '19:00:00'}`);
 
       const calendarResult = await createCommissionBoostScheduledEvent(
         handleWithAt,

@@ -220,8 +220,8 @@ export default function MissionsPage() {
       valueData: { percent: 5, durationDays: 30 },
       scheduling: {
         scheduledActivationDate: "2025-01-25",
-        scheduledActivationTime: "18:00:00",
-        scheduledActivationFormatted: "Jan 25, 2025 at 6:00 PM EST",
+        scheduledActivationTime: "19:00:00",
+        scheduledActivationFormatted: "Jan 25, 2025 at 2:00 PM EST",
         activationDate: null,
         activationDateFormatted: null,
         expirationDate: null,
@@ -234,7 +234,7 @@ export default function MissionsPage() {
         backContentType: "dates",
         message: null,
         dates: [
-          { label: "Scheduled", value: "Jan 25, 2025 at 6:00 PM EST" },
+          { label: "Scheduled", value: "Jan 25, 2025 at 2:00 PM EST" },
           { label: "Duration", value: "Active for 30 days" }
         ]
       }

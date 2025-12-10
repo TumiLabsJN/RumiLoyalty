@@ -467,7 +467,7 @@ interface ClaimRewardRequest {
 **Discount (Line 4929-4930):**
 ```json
 {
-  "scheduledActivationAt": "2025-01-20T23:00:00Z"
+  "scheduledActivationAt": "2025-01-20T19:00:00Z"
 }
 ```
 

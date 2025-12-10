@@ -30,7 +30,7 @@ interface SchedulePayboostModalProps {
  *
  * Features:
  * - Date picker (today through +7 days)
- * - Fixed time: 6:00 PM ET (no time selection needed)
+ * - Fixed time: 2:00 PM ET (no time selection needed)
  * - Shows time in user's local timezone
  * - Validation (no past dates, within 7-day window, weekdays only)
  * - Loading state during API call
@@ -54,8 +54,8 @@ export function SchedulePayboostModal({
   // Detect user's timezone
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
 
-  // Fixed time for commission boost: 6:00 PM ET
-  const FIXED_HOUR_ET = 18 // 6 PM in 24-hour format
+  // Fixed time for commission boost: 2:00 PM ET (7 PM UTC)
+  const FIXED_HOUR_ET = 14 // 2 PM in 24-hour format
   const FIXED_MINUTE_ET = 0
 
   // Get user's timezone abbreviation
@@ -70,11 +70,11 @@ export function SchedulePayboostModal({
     return tzPart?.value || ""
   }
 
-  // Convert 6 PM ET to user's local time for display
+  // Convert 2 PM ET to user's local time for display
   const getLocalTimeDisplay = (): string => {
-    // Create a date in ET timezone at 6 PM
+    // Create a date in ET timezone at 2 PM
     const now = new Date()
-    const etString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T18:00:00`
+    const etString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T14:00:00`
 
     // Parse as ET time (EST is UTC-5)
     const utcDate = new Date(etString + "-05:00")
@@ -92,14 +92,14 @@ export function SchedulePayboostModal({
 
   const localTimeDisplay = getLocalTimeDisplay()
 
-  // Convert date to DateTime with fixed 6 PM ET time
+  // Convert date to DateTime with fixed 2 PM ET time
   const convertToDateTime = (date: Date): Date => {
     const year = date.getFullYear()
     const month = date.getMonth()
     const day = date.getDate()
 
-    // Create date string in ET with 6 PM time
-    const etDateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T18:00:00-05:00`
+    // Create date string in ET with 2 PM time
+    const etDateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T14:00:00-05:00`
 
     // Parse as UTC
     return new Date(etDateString)
@@ -127,7 +127,7 @@ export function SchedulePayboostModal({
     setIsSubmitting(true)
 
     try {
-      // Combine date + fixed 6 PM ET time and convert to UTC
+      // Combine date + fixed 2 PM ET time and convert to UTC
       const combinedDateTime = convertToDateTime(selectedDate)
 
       // Call parent's onConfirm with UTC timestamp

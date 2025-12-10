@@ -69,7 +69,7 @@ Backend provides pre-formatted versions for display:
 | Raw Field | Formatted Field | Example |
 |-----------|-----------------|---------|
 | `amount` | `amountFormatted` | `"$50.00"` |
-| `createdAt` | `createdAtFormatted` | `"Nov 25, 2025 6:00 PM EST"` |
+| `createdAt` | `createdAtFormatted` | `"Nov 25, 2025 2:00 PM EST"` |
 | `completedAt` | `completedAtFormatted` | `"Nov 25, 2025"` |
 
 ### Success Response (Mutations)

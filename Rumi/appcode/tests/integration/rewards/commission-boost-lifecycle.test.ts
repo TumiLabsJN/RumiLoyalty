@@ -171,7 +171,7 @@ function createCommissionBoostClaimResponse(
       totalQuantity: 2,
       nextSteps: {
         action: 'scheduled_confirmation',
-        message: 'Your boost will activate automatically at 6 PM ET on the scheduled date!',
+        message: 'Your boost will activate automatically at 2 PM ET on the scheduled date!',
       },
     },
     updatedRewards: [
@@ -281,7 +281,7 @@ describe('Commission Boost Lifecycle Tests (API Routes)', () => {
 
       // Per API_CONTRACTS.md line 5126
       expect(data.redemption.nextSteps.action).toBe('scheduled_confirmation');
-      expect(data.redemption.nextSteps.message).toContain('6 PM ET');
+      expect(data.redemption.nextSteps.message).toContain('2 PM ET');
     });
   });
 
@@ -652,8 +652,8 @@ describe('Commission Boost Lifecycle Tests (API Routes)', () => {
     it('should have complete audit trail for full lifecycle', () => {
       const fullHistory = createStateHistoryEntries([
         { fromStatus: null, toStatus: 'scheduled', transitionedAt: '2025-01-14T15:30:00Z', transitionedBy: TEST_USER_ID, transitionType: 'api' },
-        { fromStatus: 'scheduled', toStatus: 'active', transitionedAt: '2025-01-20T23:00:00Z', transitionedBy: null, transitionType: 'cron' },
-        { fromStatus: 'active', toStatus: 'expired', transitionedAt: '2025-02-19T23:00:00Z', transitionedBy: null, transitionType: 'cron' },
+        { fromStatus: 'scheduled', toStatus: 'active', transitionedAt: '2025-01-20T19:00:00Z', transitionedBy: null, transitionType: 'cron' },
+        { fromStatus: 'active', toStatus: 'expired', transitionedAt: '2025-02-19T19:00:00Z', transitionedBy: null, transitionType: 'cron' },
         { fromStatus: 'expired', toStatus: 'pending_info', transitionedAt: '2025-02-19T23:01:00Z', transitionedBy: null, transitionType: 'cron' },
         { fromStatus: 'pending_info', toStatus: 'pending_payout', transitionedAt: '2025-02-20T10:00:00Z', transitionedBy: TEST_USER_ID, transitionType: 'api' },
         { fromStatus: 'pending_payout', toStatus: 'paid', transitionedAt: '2025-02-25T14:00:00Z', transitionedBy: 'admin-123', transitionType: 'manual' },
