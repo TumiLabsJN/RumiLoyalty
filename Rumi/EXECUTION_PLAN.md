@@ -1410,13 +1410,13 @@
     - **Implementation Guide:** In salesService processDailySales: (1) call syncRepository.findNewlyCompletedMissions to get missions where current_value >= target_value AND no existing redemption for that mission_progress_id, (2) for each result, call syncRepository.createRedemptionForCompletedMission with userId, missionId, rewardId, tierAtClaim from user's current_tier
     - **Acceptance Criteria:** Uses syncRepository functions (no direct DB in service), only creates redemptions for newly completed missions (no duplicates), redemptions created with status='claimable', tier_at_claim captured at completion time
 
-- [ ] **Task 8.2.4:** Create daily-automation cron route
+- [x] **Task 8.2.4:** Create daily-automation cron route
     - **Action:** Create `/app/api/cron/daily-automation/route.ts` with GET handler implementing 4-step orchestration: (1) verify cron secret from request headers, (2) call salesService.processDailySales which internally orchestrates Puppeteer download → CSV parse → video upserts → precomputed updates per Flow 1, (3) handle download/processing failures with detailed error logging, (4) return appropriate HTTP status codes
     - **References:** Loyalty.md Flow 1 lines 410-610 (Daily Metrics Sync complete workflow), lines 412 (Vercel cron at 2 PM EST daily)
     - **Implementation Guide:** MUST verify cron secret from Authorization header or query param to prevent unauthorized access. Call salesService.processDailySales() which orchestrates complete Flow 1 workflow (Puppeteer CRUVA download → CSV parse → video upserts → precomputed field updates → mission progress updates). Handle errors at multiple levels: CRUVA authentication failures (Task 8.2.0a), CSV download failures (network timeout, file not found), CSV parsing errors (malformed data), database transaction failures (constraint violations, connection errors). Log detailed error context (error type, timestamp, affected records count). Call error monitoring function from Task 8.2.5 to send Resend alert to admin on any failure. Return 200 OK on success with summary (records processed, users updated), 401 for invalid cron secret, 500 for processing failures with error details
     - **Acceptance Criteria:** MUST verify cron secret before processing, orchestrates Puppeteer download → CSV parse → video upserts → precomputed updates per Flow 1 complete workflow lines 410-610, calls salesService.processDailySales from Task 8.2.3, handles CRUVA download failures from Task 8.2.0a with descriptive errors, handles CSV parsing errors with row-level context, wraps database operations in transaction per Pattern 1, sends Resend alert to admin on failure per Task 8.2.5, logs processing summary (records processed, users updated, mission progress updated), returns 200 with success summary or 401/500 with error details, follows cron route security pattern
 
-- [ ] **Task 8.2.5:** Add error monitoring
+- [x] **Task 8.2.5:** Add error monitoring
     - **Action:** Integrate Resend for failure alerts
     - **References:** Loyalty.md lines 1960-1997 (Automation Monitoring & Reliability)
     - **Acceptance Criteria:** Email sent to admin on cron failure
