@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-11 (Phase 8 - Task 8.2.2a COMPLETE) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-11 (Phase 8 - RPC Migration COMPLETE) [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **FILE SIZE LIMIT: 250 lines maximum**
 
-**Current size:** 250 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
+**Current size:** 246 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
 **Status:** ✅ UNDER LIMIT
 
 **PRE-MODIFICATION CHECK:**
@@ -182,12 +182,12 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**Task 8.2.2a COMPLETE - Create syncRepository** (2025-12-11)
-- Created `/lib/repositories/syncRepository.ts` (546 lines)
-- 12 functions: upsertVideo, bulkUpsertVideos, findUserByTiktokHandle, createUserFromCruva, updatePrecomputedFields (stub), updateLeaderboardRanks (stub), updateMissionProgress (stub), findNewlyCompletedMissions, createRedemptionForCompletedMission, createSyncLog, updateSyncLog, applyPendingSalesAdjustments (stub)
-- All functions filter by client_id per ARCHITECTURE.md Section 9
-- TypeScript types defined per Phase8UpgradeIMPL.md Section 11
-- Fixed Phase8UpgradeIMPL.md bug: missionId → missionProgressId (per SchemaFinalv2.md)
+**Task 8.2.3c COMPLETE - TierAtClaimLookup Bug Fix** (2025-12-11)
+- Fixed bug: `findUserByTiktokHandle` called with UUID instead of handle
+- Added multi-tenant filter: `.eq('users.client_id', clientId)` to syncRepository
+- Refactored to single source of truth: `createRedemptionsForCompletedMissions` helper
+- processDailySales Step 7 now delegates to helper (eliminates code duplication)
+- Per TierAtClaimLookupFixIMPL.md v1.2 - All 3 steps executed and verified
 
 ---
 
@@ -198,14 +198,11 @@ If either check fails, FIX before proceeding with task.
 **Next:** Phase 9 - Frontend Integration
 
 **What's Left:**
-- [x] Step 8.1: Cron Infrastructure ✅
-- [x] Task 8.2.0a-8.2.2a: Downloader, parser, service, repository ✅
-- [x] Task 8.2.3: processDailySales ✅ (8-step workflow)
-- [ ] Task 8.2.3a: updatePrecomputedFields ← NEXT
-- [ ] Tasks 8.2.3b-c, 8.2.4, 8.2.5: Remaining Step 8.2
-- [ ] Step 8.3: Tier Calculation
-- [ ] Step 8.4: Manual Upload
-- [ ] Step 8.5: Cron Testing
+- [x] Step 8.1, Tasks 8.2.0a-8.2.3, RPC Migration (8.2.3-rpc/a/b, 8.3.1a) ✅
+- [x] Task 8.2.3c: Redemption creation + TierAtClaimLookup bug fix ✅
+- [ ] Tasks 8.2.4-5: Cron route + error monitoring ← NEXT
+- [ ] Step 8.3: Tier Calculation (8.3.0a-4)
+- [ ] Steps 8.4-8.5: Manual Upload + Cron Testing
 
 ---
 
@@ -213,16 +210,16 @@ If either check fails, FIX before proceeding with task.
 
 **Count:** 10/10 ✅ AT LIMIT
 
-1. [x] **Task 8.2.2a** Create syncRepository (2025-12-11) - 546 lines, 12 functions, client_id filtering
-2. [x] **Step 8.1 COMPLETE** Cron Infrastructure (2025-12-10) - directory + vercel.json verified
-3. [x] **Step 7.3 COMPLETE** Tiers Testing (2025-12-10) - 109 tests: 44 integration + 65 unit
-4. [x] **Step 7.2 COMPLETE** Tiers API (2025-12-09) - repository, service, route for GET /api/tiers
-5. [x] **Task 7.2.4** Implement getTiersPageData (2025-12-09) - 219 lines, aggregation + progress
-6. [x] **Task 7.2.3** Create Tier Service File (2025-12-09) - 336 lines, helpers + API_CONTRACTS.md fix
-7. [x] **Task 7.2.2** Tier Repository Query Functions (2025-12-09) - 5 functions + isRaffle fix
-8. [x] **Step 6.4 COMPLETE** Reward Testing (2025-12-07) - 229 tests: all 6 reward types + encryption
-9. [x] **Tasks 6.3.1-5** Reward API Routes (2025-12-05) - 5 routes: rewards, claim, history, payment-info
-10. [x] **Tasks 6.1.1-3** Reward Repository (2025-12-04) - rewardRepository.ts with RPC
+1. [x] **Task 8.2.3c** TierAtClaimLookup Bug Fix (2025-12-11) - multi-tenant filter, single source of truth
+2. [x] **RPC Migration** Tasks 8.2.3-rpc, 8.2.3a, 8.2.3b, 8.3.1a (2025-12-11) - 3 RPCs, O(1) perf
+3. [x] **Task 8.2.2a** Create syncRepository (2025-12-11) - 546 lines, 12 functions, client_id filtering
+4. [x] **Step 8.1 COMPLETE** Cron Infrastructure (2025-12-10) - directory + vercel.json verified
+5. [x] **Step 7.3 COMPLETE** Tiers Testing (2025-12-10) - 109 tests: 44 integration + 65 unit
+6. [x] **Step 7.2 COMPLETE** Tiers API (2025-12-09) - repository, service, route for GET /api/tiers
+7. [x] **Task 7.2.4** Implement getTiersPageData (2025-12-09) - 219 lines, aggregation + progress
+8. [x] **Task 7.2.3** Create Tier Service File (2025-12-09) - 336 lines, helpers + API_CONTRACTS.md fix
+9. [x] **Task 7.2.2** Tier Repository Query Functions (2025-12-09) - 5 functions + isRaffle fix
+10. [x] **Step 6.4 COMPLETE** Reward Testing (2025-12-07) - 229 tests: all 6 reward types + encryption
 
 ---
 

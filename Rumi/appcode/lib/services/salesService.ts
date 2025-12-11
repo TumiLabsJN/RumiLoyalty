@@ -203,28 +203,10 @@ export async function processDailySales(
     }
 
     // Step 7: Create redemptions for newly completed missions (Task 8.2.3c)
+    // Delegates to helper function - SINGLE SOURCE OF TRUTH (TierAtClaimLookupFix.md)
     console.log('[SalesService] Step 7: Creating redemptions for completed missions...');
     try {
-      const completedMissions = await syncRepository.findNewlyCompletedMissions(clientId);
-      for (const mission of completedMissions) {
-        try {
-          // Get user's current tier for tier_at_claim
-          const user = await syncRepository.findUserByTiktokHandle(clientId, mission.userId);
-          const tierAtClaim = user?.currentTier ?? 'tier_1';
-
-          await syncRepository.createRedemptionForCompletedMission(clientId, {
-            userId: mission.userId,
-            missionProgressId: mission.missionProgressId,
-            rewardId: mission.rewardId,
-            tierAtClaim,
-          });
-          redemptionsCreated++;
-        } catch (redemptionError) {
-          const errorMsg = redemptionError instanceof Error ? redemptionError.message : String(redemptionError);
-          errors.push(`Redemption creation failed for mission ${mission.missionId}: ${errorMsg}`);
-          console.error(`[SalesService] Redemption creation failed: ${errorMsg}`);
-        }
-      }
+      redemptionsCreated = await createRedemptionsForCompletedMissions(clientId, errors);
     } catch (findMissionsError) {
       // Non-fatal: Log error, continue
       const errorMsg = findMissionsError instanceof Error ? findMissionsError.message : String(findMissionsError);
@@ -333,29 +315,39 @@ export async function updateLeaderboardRanks(
 
 /**
  * Create redemption records for missions that just completed
+ * SINGLE SOURCE OF TRUTH for redemption creation (TierAtClaimLookupFix.md)
  *
- * Uses syncRepository.findNewlyCompletedMissions + createRedemptionForCompletedMission
+ * Uses syncRepository.findNewlyCompletedMissions (which includes currentTier via JOIN)
+ * + syncRepository.createRedemptionForCompletedMission
  *
  * @param clientId - Client ID for multi-tenant isolation
+ * @param errors - Optional array to collect error messages (for caller tracking)
  * @returns Number of redemptions created
  */
 export async function createRedemptionsForCompletedMissions(
-  clientId: string
+  clientId: string,
+  errors?: string[]
 ): Promise<number> {
   let redemptionsCreated = 0;
   const completedMissions = await syncRepository.findNewlyCompletedMissions(clientId);
 
   for (const mission of completedMissions) {
-    const user = await syncRepository.findUserByTiktokHandle(clientId, mission.userId);
-    const tierAtClaim = user?.currentTier ?? 'tier_1';
-
-    await syncRepository.createRedemptionForCompletedMission(clientId, {
-      userId: mission.userId,
-      missionProgressId: mission.missionProgressId,
-      rewardId: mission.rewardId,
-      tierAtClaim,
-    });
-    redemptionsCreated++;
+    try {
+      // Use mission.currentTier from findNewlyCompletedMissions JOIN (TierAtClaimLookupFix.md)
+      await syncRepository.createRedemptionForCompletedMission(clientId, {
+        userId: mission.userId,
+        missionProgressId: mission.missionProgressId,
+        rewardId: mission.rewardId,
+        tierAtClaim: mission.currentTier,
+      });
+      redemptionsCreated++;
+    } catch (redemptionError) {
+      const errorMsg = redemptionError instanceof Error ? redemptionError.message : String(redemptionError);
+      if (errors) {
+        errors.push(`Redemption creation failed for mission ${mission.missionId}: ${errorMsg}`);
+      }
+      console.error(`[SalesService] Redemption creation failed: ${errorMsg}`);
+    }
   }
 
   return redemptionsCreated;

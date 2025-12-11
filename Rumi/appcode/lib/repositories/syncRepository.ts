@@ -63,12 +63,14 @@ export interface SyncUserData {
 
 /**
  * Newly completed mission result
+ * Per TierAtClaimLookupFix.md - includes currentTier from users JOIN
  */
 export interface CompletedMissionData {
   missionProgressId: string;
   userId: string;
   missionId: string;
   rewardId: string;
+  currentTier: string;  // From users table JOIN - for tier_at_claim
 }
 
 /**
@@ -272,23 +274,11 @@ export const syncRepository = {
   // ========== Precomputed Fields ==========
 
   /**
-   * Update 13 precomputed fields for users (Task 8.2.3a)
-   * Per ARCHITECTURE.md Section 3.1 lines 176-207, Loyalty.md lines 439-464
-   *
-   * Fields updated by this function:
-   * - total_sales, total_units (lifetime aggregates)
-   * - checkpoint_sales_current, checkpoint_units_current (checkpoint period)
-   * - checkpoint_videos_posted, checkpoint_total_views, checkpoint_total_likes, checkpoint_total_comments
-   * - projected_tier_at_checkpoint (calculated from current progress vs thresholds)
-   * - next_tier_name, next_tier_threshold, next_tier_threshold_units (from tiers table)
-   * - checkpoint_progress_updated_at (NOW())
-   *
-   * NOT updated here (handled by other tasks):
-   * - leaderboard_rank (Task 8.2.3b)
-   * - manual_adjustments_total, manual_adjustments_units (Task 8.3.1a)
+   * Update precomputed fields for users via RPC bulk operation
+   * Per RPCMigrationFix.md - O(1) performance instead of O(N)
    *
    * @param clientId - Client ID for multi-tenant isolation
-   * @param userIds - If provided, update only these users; otherwise update all
+   * @param userIds - Optional user IDs to update (null = all users)
    * @returns Count of users updated
    */
   async updatePrecomputedFields(
@@ -297,190 +287,41 @@ export const syncRepository = {
   ): Promise<number> {
     const supabase = createAdminClient();
 
-    // Step 1: Get client's vip_metric (sales or units mode)
-    const { data: client, error: clientError } = await supabase
-      .from('clients')
-      .select('vip_metric')
-      .eq('id', clientId)
-      .single();
-
-    if (clientError || !client) {
-      throw new Error(`Failed to get client: ${clientError?.message ?? 'Not found'}`);
-    }
-
-    const vipMetric = client.vip_metric as 'sales' | 'units';
-
-    // Step 2: Get all tiers for this client (for projected_tier and next_tier calculations)
-    const { data: tiers, error: tiersError } = await supabase
-      .from('tiers')
-      .select('tier_id, tier_name, tier_order, sales_threshold, units_threshold')
-      .eq('client_id', clientId)
-      .order('tier_order', { ascending: true });
-
-    if (tiersError) {
-      throw new Error(`Failed to get tiers: ${tiersError.message}`);
-    }
-
-    // Step 3: Get users to update with their current tier info
-    let usersQuery = supabase
-      .from('users')
-      .select('id, current_tier, tier_achieved_at')
-      .eq('client_id', clientId);
-
-    if (userIds && userIds.length > 0) {
-      usersQuery = usersQuery.in('id', userIds);
-    }
-
-    const { data: users, error: usersError } = await usersQuery;
-
-    if (usersError) {
-      throw new Error(`Failed to get users: ${usersError.message}`);
-    }
-
-    if (!users || users.length === 0) {
-      return 0;
-    }
-
-    // Step 4: Aggregate video stats for each user
-    // Using a single query with GROUP BY for efficiency
-    const userIdList = users.map((u) => u.id);
-
-    const { data: videoStats, error: videoError } = await supabase
-      .from('videos')
-      .select('user_id, gmv, units_sold, views, likes, comments, post_date')
-      .eq('client_id', clientId)
-      .in('user_id', userIdList);
-
-    if (videoError) {
-      throw new Error(`Failed to get video stats: ${videoError.message}`);
-    }
-
-    // Step 5: Calculate aggregates per user
-    const userAggregates = new Map<string, {
-      totalSales: number;
-      totalUnits: number;
-      checkpointSales: number;
-      checkpointUnits: number;
-      checkpointVideos: number;
-      checkpointViews: number;
-      checkpointLikes: number;
-      checkpointComments: number;
-    }>();
-
-    // Initialize all users with zero values
-    for (const user of users) {
-      userAggregates.set(user.id, {
-        totalSales: 0,
-        totalUnits: 0,
-        checkpointSales: 0,
-        checkpointUnits: 0,
-        checkpointVideos: 0,
-        checkpointViews: 0,
-        checkpointLikes: 0,
-        checkpointComments: 0,
-      });
-    }
-
-    // Aggregate video data
-    for (const video of videoStats ?? []) {
-      if (!video.user_id) continue;
-      const agg = userAggregates.get(video.user_id);
-      if (!agg) continue;
-
-      const user = users.find((u) => u.id === video.user_id);
-      const tierAchievedAt = user?.tier_achieved_at
-        ? new Date(user.tier_achieved_at)
-        : null;
-      const postDate = new Date(video.post_date);
-
-      // Lifetime totals
-      agg.totalSales += video.gmv ?? 0;
-      agg.totalUnits += video.units_sold ?? 0;
-
-      // Checkpoint period (post_date >= tier_achieved_at)
-      if (!tierAchievedAt || postDate >= tierAchievedAt) {
-        agg.checkpointSales += video.gmv ?? 0;
-        agg.checkpointUnits += video.units_sold ?? 0;
-        agg.checkpointVideos += 1;
-        agg.checkpointViews += video.views ?? 0;
-        agg.checkpointLikes += video.likes ?? 0;
-        agg.checkpointComments += video.comments ?? 0;
+    // Type assertion: RPC function added in 20251211_add_phase8_rpc_functions.sql
+    // Regenerate types after migration: supabase gen types typescript
+    const { data, error } = await (supabase.rpc as Function)(
+      'update_precomputed_fields',
+      {
+        p_client_id: clientId,
+        p_user_ids: userIds ?? null,
       }
+    );
+
+    if (error) {
+      throw new Error(`Failed to update precomputed fields: ${error.message}`);
     }
 
-    // Step 6: Calculate projected_tier and next_tier for each user
-    let updatedCount = 0;
-
-    for (const user of users) {
-      const agg = userAggregates.get(user.id);
-      if (!agg) continue;
-
-      // Find current tier info
-      const currentTierInfo = tiers?.find((t) => t.tier_id === user.current_tier);
-      const currentTierOrder = currentTierInfo?.tier_order ?? 1;
-
-      // Calculate projected tier based on checkpoint progress
-      const checkpointValue = vipMetric === 'sales' ? agg.checkpointSales : agg.checkpointUnits;
-      let projectedTier = 'tier_1';
-
-      if (tiers) {
-        for (const tier of tiers) {
-          const threshold = vipMetric === 'sales'
-            ? (tier.sales_threshold ?? 0)
-            : (tier.units_threshold ?? 0);
-
-          if (checkpointValue >= threshold) {
-            projectedTier = tier.tier_id;
-          }
-        }
-      }
-
-      // Find next tier (tier with order = current + 1)
-      const nextTierInfo = tiers?.find((t) => t.tier_order === currentTierOrder + 1);
-
-      // Step 7: Update user with all precomputed fields
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          total_sales: agg.totalSales,
-          total_units: agg.totalUnits,
-          checkpoint_sales_current: agg.checkpointSales,
-          checkpoint_units_current: agg.checkpointUnits,
-          checkpoint_videos_posted: agg.checkpointVideos,
-          checkpoint_total_views: agg.checkpointViews,
-          checkpoint_total_likes: agg.checkpointLikes,
-          checkpoint_total_comments: agg.checkpointComments,
-          projected_tier_at_checkpoint: projectedTier,
-          next_tier_name: nextTierInfo?.tier_name ?? null,
-          next_tier_threshold: nextTierInfo?.sales_threshold ?? null,
-          next_tier_threshold_units: nextTierInfo?.units_threshold ?? null,
-          checkpoint_progress_updated_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id)
-        .eq('client_id', clientId);
-
-      if (updateError) {
-        console.error(`Failed to update user ${user.id}: ${updateError.message}`);
-        continue;
-      }
-
-      updatedCount++;
-    }
-
-    return updatedCount;
+    return (data as number) ?? 0;
   },
 
   /**
-   * Calculate and update leaderboard ranks
-   * Uses ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY total_sales DESC)
+   * Update leaderboard ranks via RPC bulk operation
+   * Per RPCMigrationFix.md - Uses ROW_NUMBER() with vip_metric awareness
    *
    * @param clientId - Client ID for multi-tenant isolation
    */
   async updateLeaderboardRanks(clientId: string): Promise<void> {
-    // TODO: Implement in Task 8.2.3b with ROW_NUMBER()
-    // This is a placeholder that will be replaced with actual implementation
-    throw new Error('Not implemented - see Task 8.2.3b');
+    const supabase = createAdminClient();
+
+    // Type assertion: RPC function added in 20251211_add_phase8_rpc_functions.sql
+    // Regenerate types after migration: supabase gen types typescript
+    const { error } = await (supabase.rpc as Function)('update_leaderboard_ranks', {
+      p_client_id: clientId,
+    });
+
+    if (error) {
+      throw new Error(`Failed to update leaderboard ranks: ${error.message}`);
+    }
   },
 
   // ========== Mission Progress ==========
@@ -505,9 +346,10 @@ export const syncRepository = {
   /**
    * Find missions where status just changed to 'completed'
    * (current_value >= target_value AND status was 'in_progress' AND no existing redemption)
+   * Per TierAtClaimLookupFix.md - JOINs users table to get current_tier
    *
    * @param clientId - Client ID for multi-tenant isolation
-   * @returns Array of completed mission data
+   * @returns Array of completed mission data including currentTier
    */
   async findNewlyCompletedMissions(
     clientId: string
@@ -517,6 +359,7 @@ export const syncRepository = {
     // Find mission_progress records where:
     // 1. status = 'completed' (just transitioned)
     // 2. No existing redemption for this mission_progress
+    // JOIN users to get current_tier for tier_at_claim (TierAtClaimLookupFix.md)
     const { data, error } = await supabase
       .from('mission_progress')
       .select(`
@@ -525,11 +368,15 @@ export const syncRepository = {
         mission_id,
         missions!inner (
           reward_id
+        ),
+        users!inner (
+          current_tier
         )
       `)
       .eq('client_id', clientId)
       .eq('status', 'completed')
-      .is('completed_at', null); // Not yet processed
+      .is('completed_at', null)
+      .eq('users.client_id', clientId); // AUDIT FIX: Multi-tenant filter on joined users table
 
     if (error) {
       throw new Error(`Failed to find newly completed missions: ${error.message}`);
@@ -563,6 +410,7 @@ export const syncRepository = {
         userId: mp.user_id as string,
         missionId: mp.mission_id as string,
         rewardId: (mp.missions as { reward_id: string }).reward_id,
+        currentTier: (mp.users as { current_tier: string | null }).current_tier ?? 'tier_1',
       }));
   },
 
@@ -700,20 +548,28 @@ export const syncRepository = {
   // ========== Sales Adjustments ==========
 
   /**
-   * Apply pending sales adjustments to users
-   * Per Loyalty.md lines 1458-1541 (Step 0 of tier calculation)
-   *
-   * 1. UPDATE users.total_sales += SUM(amount) WHERE applied_at IS NULL
-   * 2. UPDATE users.manual_adjustments_total += same
-   * 3. For units mode: same for units fields
-   * 4. Mark adjustments as applied
+   * Apply pending sales adjustments via RPC bulk operation
+   * Per RPCMigrationFix.md - Atomic application of all pending adjustments
    *
    * @param clientId - Client ID for multi-tenant isolation
    * @returns Count of adjustments applied
    */
   async applyPendingSalesAdjustments(clientId: string): Promise<number> {
-    // TODO: Implement in Task 8.3.1a with batch SQL
-    // This is a placeholder that will be replaced with actual implementation
-    throw new Error('Not implemented - see Task 8.3.1a');
+    const supabase = createAdminClient();
+
+    // Type assertion: RPC function added in 20251211_add_phase8_rpc_functions.sql
+    // Regenerate types after migration: supabase gen types typescript
+    const { data, error } = await (supabase.rpc as Function)(
+      'apply_pending_sales_adjustments',
+      {
+        p_client_id: clientId,
+      }
+    );
+
+    if (error) {
+      throw new Error(`Failed to apply sales adjustments: ${error.message}`);
+    }
+
+    return (data as number) ?? 0;
   },
 };

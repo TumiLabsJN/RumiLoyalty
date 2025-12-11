@@ -1384,7 +1384,7 @@
     - **Implementation Guide:** MUST implement complete Flow 1 workflow using syncRepository: (1) call syncRepository.createSyncLog to start tracking, (2) call cruvaDownloader.downloadCSV() from Task 8.2.0a, (3) parse CSV using csvParser.parseCruvaCSV(), (4) for each row: call syncRepository.findUserByTiktokHandle, if null call syncRepository.createUserFromCruva, then call syncRepository.upsertVideo, (5) call syncRepository.updatePrecomputedFields, (6) call syncRepository.updateMissionProgress, (7) call syncRepository.findNewlyCompletedMissions + createRedemptionForCompletedMission for each, (8) call syncRepository.updateSyncLog with final status. Handle errors per Phase8UpgradeIMPL.md Section 10.
     - **Acceptance Criteria:** Uses syncRepository for ALL database operations (no direct Supabase in service per Section 5), MUST filter all queries by client_id per Section 9, creates sync_log at start and updates at end, handles CRUVA download/parse failures with sync_log update, returns ProcessDailySalesResult with success/failure and counts
 
-- [ ] **Task 8.2.3-rpc:** Create Phase 8 RPC migration for bulk operations
+- [x] **Task 8.2.3-rpc:** Create Phase 8 RPC migration for bulk operations
     - **Action:** Create SQL migration with 3 PostgreSQL RPC functions for O(1) bulk operations
     - **File:** `supabase/migrations/20251211_add_phase8_rpc_functions.sql`
     - **Functions:** `update_precomputed_fields(UUID, UUID[])`, `update_leaderboard_ranks(UUID)`, `apply_pending_sales_adjustments(UUID)`
@@ -1398,13 +1398,13 @@
     - **Implementation Guide:** Call `supabase.rpc('update_precomputed_fields', { p_client_id: clientId, p_user_ids: userIds ?? null })`. RPC function (from Task 8.2.3-rpc) handles: (1) aggregates videos table for checkpoint fields, (2) aggregates sales data, (3) calculates projected_tier_at_checkpoint, (4) derives next_tier fields, (5) sets checkpoint_progress_updated_at. **Note:** Both next_tier_threshold AND next_tier_threshold_units are set regardless of vip_metric (frontend picks which to display).
     - **Acceptance Criteria:** Uses RPC for O(1) performance (not N+1), handles both sales mode and units mode via RPC's vip_metric branching, filters by client_id
 
-- [ ] **Task 8.2.3b:** Implement syncRepository.updateLeaderboardRanks
+- [x] **Task 8.2.3b:** Implement syncRepository.updateLeaderboardRanks
     - **Action:** Implement updateLeaderboardRanks function in syncRepository using `supabase.rpc('update_leaderboard_ranks')`
     - **References:** ARCHITECTURE.md Section 3.1 (lines 196-207), Phase8UpgradeIMPL.md, **RPCMigrationFixIMPL.md**
     - **Implementation Guide:** Call `supabase.rpc('update_leaderboard_ranks', { p_client_id: clientId })`. RPC function (from Task 8.2.3-rpc) uses ROW_NUMBER() and **branches on vip_metric**: ORDER BY total_units for units mode, ORDER BY total_sales for sales mode.
     - **Acceptance Criteria:** Uses RPC for O(1) performance, ranks by correct metric based on client.vip_metric, filters by client_id, ties handled consistently (sequential ranks)
 
-- [ ] **Task 8.2.3c:** Implement redemption creation for completed missions
+- [x] **Task 8.2.3c:** Implement redemption creation for completed missions
     - **Action:** In salesService, use syncRepository.findNewlyCompletedMissions + syncRepository.createRedemptionForCompletedMission
     - **References:** Loyalty.md lines 338-355, SchemaFinalv2.md redemptions table, Phase8UpgradeIMPL.md
     - **Implementation Guide:** In salesService processDailySales: (1) call syncRepository.findNewlyCompletedMissions to get missions where current_value >= target_value AND no existing redemption for that mission_progress_id, (2) for each result, call syncRepository.createRedemptionForCompletedMission with userId, missionId, rewardId, tierAtClaim from user's current_tier
@@ -1434,7 +1434,7 @@
     - **Implementation Guide:** MUST implement 7-step workflow using repositories: (1) call syncRepository.applyPendingSalesAdjustments, (2) call tierRepository.getUsersDueForCheckpoint, (3) for each user: calculate checkpoint value (metric-aware using vipMetric from user data), (4) call tierRepository.getTierThresholdsForCheckpoint and find highest qualifying tier (iterate DESC, first where value >= threshold), (5) determine outcome (promoted/maintained/demoted by comparing tierOrder), (6) call tierRepository.updateUserTierAfterCheckpoint, (7) call tierRepository.logCheckpointResult. If demoted, call tierRepository.softDeleteVipRewardsOnDemotion.
     - **Acceptance Criteria:** Uses tierRepository for ALL database operations (no direct Supabase in service per Section 5), MUST query only users due for checkpoint, MUST be metric-aware, MUST handle promotion/maintenance/demotion, MUST reset counters after evaluation, MUST log all evaluations, Bronze tier exempt
 
-- [ ] **Task 8.3.1a:** Implement syncRepository.applyPendingSalesAdjustments
+- [x] **Task 8.3.1a:** Implement syncRepository.applyPendingSalesAdjustments
     - **Action:** Implement applyPendingSalesAdjustments function in syncRepository using `supabase.rpc('apply_pending_sales_adjustments')`
     - **References:** Loyalty.md lines 1458-1541, SchemaFinalv2.md sales_adjustments table, Phase8UpgradeIMPL.md, **RPCMigrationFixIMPL.md**
     - **Implementation Guide:** Call `supabase.rpc('apply_pending_sales_adjustments', { p_client_id: clientId })`. RPC function (from Task 8.2.3-rpc) atomically: (1) aggregates pending adjustments by user_id, (2) updates users.total_sales/total_units and manual_adjustments_* fields, (3) marks adjustments as applied. **IMPORTANT:** Must be called BEFORE updatePrecomputedFields and updateLeaderboardRanks per RPCMigrationFixIMPL.md call sequence.
