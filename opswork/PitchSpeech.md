@@ -1,5 +1,6 @@
 # SLIDE 1: How Supplement Brands Create content [3 mins]
 **Reference Image**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide1_ContentStrategies.png 
+\\wsl$\Ubuntu\home\jorge\Loyalty\opswork\Slide2_BrandMatrix.png
 **Reference Table**: \\wsl$\Ubuntu\home\jorge\Loyalty\opswork\ContentComparison2.xlsx
     - Excel Tab: Meta-Category Mapping | Meta-Category Summary | Brand Matrix
 

@@ -50,9 +50,6 @@
 ### 1. Project Context
 > Provide 3-5 sentences explaining what this project is, for an external auditor with no background.
 
-```markdown
-## 1. Project Context
-
 [Describe the project type, tech stack, and what it does. Example:]
 
 This is a [type] application built with [tech stack]. The system handles [core functionality].
@@ -60,24 +57,16 @@ The bug affects the [specific area/feature] which is responsible for [what it do
 
 **Tech Stack:** [e.g., Next.js 14, TypeScript, Supabase, PostgreSQL]
 **Architecture Pattern:** [e.g., Repository → Service → Route layers]
-```
 
 ### 2. Bug Summary
 > One paragraph explaining the bug in plain language.
 
-```markdown
-## 2. Bug Summary
-
 **What's happening:** [Describe the incorrect behavior]
 **What should happen:** [Describe the expected behavior]
 **Impact:** [Who/what is affected]
-```
 
 ### 3. Discovery Evidence
 > Document WHERE you found evidence of the bug. Reference documents by section name.
-
-```markdown
-## 3. Discovery Evidence
 
 ### Source Documents Analyzed
 
@@ -97,13 +86,9 @@ The bug affects the [specific area/feature] which is responsible for [what it do
 - Implication: [What this means]
 
 [Add more as needed]
-```
 
 ### 4. Root Cause Analysis
 > Explain WHY the bug exists.
-
-```markdown
-## 4. Root Cause Analysis
 
 **Root Cause:** [One sentence describing the fundamental issue]
 
@@ -113,13 +98,10 @@ The bug affects the [specific area/feature] which is responsible for [what it do
 3. [Factor 3]
 
 **How it was introduced:** [If known - design oversight, incomplete implementation, etc.]
-```
+
 
 ### 5. Business Implications
 > Explain the business impact if this bug is not fixed.
-
-```markdown
-## 5. Business Implications
 
 | Aspect | Impact | Risk Level |
 |--------|--------|------------|
@@ -128,15 +110,12 @@ The bug affects the [specific area/feature] which is responsible for [what it do
 | [Feature functionality] | [Description] | [High/Medium/Low] |
 
 **Business Risk Summary:** [1-2 sentences on overall business impact]
-```
+
 
 ### 6. Current State
 > Show the ACTUAL code/configuration that exists now.
 
-```markdown
-## 6. Current State
-
-### Current File(s)
+#### Current File(s)
 
 **File:** `[full/path/to/file.ts]`
 ```typescript
@@ -148,7 +127,7 @@ The bug affects the [specific area/feature] which is responsible for [what it do
 - [Bullet point what currently happens]
 - [Bullet point what currently happens]
 
-### Current Data Flow
+#### Current Data Flow
 
 ```
 [Diagram showing current flow]
@@ -156,18 +135,15 @@ Component A → Component B → Component C
      ↓
 [What happens at each step]
 ```
-```
+
 
 ### 7. Proposed Fix
 > Show the EXACT changes needed.
 
-```markdown
-## 7. Proposed Fix
-
-### Approach
+#### Approach
 [1-2 sentences describing the fix approach]
 
-### Changes Required
+#### Changes Required
 
 **File:** `[full/path/to/file.ts]`
 
@@ -200,13 +176,9 @@ interface [Name] {
   [properties]
 }
 ```
-```
 
 ### 8. Files Affected
 > Complete list of files that will be modified or created.
-
-```markdown
-## 8. Files Affected
 
 | File | Action | Changes |
 |------|--------|---------|
@@ -222,15 +194,12 @@ interface [Name] {
 ├── imported by: [list]
 └── affects: [downstream impacts]
 ```
-```
+
 
 ### 9. Data Flow Analysis
 > Show how data flows before and after the fix.
 
-```markdown
-## 9. Data Flow Analysis
-
-### Before Fix
+#### Before Fix
 
 ```
 [Source] → [Transform] → [Destination]
@@ -238,7 +207,7 @@ interface [Name] {
 [data]      [issue]      [incorrect result]
 ```
 
-### After Fix
+#### After Fix
 
 ```
 [Source] → [Transform] → [Destination]
@@ -246,20 +215,16 @@ interface [Name] {
 [data]      [fix]        [correct result]
 ```
 
-### Data Transformation Steps
+#### Data Transformation Steps
 
 1. **Step 1:** [Description]
 2. **Step 2:** [Description]
 3. **Step 3:** [Description]
-```
 
 ### 10. Call Chain Mapping
 > Document the complete call chain affected by this bug.
 
-```markdown
-## 10. Call Chain Mapping
-
-### Affected Call Chain
+#### Affected Call Chain
 
 ```
 [Entry Point] (file.ts)
@@ -275,7 +240,7 @@ interface [Name] {
     └── [What it does]
 ```
 
-### Integration Points
+#### Integration Points
 
 | Layer | Component | Role in Bug |
 |-------|-----------|-------------|
@@ -284,45 +249,38 @@ interface [Name] {
 | Service | [function] | [role] |
 | API Route | [endpoint] | [role] |
 | Frontend | [component] | [role] |
-```
 
 ### 11. Database/Schema Verification
 > Verify schema supports the fix.
 
-```markdown
-## 11. Database/Schema Verification
-
-### Relevant Tables
+#### Relevant Tables
 
 | Table | Relevant Columns | Notes |
 |-------|------------------|-------|
 | [table_name] | [columns] | [notes] |
 
-### Schema Check
+#### Schema Check
 
 ```sql
 -- Query to verify schema supports fix
 [SQL query]
 ```
 
-### Data Migration Required?
+#### Data Migration Required?
 - [ ] Yes - [describe migration]
 - [x] No - schema already supports fix
-```
+
 
 ### 12. Frontend Impact Assessment
 > Assess impact on frontend components.
 
-```markdown
-## 12. Frontend Impact Assessment
-
-### Affected Components
+#### Affected Components
 
 | Component | File | Impact |
 |-----------|------|--------|
 | [ComponentName] | [path] | [None/Minor/Major] |
 
-### API Contract Changes
+#### API Contract Changes
 
 | Field | Before | After | Breaking? |
 |-------|--------|-------|-----------|
@@ -331,60 +289,50 @@ interface [Name] {
 ### Frontend Changes Required?
 - [ ] Yes - [describe changes]
 - [x] No - frontend already handles this
-```
+
 
 ### 13. Alternative Solutions Considered
 > Document other approaches and why they were rejected.
 
-```markdown
-## 13. Alternative Solutions Considered
-
-### Option A: [Name]
+#### Option A: [Name]
 - **Description:** [What this approach would do]
 - **Pros:** [List]
 - **Cons:** [List]
 - **Verdict:** ❌ Rejected - [reason]
 
-### Option B: [Name] (Selected)
+#### Option B: [Name] (Selected)
 - **Description:** [What this approach does]
 - **Pros:** [List]
 - **Cons:** [List]
 - **Verdict:** ✅ Selected - [reason]
 
-### Option C: [Name]
+#### Option C: [Name]
 - **Description:** [What this approach would do]
 - **Pros:** [List]
 - **Cons:** [List]
 - **Verdict:** ❌ Rejected - [reason]
-```
+
 
 ### 14. Risk Assessment
 > What could go wrong with this fix?
-
-```markdown
-## 14. Risk Assessment
-
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | [Risk 1] | [Low/Med/High] | [Low/Med/High] | [How to mitigate] |
 | [Risk 2] | [Low/Med/High] | [Low/Med/High] | [How to mitigate] |
 
-### Breaking Change Analysis
+#### Breaking Change Analysis
 
 | Component | Breaking? | Migration Path |
 |-----------|-----------|----------------|
 | [API] | [Yes/No] | [If yes, how to migrate] |
 | [Database] | [Yes/No] | [If yes, how to migrate] |
 | [Frontend] | [Yes/No] | [If yes, how to migrate] |
-```
+
 
 ### 15. Testing Strategy
 > How to verify the fix works.
 
-```markdown
-## 15. Testing Strategy
-
-### Unit Tests
+#### Unit Tests
 
 **File:** `[path/to/test.ts]`
 ```typescript
@@ -399,7 +347,7 @@ describe('[Component]', () => {
 });
 ```
 
-### Integration Tests
+#### Integration Tests
 
 ```typescript
 describe('[Feature] Integration', () => {
@@ -409,13 +357,13 @@ describe('[Feature] Integration', () => {
 });
 ```
 
-### Manual Verification Steps
+#### Manual Verification Steps
 
 1. [ ] [Step 1]
 2. [ ] [Step 2]
 3. [ ] [Step 3]
 
-### Verification Commands
+#### Verification Commands
 
 ```bash
 # Run specific tests
@@ -427,20 +375,17 @@ npm run typecheck
 # Build verification
 npm run build
 ```
-```
+
 
 ### 16. Implementation Checklist
 > Step-by-step implementation guide.
 
-```markdown
-## 16. Implementation Checklist
-
-### Pre-Implementation
+#### Pre-Implementation
 - [ ] Read and understand all source documents referenced
 - [ ] Verify current code matches "Current State" section
 - [ ] Ensure no conflicting changes in progress
 
-### Implementation Steps
+#### Implementation Steps
 - [ ] **Step 1:** [Specific action]
   - File: `[path]`
   - Change: [description]
@@ -451,43 +396,36 @@ npm run build
   - File: `[path]`
   - Change: [description]
 
-### Post-Implementation
+#### Post-Implementation
 - [ ] Run type checker: `npm run typecheck`
 - [ ] Run tests: `npm test`
 - [ ] Run build: `npm run build`
 - [ ] Manual verification per Testing Strategy
 - [ ] Update EXECUTION_PLAN.md if tasks affected
-```
+
 
 ### 17. EXECUTION_PLAN.md Integration
 > Document how this bug affects planned tasks.
 
-```markdown
-## 17. EXECUTION_PLAN.md Integration
-
-### Affected Tasks
+#### Affected Tasks
 
 | Task ID | Task Name | Impact |
 |---------|-----------|--------|
 | [X.Y.Z] | [Name] | [How this bug affects the task] |
 
-### Updates Required
+#### Updates Required
 
 **Task [X.Y.Z]:**
 - Current AC: [current acceptance criteria]
 - Updated AC: [new acceptance criteria if changed]
 - Notes: [any implementation notes]
 
-### New Tasks Created (if any)
+#### New Tasks Created (if any)
 - [ ] [New task description]
-```
+
 
 ### 18. Definition of Done
 > Acceptance criteria for this fix.
-
-```markdown
-## 18. Definition of Done
-
 - [ ] All code changes implemented per "Proposed Fix" section
 - [ ] Type checker passes with no errors
 - [ ] All existing tests pass
@@ -496,13 +434,10 @@ npm run build
 - [ ] Manual verification steps completed
 - [ ] EXECUTION_PLAN.md updated (if applicable)
 - [ ] This document status updated to "Implemented"
-```
+
 
 ### 19. Source Documents Reference
 > List all authoritative documents for this fix.
-
-```markdown
-## 19. Source Documents Reference
 
 > **Note:** Reference by section name, not line numbers (lines change frequently).
 

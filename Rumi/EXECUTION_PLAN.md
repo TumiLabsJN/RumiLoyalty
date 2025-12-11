@@ -1352,44 +1352,63 @@
     - **Note:** Config already exists in vercel.json. JSON doesn't support comments; timing rationale documented in Loyalty.md lines 58-65. Upgrade triggers: >10% support tickets, user requests, or 500+ creators.
 
 ## Step 8.2: Daily Sales Sync
-- [ ] **Task 8.2.0a:** Create CRUVA CSV downloader utility
+- [x] **Task 8.2.0a:** Create CRUVA CSV downloader utility
     - **Action:** Create `/lib/automation/cruvaDownloader.ts` with Puppeteer script implementing 4-step download workflow: (1) launch headless Chrome, (2) navigate to CRUVA_LOGIN_URL and authenticate with CRUVA_USERNAME/CRUVA_PASSWORD from env vars, (3) navigate to Dashboard > My Videos page, (4) trigger CSV download and save videos.csv file
     - **References:** Loyalty.md lines 73-83 (CRUVA TikTok Analytics Platform architecture diagram), lines 120 (Infrastructure: Puppeteer headless Chrome), lines 425-431 (Flow 1: Download and parse CSV from Cruva)
     - **Implementation Guide:** MUST use Puppeteer library installed in Task 0.2.2b (line 99), launch browser with `puppeteer.launch({ headless: true })`, navigate to CRUVA_LOGIN_URL from env vars, locate and fill login form fields (username/password), submit form and wait for navigation, navigate to "Dashboard > My Videos" page path, locate CSV download button/link, trigger download action, wait for download to complete, save file to `/tmp/videos.csv` or return as Buffer, close browser, handle errors with descriptive messages (login failed, navigation timeout, download failed)
     - **Acceptance Criteria:** MUST authenticate to CRUVA platform using credentials from env vars (Task 0.2.3a), navigate to Dashboard > My Videos page, successfully download videos.csv file with columns per line 431 (Handle, Video, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title), return file path or Buffer for processing, handle network errors with retry logic (max 3 attempts), log detailed error messages for debugging, close browser session properly to prevent memory leaks
+    - **Note:** Implemented with CRUVA selectors: #email, #password, button[type="submit"], /dashboard/videos, XPath for "Export to CSV" button. 270 lines.
 
-- [ ] **Task 8.2.1:** Create CSV parser utility with column mapping
+- [x] **Task 8.2.1:** Create CSV parser utility with column mapping
     - **Action:** Create `/lib/utils/csvParser.ts` with centralized CRUVA column mapping
     - **References:** Loyalty.md Flow 1 lines 429-431 (CSV columns from CRUVA)
     - **Implementation Guide:** MUST create a single `CRUVA_COLUMN_MAP` constant that maps CRUVA CSV headers to database column names. This enables single-file updates if CRUVA changes column names. Map: Handle→tiktok_handle (user lookup), Video→video_url, Views→views, Likes→likes, Comments→comments, GMV→gmv, CTR→ctr, Units Sold→units_sold, Post Date→post_date, Video Title→video_title
     - **Acceptance Criteria:** (1) CRUVA_COLUMN_MAP constant exported from csvParser.ts, (2) Parser uses mapping to transform CSV headers to database columns, (3) All 10 CRUVA columns handled: Handle, Video, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title, (4) Column name changes require updating ONLY this one file
+    - **Note:** 211 lines. Exports: CRUVA_COLUMN_MAP, parseCruvaCSV(), ParsedVideoRow interface, ParseResult interface.
 
-- [ ] **Task 8.2.2:** Create sales service file
+- [x] **Task 8.2.2:** Create sales service file
     - **Action:** Create `/lib/services/salesService.ts`
     - **References:** ARCHITECTURE.md Section 5 (Service Layer, lines 463-526), Section 7 (Naming Conventions, lines 939-943)
     - **Acceptance Criteria:** File exists with service functions following Section 5 patterns
+    - **Note:** 210 lines. Exports: processDailySales, processManualUpload, updatePrecomputedFields, updateLeaderboardRanks, createRedemptionsForCompletedMissions. Stubs ready for Tasks 8.2.3, 8.2.3a, 8.2.3b, 8.2.3c.
 
-- [ ] **Task 8.2.3:** Implement processDailySales function
-    - **Action:** Add transactional function to salesService implementing 6-step workflow: (1) call cruvaDownloader.downloadCSV() to get videos.csv from CRUVA platform, (2) parse CSV using csv-parse library, (3) for each row match user by tiktok_handle and upsert videos table, (4) update user precomputed fields, (5) update mission progress for active missions, (6) create redemptions for newly completed missions (Task 8.2.3c)
-    - **References:** SchemaFinalv2.md (videos table), Loyalty.md Flow 1 lines 425-465 (Daily Metrics Sync complete workflow), lines 431 (CSV columns: Handle, Video, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title), lines 433-437 (Process videos step-by-step), Pattern 1 (Transactional Workflows), ARCHITECTURE.md Section 9 (Multitenancy Enforcement, lines 1104-1137)
-    - **Implementation Guide:** MUST implement complete Flow 1 workflow per lines 425-610. Step 1: Call cruvaDownloader.downloadCSV() from Task 8.2.0a to download videos.csv from CRUVA (lines 425-427). Step 2: Parse CSV using csv-parse library extracting columns per line 431 (Handle, Video, Views, Likes, Comments, GMV, CTR, Units Sold, Post Date, Video Title). Step 3: Process each CSV row per lines 433-437 (match user by tiktok_handle, if no match auto-create user per Flow 2 lines 556-560 with: tiktok_handle from CSV, email=NULL, current_tier='tier_1', first_video_date=earliest post_date from videos.csv; upsert videos table using video_url as unique key). Step 4: Update user precomputed fields by calling updatePrecomputedFields function from Task 8.2.3a (updates all 16 fields per lines 439-464). Step 5: Update mission progress per lines 466-533 (calculate current_value for all active missions based on mission_type). Wrap all database operations in transaction per Pattern 1. Handle CRUVA download failures with descriptive error messages
-    - **Acceptance Criteria:** MUST filter all queries by client_id per Section 9 Critical Rule #1, MUST use database transaction wrapping all operations per Pattern 1, successfully downloads videos.csv from CRUVA via Puppeteer (Task 8.2.0a), parses CSV extracting all columns per line 431, processes each row matching user by tiktok_handle, auto-creates users if handle not found with tiktok_handle from CSV + email=NULL + current_tier='tier_1' + first_video_date=earliest post_date per Flow 2 lines 556-560, upserts videos table using video_url as unique constraint per line 437, calls updatePrecomputedFields to update all 16 user fields per Task 8.2.3a, updates mission_progress.current_value for all active missions per lines 466-533, handles duplicates via upsert logic, returns success/failure status with error details
+- [x] **Task 8.2.2a:** Create syncRepository for daily sync database operations
+    - **Action:** Create `/lib/repositories/syncRepository.ts`
+    - **References:** ARCHITECTURE.md Section 4 (Repository Layer, lines 534-612), Section 9 (Multitenancy, lines 1104-1137), Phase8UpgradeIMPL.md
+    - **Implementation Guide:** Create repository with 11 functions: (1) upsertVideo - upsert to videos table using video_url as unique key, (2) bulkUpsertVideos - batch insert for efficiency, (3) findUserByTiktokHandle - lookup user for CSV row processing, (4) createUserFromCruva - auto-create user per Flow 2 lines 556-560 with tiktok_handle, email=NULL, current_tier='tier_1', first_video_date, (5) updatePrecomputedFields - update all 16 fields on users table via SQL aggregation, (6) updateLeaderboardRanks - ROW_NUMBER() calculation, (7) updateMissionProgress - recalculate current_value for active missions, (8) findNewlyCompletedMissions - find missions where current_value >= target_value AND no existing redemption, (9) createRedemptionForCompletedMission - insert redemption with status='claimable', (10) createSyncLog/updateSyncLog - sync_logs table operations, (11) applyPendingSalesAdjustments - apply pending sales_adjustments to users
+    - **Acceptance Criteria:** (1) File exists at /lib/repositories/syncRepository.ts, (2) All 11 functions filter by client_id per Section 9, (3) TypeScript compiles, (4) Follows Section 4 patterns (Supabase queries, data mapping, error handling), (5) TypeScript types defined for all inputs/outputs per Phase8UpgradeIMPL.md Section 11
 
-- [ ] **Task 8.2.3a:** Add updatePrecomputedFields function to daily sync
-    - **Action:** Add SQL to update all 16 precomputed fields on users table after sales data sync: total_sales, total_units, manual_adjustments_total, manual_adjustments_units, checkpoint_sales_current, checkpoint_units_current, checkpoint_videos_posted, checkpoint_total_views, checkpoint_total_likes, checkpoint_total_comments, next_tier_name, next_tier_threshold, next_tier_threshold_units, checkpoint_progress_updated_at
-    - **References:** ARCHITECTURE.md Section 3.1 (lines 176-207 - SQL for updating precomputed fields)
-    - **Acceptance Criteria:** Function aggregates data from videos, sales_adjustments, and vip_tiers tables, updates all 16 fields in single transaction, handles both sales mode and units mode based on client.vip_metric
+- [x] **Task 8.2.3:** Implement processDailySales function
+    - **Action:** Implement salesService.processDailySales using syncRepository for all database operations (per ARCHITECTURE.md Section 5 - services use repositories)
+    - **References:** SchemaFinalv2.md (videos table), Loyalty.md Flow 1 lines 425-465, syncRepository functions from Task 8.2.2a, Phase8UpgradeIMPL.md
+    - **Implementation Guide:** MUST implement complete Flow 1 workflow using syncRepository: (1) call syncRepository.createSyncLog to start tracking, (2) call cruvaDownloader.downloadCSV() from Task 8.2.0a, (3) parse CSV using csvParser.parseCruvaCSV(), (4) for each row: call syncRepository.findUserByTiktokHandle, if null call syncRepository.createUserFromCruva, then call syncRepository.upsertVideo, (5) call syncRepository.updatePrecomputedFields, (6) call syncRepository.updateMissionProgress, (7) call syncRepository.findNewlyCompletedMissions + createRedemptionForCompletedMission for each, (8) call syncRepository.updateSyncLog with final status. Handle errors per Phase8UpgradeIMPL.md Section 10.
+    - **Acceptance Criteria:** Uses syncRepository for ALL database operations (no direct Supabase in service per Section 5), MUST filter all queries by client_id per Section 9, creates sync_log at start and updates at end, handles CRUVA download/parse failures with sync_log update, returns ProcessDailySalesResult with success/failure and counts
 
-- [ ] **Task 8.2.3b:** Add updateLeaderboardRanks function to daily sync
-    - **Action:** Add SQL to calculate and update leaderboard_rank for all users based on total_sales or total_units
-    - **References:** ARCHITECTURE.md Section 3.1 (lines 196-207 - Leaderboard rank calculation)
-    - **Acceptance Criteria:** Uses ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY total_sales DESC) to assign ranks, updates users.leaderboard_rank
+- [ ] **Task 8.2.3-rpc:** Create Phase 8 RPC migration for bulk operations
+    - **Action:** Create SQL migration with 3 PostgreSQL RPC functions for O(1) bulk operations
+    - **File:** `supabase/migrations/20251211_add_phase8_rpc_functions.sql`
+    - **Functions:** `update_precomputed_fields(UUID, UUID[])`, `update_leaderboard_ranks(UUID)`, `apply_pending_sales_adjustments(UUID)`
+    - **References:** BugFixes/RPCMigrationFix.md, BugFixes/RPCMigrationFixIMPL.md, Loyalty.md Flow 1 Step 4
+    - **Implementation Guide:** Follow RPCMigrationFixIMPL.md exactly. All functions must: (1) validate vip_metric with RAISE EXCEPTION if NULL/invalid, (2) filter by client_id for multi-tenant isolation, (3) use SECURITY DEFINER, (4) GRANT EXECUTE to service_role
+    - **Acceptance Criteria:** Migration applies cleanly, all 3 functions callable via `supabase.rpc()`, O(1) query performance regardless of user count, vip_metric branching in functions 1 & 2
 
-- [ ] **Task 8.2.3c:** Add createRedemptionsForCompletedMissions function to daily sync
-    - **Action:** Add function to auto-create redemption records for missions that just completed (status changed to 'completed')
-    - **References:** Loyalty.md lines 338-355 (Mission & Reward Lifecycle - redemption auto-creation), SchemaFinalv2.md (redemptions table lines 550-582), API_CONTRACTS.md lines 3487-3494 (status computation expects redemption.status='claimable')
-    - **Implementation Guide:** After mission progress updates in Step 5, query for mission_progress records WHERE status='completed' AND NOT EXISTS (SELECT 1 FROM redemptions WHERE mission_progress_id = mp.id). For each newly completed mission, INSERT INTO redemptions (user_id, reward_id, mission_progress_id, client_id, status, tier_at_claim, redemption_type) VALUES (mp.user_id, m.reward_id, mp.id, mp.client_id, 'claimable', u.current_tier, r.redemption_type). This creates the redemption record that enables the "Claim" button in the UI.
-    - **Acceptance Criteria:** MUST filter by client_id per Section 9 Critical Rule #1, MUST only create redemptions for missions that don't already have one (prevents duplicates), creates redemption with status='claimable' per Loyalty.md line 341, sets mission_progress_id to link redemption to completed mission, sets tier_at_claim from user's current tier at time of completion, sets redemption_type from reward configuration ('instant' or 'scheduled'), wrapped in same transaction as mission progress updates per Pattern 1
+- [x] **Task 8.2.3a:** Implement syncRepository.updatePrecomputedFields
+    - **Action:** Implement updatePrecomputedFields function in syncRepository using `supabase.rpc('update_precomputed_fields')`
+    - **References:** ARCHITECTURE.md Section 3.1 (lines 176-207), SchemaFinalv2.md users table precomputed fields, Phase8UpgradeIMPL.md, **RPCMigrationFixIMPL.md**
+    - **Implementation Guide:** Call `supabase.rpc('update_precomputed_fields', { p_client_id: clientId, p_user_ids: userIds ?? null })`. RPC function (from Task 8.2.3-rpc) handles: (1) aggregates videos table for checkpoint fields, (2) aggregates sales data, (3) calculates projected_tier_at_checkpoint, (4) derives next_tier fields, (5) sets checkpoint_progress_updated_at. **Note:** Both next_tier_threshold AND next_tier_threshold_units are set regardless of vip_metric (frontend picks which to display).
+    - **Acceptance Criteria:** Uses RPC for O(1) performance (not N+1), handles both sales mode and units mode via RPC's vip_metric branching, filters by client_id
+
+- [ ] **Task 8.2.3b:** Implement syncRepository.updateLeaderboardRanks
+    - **Action:** Implement updateLeaderboardRanks function in syncRepository using `supabase.rpc('update_leaderboard_ranks')`
+    - **References:** ARCHITECTURE.md Section 3.1 (lines 196-207), Phase8UpgradeIMPL.md, **RPCMigrationFixIMPL.md**
+    - **Implementation Guide:** Call `supabase.rpc('update_leaderboard_ranks', { p_client_id: clientId })`. RPC function (from Task 8.2.3-rpc) uses ROW_NUMBER() and **branches on vip_metric**: ORDER BY total_units for units mode, ORDER BY total_sales for sales mode.
+    - **Acceptance Criteria:** Uses RPC for O(1) performance, ranks by correct metric based on client.vip_metric, filters by client_id, ties handled consistently (sequential ranks)
+
+- [ ] **Task 8.2.3c:** Implement redemption creation for completed missions
+    - **Action:** In salesService, use syncRepository.findNewlyCompletedMissions + syncRepository.createRedemptionForCompletedMission
+    - **References:** Loyalty.md lines 338-355, SchemaFinalv2.md redemptions table, Phase8UpgradeIMPL.md
+    - **Implementation Guide:** In salesService processDailySales: (1) call syncRepository.findNewlyCompletedMissions to get missions where current_value >= target_value AND no existing redemption for that mission_progress_id, (2) for each result, call syncRepository.createRedemptionForCompletedMission with userId, missionId, rewardId, tierAtClaim from user's current_tier
+    - **Acceptance Criteria:** Uses syncRepository functions (no direct DB in service), only creates redemptions for newly completed missions (no duplicates), redemptions created with status='claimable', tier_at_claim captured at completion time
 
 - [ ] **Task 8.2.4:** Create daily-automation cron route
     - **Action:** Create `/app/api/cron/daily-automation/route.ts` with GET handler implementing 4-step orchestration: (1) verify cron secret from request headers, (2) call salesService.processDailySales which internally orchestrates Puppeteer download → CSV parse → video upserts → precomputed updates per Flow 1, (3) handle download/processing failures with detailed error logging, (4) return appropriate HTTP status codes
@@ -1403,29 +1422,35 @@
     - **Acceptance Criteria:** Email sent to admin on cron failure
 
 ## Step 8.3: Tier Calculation
+- [ ] **Task 8.3.0a:** Extend tierRepository with checkpoint evaluation functions
+    - **Action:** Add checkpoint functions to `/lib/repositories/tierRepository.ts`
+    - **References:** ARCHITECTURE.md Section 4 (Repository Layer), Loyalty.md lines 1553-1655 (checkpoint workflow), SchemaFinalv2.md lines 286-310 (tier_checkpoints table), Phase8UpgradeIMPL.md
+    - **Implementation Guide:** Add 5 functions to existing tierRepository: (1) getUsersDueForCheckpoint - query users WHERE next_checkpoint_at <= TODAY AND current_tier != 'tier_1', joins clients for vip_metric and checkpoint_months, returns CheckpointUserData[], (2) getTierThresholdsForCheckpoint - get tier thresholds ordered by tier_order DESC for highest-first matching, returns sales_threshold or units_threshold based on vip_metric param, (3) updateUserTierAfterCheckpoint - update current_tier, tier_achieved_at, next_checkpoint_at, reset checkpoint counters to 0, (4) logCheckpointResult - insert audit record to tier_checkpoints with period dates, values, tier_before, tier_after, status, (5) softDeleteVipRewardsOnDemotion - set deleted_at and deleted_reason on VIP redemptions when user demoted
+    - **Acceptance Criteria:** (1) All 5 functions added to tierRepository.ts, (2) All functions filter by client_id per Section 9, (3) TypeScript compiles, (4) Checkpoint exempt tiers (Bronze/tier_1) excluded from getUsersDueForCheckpoint, (5) getTierThresholdsForCheckpoint is metric-aware (uses correct threshold field), (6) Types defined per Phase8UpgradeIMPL.md Section 11
+
 - [ ] **Task 8.3.1:** Create tier calculation service with checkpoint maintenance
-    - **Action:** Create `/lib/services/tierCalculationService.ts` with functions for full checkpoint evaluation workflow
-    - **References:** Loyalty.md lines 1452-1666 (Flow 7: Daily Tier Calculation), API_CONTRACTS.md lines 2448-2473 (checkpoint computation), lines 4592-4600 (tier demotion handling)
-    - **Implementation Guide:** MUST implement 7-step checkpoint workflow: (1) Apply pending sales_adjustments to users table (lines 1463-1505), (2) Query users WHERE next_checkpoint_at <= TODAY AND current_tier != 'tier_1' (lines 1553-1561), (3) Calculate checkpoint value metric-aware: if vip_metric='units' use checkpoint_units_current + manual_adjustments_units, else use checkpoint_sales_current + manual_adjustments_total (lines 1564-1578), (4) Compare against tier thresholds ordered DESC to find highest qualifying tier (lines 1580-1604), (5) Determine outcome: promoted/maintained/demoted (lines 1606-1610), (6) Update user record: current_tier, tier_achieved_at=NOW(), next_checkpoint_at=NOW()+checkpoint_months, reset checkpoint_sales_current=0 and checkpoint_units_current=0 (lines 1611-1626), (7) Log to tier_checkpoints audit table with period dates, values, tier_before, tier_after, status (lines 1628-1655)
-    - **Acceptance Criteria:** MUST query only users due for checkpoint (not all users), MUST be metric-aware (units vs sales mode from clients.vip_metric), MUST handle promotion/maintenance/demotion outcomes, MUST reset checkpoint counters after evaluation, MUST log all evaluations to tier_checkpoints table, Bronze tier (tier_1) MUST be exempt from checkpoints
+    - **Action:** Create `/lib/services/tierCalculationService.ts` using tierRepository functions from Task 8.3.0a (per ARCHITECTURE.md Section 5 - services use repositories)
+    - **References:** Loyalty.md lines 1452-1666 (Flow 7), tierRepository checkpoint functions, Phase8UpgradeIMPL.md
+    - **Implementation Guide:** MUST implement 7-step workflow using repositories: (1) call syncRepository.applyPendingSalesAdjustments, (2) call tierRepository.getUsersDueForCheckpoint, (3) for each user: calculate checkpoint value (metric-aware using vipMetric from user data), (4) call tierRepository.getTierThresholdsForCheckpoint and find highest qualifying tier (iterate DESC, first where value >= threshold), (5) determine outcome (promoted/maintained/demoted by comparing tierOrder), (6) call tierRepository.updateUserTierAfterCheckpoint, (7) call tierRepository.logCheckpointResult. If demoted, call tierRepository.softDeleteVipRewardsOnDemotion.
+    - **Acceptance Criteria:** Uses tierRepository for ALL database operations (no direct Supabase in service per Section 5), MUST query only users due for checkpoint, MUST be metric-aware, MUST handle promotion/maintenance/demotion, MUST reset counters after evaluation, MUST log all evaluations, Bronze tier exempt
 
-- [ ] **Task 8.3.1a:** Implement applyPendingSalesAdjustments function
-    - **Action:** Add function to tierCalculationService that applies pending sales_adjustments before tier calculation
-    - **References:** Loyalty.md lines 1458-1541 (Step 0: Apply Pending Sales Adjustments), SchemaFinalv2.md (sales_adjustments table)
-    - **Implementation Guide:** (1) Update users.total_sales += SUM(amount) from sales_adjustments WHERE applied_at IS NULL AND amount IS NOT NULL, (2) Update users.manual_adjustments_total += same sum, (3) For units mode: Update users.total_units += SUM(amount_units) and users.manual_adjustments_units += same, (4) Mark adjustments as applied: UPDATE sales_adjustments SET applied_at = NOW() WHERE applied_at IS NULL
-    - **Acceptance Criteria:** MUST apply adjustments BEFORE tier calculations run, MUST handle both sales mode and units mode, MUST mark adjustments as applied to prevent double-application, MUST update both total fields and manual_adjustments tracking fields
+- [ ] **Task 8.3.1a:** Implement syncRepository.applyPendingSalesAdjustments
+    - **Action:** Implement applyPendingSalesAdjustments function in syncRepository using `supabase.rpc('apply_pending_sales_adjustments')`
+    - **References:** Loyalty.md lines 1458-1541, SchemaFinalv2.md sales_adjustments table, Phase8UpgradeIMPL.md, **RPCMigrationFixIMPL.md**
+    - **Implementation Guide:** Call `supabase.rpc('apply_pending_sales_adjustments', { p_client_id: clientId })`. RPC function (from Task 8.2.3-rpc) atomically: (1) aggregates pending adjustments by user_id, (2) updates users.total_sales/total_units and manual_adjustments_* fields, (3) marks adjustments as applied. **IMPORTANT:** Must be called BEFORE updatePrecomputedFields and updateLeaderboardRanks per RPCMigrationFixIMPL.md call sequence.
+    - **Acceptance Criteria:** Uses RPC for atomic O(1) operation, adjustments applied exactly once (applied_at prevents double-application), handles both sales and units adjustments, filters by client_id
 
-- [ ] **Task 8.3.1b:** Implement getUsersDueForCheckpoint function
-    - **Action:** Add function to query users whose checkpoint date has arrived
-    - **References:** Loyalty.md lines 1544-1562 (per-user checkpoint dates), API_CONTRACTS.md lines 2679-2685 (checkpoint field mapping)
-    - **Implementation Guide:** Query: SELECT u.*, c.vip_metric, c.checkpoint_months FROM users u JOIN clients c ON u.client_id = c.id WHERE u.next_checkpoint_at <= TODAY AND u.current_tier != 'tier_1'. Returns ~10-50 users/day, not entire user base.
-    - **Acceptance Criteria:** MUST filter by next_checkpoint_at <= current date, MUST exclude Bronze tier (tier_1) users, MUST join clients table to get vip_metric and checkpoint_months, MUST filter by client_id for multi-tenant isolation
+- [ ] **Task 8.3.1b:** Implement tierRepository.getUsersDueForCheckpoint
+    - **Action:** Implement getUsersDueForCheckpoint function in tierRepository
+    - **References:** Loyalty.md lines 1544-1562, Phase8UpgradeIMPL.md
+    - **Implementation Guide:** In tierRepository: SELECT u.id, u.current_tier, u.checkpoint_sales_current, u.checkpoint_units_current, u.manual_adjustments_total, u.manual_adjustments_units, u.tier_achieved_at, u.next_checkpoint_at, c.vip_metric, c.checkpoint_months, t.tier_order FROM users u JOIN clients c ON u.client_id = c.id JOIN tiers t ON u.current_tier = t.tier_id AND t.client_id = c.id WHERE u.client_id = $1 AND u.next_checkpoint_at <= CURRENT_DATE AND u.current_tier != 'tier_1'
+    - **Acceptance Criteria:** Returns only users due today, excludes Bronze tier (tier_1), includes vip_metric and checkpoint_months from client, includes current tier_order for comparison
 
-- [ ] **Task 8.3.1c:** Implement logCheckpointResult function
-    - **Action:** Add function to insert audit record into tier_checkpoints table after each evaluation
-    - **References:** Loyalty.md lines 1628-1655 (tier_checkpoints logging), SchemaFinalv2.md (tier_checkpoints table)
-    - **Implementation Guide:** Insert record with: user_id, checkpoint_date=NOW(), period_start_date=user.tier_achieved_at, period_end_date=NOW(), sales_in_period OR units_in_period (based on vip_metric), sales_required OR units_required (threshold), tier_before, tier_after, status ('promoted'|'maintained'|'demoted')
-    - **Acceptance Criteria:** MUST log every checkpoint evaluation (even if tier unchanged), MUST record both before and after tier, MUST include period dates and values for audit trail, MUST be metric-aware (log sales OR units fields based on client mode)
+- [ ] **Task 8.3.1c:** Implement tierRepository.logCheckpointResult
+    - **Action:** Implement logCheckpointResult function in tierRepository
+    - **References:** Loyalty.md lines 1628-1655, SchemaFinalv2.md tier_checkpoints table, Phase8UpgradeIMPL.md
+    - **Implementation Guide:** In tierRepository: INSERT INTO tier_checkpoints (client_id, user_id, checkpoint_date, period_start_date, period_end_date, sales_in_period, units_in_period, sales_required, units_required, tier_before, tier_after, status) VALUES ($1, $2, NOW(), $3, NOW(), $4, $5, $6, $7, $8, $9, $10) RETURNING id
+    - **Acceptance Criteria:** All checkpoint evaluations logged (even if tier unchanged), records tier_before and tier_after, includes period dates and values for audit trail, metric-aware (populates sales OR units fields based on client mode)
 
 - [ ] **Task 8.3.2:** Integrate with daily-automation
     - **Action:** Call tierCalculationService.runCheckpointEvaluation after sales processing
@@ -1465,17 +1490,24 @@
 
 - [ ] **Task 8.5.3:** Test daily automation updates user metrics
     - **Action:** Create `/tests/integration/cron/daily-automation-metrics.test.ts`
-    - **References:** SchemaFinalv2.md lines 130-145 (users precomputed fields: checkpoint_sales_current, checkpoint_units_current, lifetime_sales, etc.), Loyalty.md lines 1946-2010 (Daily Sync Flow)
-    - **Implementation Guide:** MUST test metrics update: (1) create user with checkpoint_sales_current=500, checkpoint_units_current=10, (2) create sales_adjustments records: 3 sales totaling $300 and 5 units, (3) call processDailySales or updatePrecomputedFields, (4) query users → verify checkpoint_sales_current=800 (500+300), checkpoint_units_current=15 (10+5), (5) verify lifetime_sales updated, (6) verify videos_count incremented, (7) test with client.vip_metric='units' → verify units fields used for tier calc
+    - **References:** SchemaFinalv2.md lines 130-145 (users precomputed fields), SchemaFinalv2.md lines 227-251 (videos table), Loyalty.md lines 1946-2010 (Daily Sync Flow)
+    - **Implementation Guide:** MUST test metrics update: (1) create user with checkpoint_sales_current=500, checkpoint_units_current=10, (2) create videos records: 3 videos totaling $300 GMV and 5 units_sold, (3) call processDailySales (service function), (4) query users → verify checkpoint_sales_current=800 (500+300), checkpoint_units_current=15 (10+5), (5) verify lifetime_sales updated, (6) verify videos_count incremented, (7) test with client.vip_metric='units' → verify units fields used for tier calc
     - **Test Cases:** (1) sales sync updates checkpoint_sales_current correctly, (2) units sync updates checkpoint_units_current correctly, (3) lifetime_sales aggregates all-time, (4) precomputed fields recalculated after sync, (5) vip_metric determines which field is primary
-    - **Acceptance Criteria:** All 5 test cases MUST pass, precomputed fields MUST match aggregated sales_adjustments per SchemaFinalv2.md lines 130-145, prevents stale-dashboard-data catastrophic bug
+    - **Acceptance Criteria:** All 5 test cases MUST pass, precomputed fields MUST match aggregated video data per SchemaFinalv2.md lines 130-145, prevents stale-dashboard-data catastrophic bug
 
-- [ ] **Task 8.5.4:** Test sales upsert handles duplicates
+- [ ] **Task 8.5.3a:** Test RPC function behaviors (vip_metric branching, call sequence)
+    - **Action:** Add RPC-specific tests to `/tests/integration/cron/daily-automation-metrics.test.ts`
+    - **References:** RPCMigrationFix.md Section 15, RPCMigrationFixIMPL.md, SchemaFinalv2.md line 118 (vip_metric)
+    - **Implementation Guide:** MUST test RPC behaviors introduced by Task 8.2.3-rpc: (1) create client with vip_metric='sales', 3 users with varying total_sales, call updateLeaderboardRanks → verify ranks ordered by total_sales DESC, (2) create client with vip_metric='units', same users with varying total_units, call updateLeaderboardRanks → verify ranks ordered by total_units DESC (user with most units = rank 1), (3) create client with NULL vip_metric (bypass constraint for test) → call updatePrecomputedFields → expect error containing 'NULL or invalid vip_metric', (4) same test for updateLeaderboardRanks with invalid vip_metric, (5) end-to-end sequence test: create pending sales_adjustment, call applyPendingSalesAdjustments then updatePrecomputedFields then updateLeaderboardRanks → verify adjustment reflected in total_sales AND in leaderboard rank
+    - **Test Cases:** (1) leaderboard ranks by total_sales in sales mode, (2) leaderboard ranks by total_units in units mode, (3) vip_metric NULL throws exception, (4) vip_metric invalid throws exception, (5) call sequence: adjustments reflected in projections and ranks
+    - **Acceptance Criteria:** All 5 test cases MUST pass, vip_metric branching verified for leaderboard, error handling verified for NULL/invalid vip_metric, call sequence dependency verified
+
+- [ ] **Task 8.5.4:** Test video upsert handles duplicates
     - **Action:** Add upsert test to `/tests/integration/cron/daily-automation-metrics.test.ts`
-    - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table with video_url UNIQUE per user+date)
-    - **Implementation Guide:** MUST test duplicate handling: (1) create user, (2) call sync with sales record {video_url: 'video1', date: '2025-01-20', sales: 100}, (3) query sales_adjustments → 1 record exists, (4) call sync again with same {video_url: 'video1', date: '2025-01-20', sales: 150} (updated amount), (5) query sales_adjustments → still 1 record, amount=150 (upserted), (6) verify no duplicate records created
-    - **Test Cases:** (1) first sync creates record, (2) second sync with same video_url+date upserts (updates), (3) no duplicate records created, (4) updated values reflected
-    - **Acceptance Criteria:** All 4 test cases MUST pass, UNIQUE constraint on (user_id, video_url, adjustment_date) MUST be enforced per SchemaFinalv2.md line 280
+    - **References:** SchemaFinalv2.md lines 227-251 (videos table with video_url as unique key)
+    - **Implementation Guide:** MUST test duplicate handling: (1) create user, (2) call processDailySales with CSV containing {video_url: 'https://tiktok.com/video1', post_date: '2025-01-20', gmv: 100}, (3) query videos → 1 record exists, (4) call processDailySales again with same {video_url: 'https://tiktok.com/video1', post_date: '2025-01-20', gmv: 150} (updated amount), (5) query videos → still 1 record, gmv=150 (upserted), (6) verify no duplicate records created
+    - **Test Cases:** (1) first sync creates video record, (2) second sync with same video_url upserts (updates), (3) no duplicate records created, (4) updated values reflected
+    - **Acceptance Criteria:** All 4 test cases MUST pass, UNIQUE constraint on video_url MUST be enforced per SchemaFinalv2.md lines 227-251
 
 - [ ] **Task 8.5.5:** Test tier calculation correct thresholds
     - **Action:** Create `/tests/integration/cron/tier-calculation.test.ts`
