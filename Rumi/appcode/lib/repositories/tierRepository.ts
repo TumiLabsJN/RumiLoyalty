@@ -94,6 +94,69 @@ export interface VipSystemSettings {
   metric: 'sales_dollars' | 'sales_units';
 }
 
+// ============================================
+// Checkpoint Evaluation Types (Task 8.3.0a)
+// Per Phase8UpgradeIMPL.md Section 11
+// ============================================
+
+/**
+ * User data for checkpoint evaluation
+ * Per Loyalty.md lines 1553-1561 (checkpoint query)
+ */
+export interface CheckpointUserData {
+  userId: string;
+  currentTier: string;
+  tierOrder: number;
+  checkpointSalesCurrent: number;
+  checkpointUnitsCurrent: number;
+  manualAdjustmentsTotal: number;
+  manualAdjustmentsUnits: number;
+  tierAchievedAt: string;
+  nextCheckpointAt: string;
+  vipMetric: 'sales' | 'units';
+  checkpointMonths: number;
+}
+
+/**
+ * Tier threshold for checkpoint comparison
+ * Per Loyalty.md lines 1580-1598 (threshold comparison)
+ */
+export interface TierThreshold {
+  tierId: string;
+  tierName: string;
+  tierOrder: number;
+  threshold: number;
+}
+
+/**
+ * Data for logging checkpoint result
+ * Per SchemaFinalv2.md lines 293-312 (tier_checkpoints table)
+ * Per Phase8UpgradeIMPL.md Section 11
+ */
+export interface CheckpointLogData {
+  userId: string;
+  checkpointDate: string;
+  periodStartDate: string;
+  periodEndDate: string;
+  salesInPeriod: number | null;
+  unitsInPeriod: number | null;
+  salesRequired: number | null;
+  unitsRequired: number | null;
+  tierBefore: string;
+  tierAfter: string;
+  status: 'maintained' | 'promoted' | 'demoted';
+}
+
+/**
+ * Data for updating user after checkpoint
+ * Per Phase8UpgradeIMPL.md lines 263-267
+ */
+export interface CheckpointUpdateData {
+  newTier: string;
+  tierChanged: boolean;
+  checkpointMonths: number;
+}
+
 export const tierRepository = {
   /**
    * Get all tiers for a client ordered by tier_order.
@@ -319,5 +382,216 @@ export const tierRepository = {
         isRaffle: mission.mission_type === 'raffle',
       };
     });
+  },
+
+  // ============================================
+  // Checkpoint Evaluation Functions (Task 8.3.0a)
+  // Per Loyalty.md lines 1553-1655
+  // ============================================
+
+  /**
+   * Get users due for checkpoint evaluation today.
+   * Per Loyalty.md lines 1553-1561
+   *
+   * Query: WHERE next_checkpoint_at <= TODAY AND current_tier != 'tier_1'
+   * Bronze tier (tier_1) is exempt from checkpoints.
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async getUsersDueForCheckpoint(clientId: string): Promise<CheckpointUserData[]> {
+    const supabase = await createClient();
+
+    // Get users due for checkpoint with client's VIP settings
+    // Join clients to get vip_metric and checkpoint_months
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        id,
+        current_tier,
+        checkpoint_sales_current,
+        checkpoint_units_current,
+        manual_adjustments_total,
+        manual_adjustments_units,
+        tier_achieved_at,
+        next_checkpoint_at,
+        clients!inner (
+          vip_metric,
+          checkpoint_months
+        )
+      `)
+      .eq('client_id', clientId)
+      .neq('current_tier', 'tier_1') // Bronze tier exempt
+      .lte('next_checkpoint_at', new Date().toISOString().split('T')[0]); // <= TODAY
+
+    if (error) {
+      console.error('[TierRepository] Error fetching users due for checkpoint:', error);
+      throw new Error(`Failed to fetch users due for checkpoint: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Get tier_order for each user's current tier
+    const tierIds = [...new Set(data.map((u) => u.current_tier).filter((t): t is string => t !== null))];
+    const { data: tiers, error: tierError } = await supabase
+      .from('tiers')
+      .select('tier_id, tier_order')
+      .eq('client_id', clientId)
+      .in('tier_id', tierIds);
+
+    if (tierError) {
+      console.error('[TierRepository] Error fetching tier orders:', tierError);
+      throw new Error(`Failed to fetch tier orders: ${tierError.message}`);
+    }
+
+    const tierOrderMap = new Map(tiers?.map((t) => [t.tier_id, t.tier_order]) || []);
+
+    return data.map((user) => {
+      const client = user.clients as unknown as { vip_metric: string; checkpoint_months: number };
+      return {
+        userId: user.id,
+        currentTier: user.current_tier ?? 'tier_1',
+        tierOrder: tierOrderMap.get(user.current_tier ?? '') ?? 1,
+        checkpointSalesCurrent: user.checkpoint_sales_current ?? 0,
+        checkpointUnitsCurrent: user.checkpoint_units_current ?? 0,
+        manualAdjustmentsTotal: user.manual_adjustments_total ?? 0,
+        manualAdjustmentsUnits: user.manual_adjustments_units ?? 0,
+        tierAchievedAt: user.tier_achieved_at ?? new Date().toISOString(),
+        nextCheckpointAt: user.next_checkpoint_at ?? new Date().toISOString(),
+        vipMetric: (client.vip_metric === 'units' ? 'units' : 'sales') as 'sales' | 'units',
+        checkpointMonths: client.checkpoint_months ?? 3,
+      };
+    });
+  },
+
+  /**
+   * Get tier thresholds for checkpoint comparison.
+   * Per Loyalty.md lines 1580-1598
+   *
+   * Returns tiers ordered by tier_order DESC for highest-first matching.
+   * Returns sales_threshold OR units_threshold based on vipMetric.
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async getTierThresholdsForCheckpoint(
+    clientId: string,
+    vipMetric: 'sales' | 'units'
+  ): Promise<TierThreshold[]> {
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from('tiers')
+      .select('tier_id, tier_name, tier_order, sales_threshold, units_threshold')
+      .eq('client_id', clientId)
+      .order('tier_order', { ascending: false }); // Highest tier first
+
+    if (error) {
+      console.error('[TierRepository] Error fetching tier thresholds:', error);
+      throw new Error(`Failed to fetch tier thresholds: ${error.message}`);
+    }
+
+    return (data || []).map((tier) => ({
+      tierId: tier.tier_id,
+      tierName: tier.tier_name,
+      tierOrder: tier.tier_order,
+      // Return appropriate threshold based on client's VIP metric
+      threshold: vipMetric === 'units'
+        ? (tier.units_threshold ?? 0)
+        : (tier.sales_threshold ?? 0),
+    }));
+  },
+
+  /**
+   * Update user record after checkpoint evaluation.
+   * Per Phase8UpgradeIMPL.md lines 260-268, Loyalty.md lines 1616-1631
+   *
+   * Updates:
+   * - current_tier
+   * - tier_achieved_at = NOW() (if changed)
+   * - next_checkpoint_at = NOW() + checkpoint_months
+   * - checkpoint_sales_current = 0 (reset)
+   * - checkpoint_units_current = 0 (reset)
+   *
+   * SECURITY: Filters by client_id AND user_id (multitenancy)
+   */
+  async updateUserTierAfterCheckpoint(
+    clientId: string,
+    userId: string,
+    data: CheckpointUpdateData
+  ): Promise<void> {
+    const supabase = await createClient();
+
+    const now = new Date();
+    const nextCheckpoint = new Date(now);
+    nextCheckpoint.setMonth(nextCheckpoint.getMonth() + data.checkpointMonths);
+
+    const updateData: Record<string, unknown> = {
+      current_tier: data.newTier,
+      next_checkpoint_at: nextCheckpoint.toISOString(),
+      // Reset BOTH checkpoint totals (Issue 4: Option A per Loyalty.md line 1627)
+      checkpoint_sales_current: 0,
+      checkpoint_units_current: 0,
+    };
+
+    // Only update tier_achieved_at if tier changed
+    if (data.tierChanged) {
+      updateData.tier_achieved_at = now.toISOString();
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .eq('client_id', clientId);
+
+    if (error) {
+      console.error('[TierRepository] Error updating user after checkpoint:', error);
+      throw new Error(`Failed to update user after checkpoint: ${error.message}`);
+    }
+  },
+
+  /**
+   * Log checkpoint evaluation result to tier_checkpoints audit table.
+   * Per Phase8UpgradeIMPL.md lines 274-289, Loyalty.md lines 1633-1659
+   *
+   * Creates audit record with period dates, values achieved, thresholds required,
+   * tier before/after, and evaluation status.
+   *
+   * SECURITY: Inserts with client_id (multitenancy)
+   *
+   * @returns tier_checkpoint ID
+   */
+  async logCheckpointResult(
+    clientId: string,
+    data: CheckpointLogData
+  ): Promise<string> {
+    const supabase = await createClient();
+
+    const { data: result, error } = await supabase
+      .from('tier_checkpoints')
+      .insert({
+        client_id: clientId,
+        user_id: data.userId,
+        checkpoint_date: data.checkpointDate,
+        period_start_date: data.periodStartDate,
+        period_end_date: data.periodEndDate,
+        sales_in_period: data.salesInPeriod,
+        units_in_period: data.unitsInPeriod,
+        sales_required: data.salesRequired,
+        units_required: data.unitsRequired,
+        tier_before: data.tierBefore,
+        tier_after: data.tierAfter,
+        status: data.status,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[TierRepository] Error logging checkpoint result:', error);
+      throw new Error(`Failed to log checkpoint result: ${error.message}`);
+    }
+
+    return result.id;
   },
 };
