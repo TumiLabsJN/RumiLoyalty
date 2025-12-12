@@ -148,6 +148,21 @@ export interface CheckpointLogData {
 }
 
 /**
+ * Candidate for tier promotion
+ * Used by real-time promotion check (BUG-REALTIME-PROMOTION)
+ */
+export interface PromotionCandidate {
+  userId: string;
+  currentTier: string;
+  currentTierOrder: number;
+  qualifiesForTier: string;
+  qualifiesForTierOrder: number;
+  totalValue: number;
+  threshold: number;
+  tierAchievedAt: string;
+}
+
+/**
  * Data for updating user after checkpoint
  * Per Phase8UpgradeIMPL.md lines 263-267
  */
@@ -593,5 +608,148 @@ export const tierRepository = {
     }
 
     return result.id;
+  },
+
+  /**
+   * Get all users who may qualify for promotion.
+   * Returns users whose total_sales OR total_units exceed their current tier's threshold.
+   *
+   * Unlike checkpoint evaluation, this includes ALL users (including Bronze).
+   * Per BUG-REALTIME-PROMOTION: Model B real-time promotion.
+   *
+   * SECURITY: Filters by client_id (multitenancy)
+   */
+  async getUsersForPromotionCheck(clientId: string): Promise<PromotionCandidate[]> {
+    const supabase = await createClient();
+
+    // Get all users with their current tier
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select(`
+        id,
+        current_tier,
+        total_sales,
+        total_units,
+        tier_achieved_at
+      `)
+      .eq('client_id', clientId);
+
+    if (userError) {
+      console.error('[TierRepository] Error fetching users for promotion check:', userError);
+      throw new Error(`Failed to fetch users: ${userError.message}`);
+    }
+
+    // Get client's VIP metric setting
+    const { data: client, error: clientError } = await supabase
+      .from('clients')
+      .select('vip_metric')
+      .eq('id', clientId)
+      .single();
+
+    if (clientError) {
+      console.error('[TierRepository] Error fetching client:', clientError);
+      throw new Error(`Failed to fetch client: ${clientError.message}`);
+    }
+
+    // Get tier thresholds sorted by tier_order DESC (highest first)
+    const { data: tiers, error: tierError } = await supabase
+      .from('tiers')
+      .select('tier_id, tier_order, sales_threshold, units_threshold')
+      .eq('client_id', clientId)
+      .order('tier_order', { ascending: false });
+
+    if (tierError) {
+      console.error('[TierRepository] Error fetching tiers:', tierError);
+      throw new Error(`Failed to fetch tiers: ${tierError.message}`);
+    }
+
+    const vipMetric = client?.vip_metric;
+    const candidates: PromotionCandidate[] = [];
+
+    for (const user of users || []) {
+      const userValue = vipMetric === 'units'
+        ? (user.total_units ?? 0)
+        : (user.total_sales ?? 0);
+
+      // Find current tier order
+      const currentTierData = tiers?.find(t => t.tier_id === user.current_tier);
+      const currentTierOrder = currentTierData?.tier_order ?? 1;
+
+      // Find highest qualifying tier (tiers sorted DESC by tier_order)
+      for (const tier of tiers || []) {
+        const threshold = vipMetric === 'units'
+          ? (tier.units_threshold ?? 0)
+          : (tier.sales_threshold ?? 0);
+
+        if (userValue >= threshold && tier.tier_order > currentTierOrder) {
+          // User qualifies for a HIGHER tier
+          candidates.push({
+            userId: user.id,
+            currentTier: user.current_tier ?? 'tier_1',
+            currentTierOrder,
+            qualifiesForTier: tier.tier_id,
+            qualifiesForTierOrder: tier.tier_order,
+            totalValue: userValue,
+            threshold,
+            tierAchievedAt: user.tier_achieved_at ?? new Date().toISOString(),
+          });
+          break; // Take highest qualifying tier
+        }
+      }
+    }
+
+    return candidates;
+  },
+
+  /**
+   * Promote a user to a higher tier.
+   *
+   * Updates:
+   * - current_tier: New tier
+   * - tier_achieved_at: NOW (new achievement date)
+   * - next_checkpoint_at: NOW + checkpoint_months (fresh checkpoint period)
+   * - checkpoint_*_target: NEW tier's threshold (must maintain new level)
+   * - checkpoint_*_current: 0 (reset accumulation)
+   *
+   * Per BUG-REALTIME-PROMOTION: User gets full checkpoint period to prove new tier.
+   *
+   * SECURITY: Filters by client_id AND user_id (multitenancy)
+   */
+  async promoteUserToTier(
+    clientId: string,
+    userId: string,
+    newTier: string,
+    newTierThreshold: number,
+    checkpointMonths: number,
+    vipMetric: 'sales' | 'units'
+  ): Promise<void> {
+    const supabase = await createClient();
+
+    const now = new Date();
+    const nextCheckpoint = new Date(now);
+    nextCheckpoint.setMonth(nextCheckpoint.getMonth() + checkpointMonths);
+
+    const updateData: Record<string, unknown> = {
+      current_tier: newTier,
+      tier_achieved_at: now.toISOString(),
+      next_checkpoint_at: nextCheckpoint.toISOString(),
+      // Reset checkpoint accumulation
+      checkpoint_sales_current: 0,
+      checkpoint_units_current: 0,
+      // Set target to NEW tier's threshold (dynamic per tier)
+      checkpoint_sales_target: vipMetric === 'sales' ? newTierThreshold : null,
+      checkpoint_units_target: vipMetric === 'units' ? newTierThreshold : null,
+    };
+
+    const { error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .eq('client_id', clientId);
+
+    if (error) {
+      console.error('[TierRepository] Error promoting user:', error);
+      throw new Error(`Failed to promote user: ${error.message}`);
+    }
   },
 };

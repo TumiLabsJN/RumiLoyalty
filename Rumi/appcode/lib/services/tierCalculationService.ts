@@ -20,12 +20,14 @@
  */
 
 import { syncRepository } from '@/lib/repositories/syncRepository';
+import { createClient } from '@/lib/supabase/server-client';
 import {
   tierRepository,
   CheckpointUserData,
   TierThreshold,
   CheckpointUpdateData,
   CheckpointLogData,
+  PromotionCandidate,
 } from '@/lib/repositories/tierRepository';
 
 /**
@@ -51,6 +53,23 @@ export interface RunCheckpointResult {
   maintained: number;
   demoted: number;
   results: CheckpointEvaluationResult[];
+  errors: string[];
+}
+
+/**
+ * Result of promotion check
+ * Per BUG-REALTIME-PROMOTION: Model B real-time promotion
+ */
+export interface PromotionCheckResult {
+  success: boolean;
+  usersChecked: number;
+  usersPromoted: number;
+  promotions: Array<{
+    userId: string;
+    fromTier: string;
+    toTier: string;
+    totalValue: number;
+  }>;
   errors: string[];
 }
 
@@ -296,6 +315,141 @@ export async function runCheckpointEvaluation(
     maintained,
     demoted,
     results,
+    errors,
+  };
+}
+
+/**
+ * Check all users for potential promotion to higher tier.
+ * Runs daily after sales sync, BEFORE checkpoint evaluation.
+ *
+ * Per BUG-REALTIME-PROMOTION: Model B real-time promotion.
+ * Users are promoted immediately when total_sales/total_units exceeds higher tier threshold.
+ *
+ * On promotion:
+ * - Updates current_tier, tier_achieved_at
+ * - Resets next_checkpoint_at to NOW + checkpoint_months
+ * - Sets checkpoint_*_target to NEW tier's threshold
+ * - Resets checkpoint_*_current to 0
+ * - Logs promotion to tier_checkpoints table for audit
+ */
+export async function checkForPromotions(
+  clientId: string
+): Promise<PromotionCheckResult> {
+  const promotions: PromotionCheckResult['promotions'] = [];
+  const errors: string[] = [];
+
+  console.log(`[TierCalculation] Checking for promotions for client ${clientId}`);
+
+  // Get client settings (needed for checkpoint_months and vip_metric)
+  let clientSettings: { checkpointMonths: number; vipMetric: 'sales' | 'units' };
+  try {
+    const supabase = await createClient();
+    const { data: client, error } = await supabase
+      .from('clients')
+      .select('checkpoint_months, vip_metric')
+      .eq('id', clientId)
+      .single();
+
+    if (error || !client) {
+      throw new Error(`Failed to fetch client: ${error?.message}`);
+    }
+    clientSettings = {
+      checkpointMonths: client.checkpoint_months ?? 3,
+      vipMetric: client.vip_metric === 'units' ? 'units' : 'sales',
+    };
+  } catch (error) {
+    const errorMsg = `Failed to get client settings: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(`[TierCalculation] ${errorMsg}`);
+    return {
+      success: false,
+      usersChecked: 0,
+      usersPromoted: 0,
+      promotions: [],
+      errors: [errorMsg],
+    };
+  }
+
+  // Get promotion candidates
+  let candidates: PromotionCandidate[];
+  try {
+    candidates = await tierRepository.getUsersForPromotionCheck(clientId);
+    console.log(`[TierCalculation] Found ${candidates.length} users eligible for promotion`);
+  } catch (error) {
+    const errorMsg = `Failed to get promotion candidates: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(`[TierCalculation] ${errorMsg}`);
+    return {
+      success: false,
+      usersChecked: 0,
+      usersPromoted: 0,
+      promotions: [],
+      errors: [errorMsg],
+    };
+  }
+
+  if (candidates.length === 0) {
+    console.log(`[TierCalculation] No users eligible for promotion`);
+    return {
+      success: true,
+      usersChecked: 0,
+      usersPromoted: 0,
+      promotions: [],
+      errors: [],
+    };
+  }
+
+  // Process each candidate
+  for (const candidate of candidates) {
+    try {
+      // Promote user with checkpoint reset
+      await tierRepository.promoteUserToTier(
+        clientId,
+        candidate.userId,
+        candidate.qualifiesForTier,
+        candidate.threshold,
+        clientSettings.checkpointMonths,
+        clientSettings.vipMetric
+      );
+
+      // Log promotion to tier_checkpoints for audit trail
+      await tierRepository.logCheckpointResult(clientId, {
+        userId: candidate.userId,
+        checkpointDate: new Date().toISOString().split('T')[0],
+        periodStartDate: candidate.tierAchievedAt.split('T')[0],
+        periodEndDate: new Date().toISOString().split('T')[0],
+        salesInPeriod: clientSettings.vipMetric === 'sales' ? candidate.totalValue : null,
+        unitsInPeriod: clientSettings.vipMetric === 'units' ? candidate.totalValue : null,
+        salesRequired: clientSettings.vipMetric === 'sales' ? candidate.threshold : null,
+        unitsRequired: clientSettings.vipMetric === 'units' ? candidate.threshold : null,
+        tierBefore: candidate.currentTier,
+        tierAfter: candidate.qualifiesForTier,
+        status: 'promoted',
+      });
+
+      promotions.push({
+        userId: candidate.userId,
+        fromTier: candidate.currentTier,
+        toTier: candidate.qualifiesForTier,
+        totalValue: candidate.totalValue,
+      });
+
+      console.log(
+        `[TierCalculation] Promoted user ${candidate.userId}: ` +
+        `${candidate.currentTier} → ${candidate.qualifiesForTier} ` +
+        `(value: ${candidate.totalValue}, threshold: ${candidate.threshold})`
+      );
+    } catch (error) {
+      const errorMsg = `Failed to promote user ${candidate.userId}: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[TierCalculation] ${errorMsg}`);
+      errors.push(errorMsg);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    usersChecked: candidates.length,
+    usersPromoted: promotions.length,
+    promotions,
     errors,
   };
 }

@@ -1,3 +1,4 @@
+Using workdir /home/jorge/Loyalty/Rumi
 export type Json =
   | string
   | number
@@ -1596,6 +1597,10 @@ export type Database = {
         }[]
       }
       is_admin_of_client: { Args: { p_client_id: string }; Returns: boolean }
+      update_mission_progress: {
+        Args: { p_client_id: string; p_user_ids?: string[] }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

@@ -338,9 +338,25 @@ export const syncRepository = {
     clientId: string,
     userIds: string[]
   ): Promise<number> {
-    // TODO: Implement in Task 8.2.3 with mission-type-aware calculations
-    // This is a placeholder that will be replaced with actual implementation
-    throw new Error('Not implemented - see Task 8.2.3');
+    const supabase = createAdminClient();
+
+    // Per Codex audit: empty/null userIds means "update all users for this client"
+    // RPC handles this internally with conditional logic
+    // Type assertion: RPC function added in 20251212_add_update_mission_progress_rpc.sql
+    // Regenerate types after migration: supabase gen types typescript
+    const { data, error } = await (supabase.rpc as Function)(
+      'update_mission_progress',
+      {
+        p_client_id: clientId,
+        p_user_ids: userIds.length > 0 ? userIds : null,  // null = all users
+      }
+    );
+
+    if (error) {
+      throw new Error(`Failed to update mission progress: ${error.message}`);
+    }
+
+    return (data as number) ?? 0;
   },
 
   /**

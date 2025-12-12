@@ -1452,15 +1452,16 @@
     - **Implementation Guide:** In tierRepository: INSERT INTO tier_checkpoints (client_id, user_id, checkpoint_date, period_start_date, period_end_date, sales_in_period, units_in_period, sales_required, units_required, tier_before, tier_after, status) VALUES ($1, $2, NOW(), $3, NOW(), $4, $5, $6, $7, $8, $9, $10) RETURNING id
     - **Acceptance Criteria:** All checkpoint evaluations logged (even if tier unchanged), records tier_before and tier_after, includes period dates and values for audit trail, metric-aware (populates sales OR units fields based on client mode)
 
-- [ ] **Task 8.3.2:** Integrate with daily-automation
+- [x] **Task 8.3.2:** Integrate with daily-automation
     - **Action:** Call tierCalculationService.runCheckpointEvaluation after sales processing
     - **References:** Loyalty.md Flow 1, Flow 7 lines 1452-1455 (runs after data sync)
     - **Acceptance Criteria:** Checkpoint evaluations run after each daily automation, applies sales adjustments first, then evaluates users due for checkpoint
 
 - [ ] **Task 8.3.3:** Add tier change notifications
-    - **Action:** Send email via Resend when user tier changes (promotion OR demotion)
-    - **References:** Loyalty.md Flow 7 lines 1606-1610 (outcome types: promoted/maintained/demoted)
-    - **Acceptance Criteria:** Email sent for promotions with congratulations message, Email sent for demotions with encouragement message, No email sent if tier maintained
+    - **Action:** Send email via Resend when user tier changes (promotion OR demotion) from EITHER source
+    - **References:** Loyalty.md Flow 7 lines 1606-1610 (outcome types: promoted/maintained/demoted), BugFixes/RealTimePromotionFix.md (dual promotion sources)
+    - **Implementation Guide:** Tier changes occur in TWO places: (1) `checkForPromotions()` returns `PromotionCheckResult.promotions[]` with users promoted via real-time threshold check, (2) `runCheckpointEvaluation()` returns `RunCheckpointResult.results[]` with status='promoted' or 'demoted'. MUST send notifications for BOTH sources. Create `sendTierChangeNotification(userId, fromTier, toTier, changeType: 'promotion'|'demotion')` helper. Call after each function completes in daily-automation route.
+    - **Acceptance Criteria:** Email sent for promotions with congratulations message (from BOTH checkForPromotions AND runCheckpointEvaluation), Email sent for demotions with encouragement message (from runCheckpointEvaluation only - demotions don't occur in checkForPromotions), No email sent if tier maintained, MUST handle both tier change sources
 
 - [ ] **Task 8.3.4:** Add raffle drawing calendar event in daily cron
     - **Action:** Create calendar event when raffle_end_date = TODAY
@@ -1477,9 +1478,9 @@
 ## Step 8.5: Cron Testing
 - [ ] **Task 8.5.1:** Create cron integration tests
     - **Action:** Create `/tests/integration/cron/daily-automation.test.ts`
-    - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table), lines 123-155 (users precomputed fields), ARCHITECTURE.md Section 5 (Cron Jobs)
-    - **Implementation Guide:** MUST create test file with: (1) import factories, (2) beforeEach: create test client with vip_metric, create tiers with thresholds, create users with checkpoint values, (3) afterEach: cleanupTestData(), (4) mock or use fixture CSV file for sales data, (5) describe blocks for: 'CSV parsing', 'sales upsert', 'tier calculation', 'boost activation'
-    - **Acceptance Criteria:** File exists with test suite skeleton, can load fixture CSV, can invoke processDailySales function
+    - **References:** SchemaFinalv2.md lines 271-286 (sales_adjustments table), lines 123-155 (users precomputed fields), ARCHITECTURE.md Section 5 (Cron Jobs), BugFixes/RealTimePromotionFix.md (real-time promotion flow)
+    - **Implementation Guide:** MUST create test file with: (1) import factories, (2) beforeEach: create test client with vip_metric, create tiers with thresholds, create users with checkpoint values, (3) afterEach: cleanupTestData(), (4) mock or use fixture CSV file for sales data, (5) describe blocks for: 'CSV parsing', 'sales upsert', 'real-time promotion', 'checkpoint evaluation', 'boost activation'. **Real-time promotion tests MUST cover:** (a) Bronze user exceeding Silver threshold gets promoted, (b) promotion happens BEFORE checkpoint evaluation, (c) promoted user NOT re-evaluated in checkpoint (next_checkpoint_at now in future), (d) tier_achieved_at reset on promotion (affects VIP reward usage), (e) audit log created with status='promoted', (f) getUsersForPromotionCheck includes Bronze users (no tier filter)
+    - **Acceptance Criteria:** File exists with test suite skeleton, can load fixture CSV, can invoke processDailySales function, MUST include 'real-time promotion' describe block per BUG-REALTIME-PROMOTION
 
 - [ ] **Task 8.5.2:** Test CSV parsing
     - **Action:** Add CSV parsing tests to `/tests/integration/cron/daily-automation.test.ts`

@@ -9,18 +9,22 @@
  * - Loyalty.md line 412 (Vercel cron at 2 PM EST daily)
  * - Loyalty.md lines 252-260 (Cron Job Security with CRON_SECRET)
  * - Loyalty.md lines 1987-1994 (Automation Monitoring & Reliability)
- * - EXECUTION_PLAN.md Tasks 8.2.4, 8.2.5
+ * - EXECUTION_PLAN.md Tasks 8.2.4, 8.2.5, 8.3.2
+ * - BUG-REALTIME-PROMOTION (Real-time tier promotion)
  *
- * 4-Step Orchestration:
+ * 6-Step Orchestration:
  * 1. Verify cron secret from request headers (via withCronAuth)
  * 2. Call salesService.processDailySales for data sync
- * 3. Handle download/processing failures with detailed error logging
- * 4. Return appropriate HTTP status codes + send admin alert on failure
+ * 3. Call tierCalculationService.checkForPromotions for real-time promotions (BUG-REALTIME-PROMOTION)
+ * 4. Call tierCalculationService.runCheckpointEvaluation for tier maintenance (Task 8.3.2)
+ * 5. Handle download/processing failures with detailed error logging
+ * 6. Return appropriate HTTP status codes + send admin alert on failure
  */
 
 import { NextResponse } from 'next/server';
 import { withCronAuth } from '@/lib/utils/cronAuth';
 import { processDailySales } from '@/lib/services/salesService';
+import { runCheckpointEvaluation, checkForPromotions } from '@/lib/services/tierCalculationService';
 import { sendAdminAlert, determineAlertType } from '@/lib/utils/alertService';
 
 /**
@@ -35,6 +39,22 @@ interface CronSuccessResponse {
     newUsersCreated: number;
     missionsUpdated: number;
     redemptionsCreated: number;
+    tierPromotion: {
+      usersChecked: number;
+      usersPromoted: number;
+      promotions: Array<{
+        userId: string;
+        fromTier: string;
+        toTier: string;
+        totalValue: number;
+      }>;
+    };
+    tierCalculation: {
+      usersEvaluated: number;
+      promoted: number;
+      maintained: number;
+      demoted: number;
+    };
   };
   timestamp: string;
 }
@@ -95,9 +115,36 @@ export const GET = withCronAuth(async () => {
     // Step 3: Handle success or partial failure
     if (result.success) {
       console.log(
-        `[DailyAutomation] Completed successfully: ${result.recordsProcessed} records, ` +
+        `[DailyAutomation] Sales sync completed: ${result.recordsProcessed} records, ` +
           `${result.usersUpdated} users updated, ${result.newUsersCreated} new users, ` +
           `${result.missionsUpdated} missions, ${result.redemptionsCreated} redemptions`
+      );
+
+      // Step 3b: Check for real-time promotions (BUG-REALTIME-PROMOTION)
+      // Users who exceed higher tier thresholds get promoted immediately
+      console.log(`[DailyAutomation] Checking for tier promotions`);
+      const promotionResult = await checkForPromotions(clientId);
+
+      if (promotionResult.usersPromoted > 0) {
+        console.log(
+          `[DailyAutomation] Promoted ${promotionResult.usersPromoted} users to higher tiers`
+        );
+      }
+
+      // Step 3c: Run tier checkpoint evaluation (Task 8.3.2)
+      // Per Loyalty.md Flow 7: "Runs immediately after data sync completes"
+      console.log(`[DailyAutomation] Starting tier checkpoint evaluation`);
+      const tierResult = await runCheckpointEvaluation(clientId);
+
+      if (tierResult.errors.length > 0) {
+        console.warn(
+          `[DailyAutomation] Tier calculation completed with ${tierResult.errors.length} errors`
+        );
+      }
+
+      console.log(
+        `[DailyAutomation] Tier calculation completed: ${tierResult.usersEvaluated} users evaluated ` +
+          `(${tierResult.promoted} promoted, ${tierResult.maintained} maintained, ${tierResult.demoted} demoted)`
       );
 
       return NextResponse.json(
@@ -110,6 +157,17 @@ export const GET = withCronAuth(async () => {
             newUsersCreated: result.newUsersCreated,
             missionsUpdated: result.missionsUpdated,
             redemptionsCreated: result.redemptionsCreated,
+            tierPromotion: {
+              usersChecked: promotionResult.usersChecked,
+              usersPromoted: promotionResult.usersPromoted,
+              promotions: promotionResult.promotions,
+            },
+            tierCalculation: {
+              usersEvaluated: tierResult.usersEvaluated,
+              promoted: tierResult.promoted,
+              maintained: tierResult.maintained,
+              demoted: tierResult.demoted,
+            },
           },
           timestamp,
         } as CronSuccessResponse,

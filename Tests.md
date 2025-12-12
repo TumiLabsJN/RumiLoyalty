@@ -31,3 +31,10 @@ Quantity: 1
 ### Frequency: one-time
 Quantity: 1
 ✅ Correct - Creator can claim once per tier achievement
+
+
+# Rewards
+## Demotion > Repromotion
+Logic should be that any pending reward to be redeemed should persist after demotion.
+Raffles persist?
+All other Rewards?
