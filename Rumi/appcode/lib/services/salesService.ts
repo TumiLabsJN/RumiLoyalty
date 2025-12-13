@@ -192,7 +192,21 @@ export async function processDailySales(
       console.warn(`[SalesService] Leaderboard ranks update failed (non-fatal): ${errorMsg}`);
     }
 
-    // Step 6: Update mission progress (currently stub)
+    // Step 5.5: Create mission_progress rows for eligible users (GAP-MISSION-PROGRESS-ROWS)
+    console.log('[SalesService] Step 5.5: Creating mission progress rows for eligible users...');
+    let missionRowsCreated = 0;
+    try {
+      missionRowsCreated = await syncRepository.createMissionProgressForEligibleUsers(clientId);
+      if (missionRowsCreated > 0) {
+        console.log(`[SalesService] Created ${missionRowsCreated} mission progress rows`);
+      }
+    } catch (createError) {
+      // Non-fatal: Log error, continue
+      const errorMsg = createError instanceof Error ? createError.message : String(createError);
+      console.warn(`[SalesService] Mission progress row creation failed (non-fatal): ${errorMsg}`);
+    }
+
+    // Step 6: Update mission progress
     console.log('[SalesService] Step 6: Updating mission progress...');
     try {
       missionsUpdated = await syncRepository.updateMissionProgress(clientId, processedUserIds);

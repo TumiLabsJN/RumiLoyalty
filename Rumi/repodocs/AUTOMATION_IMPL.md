@@ -1,9 +1,9 @@
 # Automation System - Implementation Guide
 
-**Purpose:** Daily cron job for sales data sync from CRUVA, precomputed field updates, real-time tier promotion, tier checkpoint evaluation, and commission boost activation
+**Purpose:** Daily cron job for sales data sync from CRUVA, precomputed field updates, real-time tier promotion, tier checkpoint evaluation, tier change notifications, and raffle calendar events
 **Phase:** Phase 8 - Automation & Cron Jobs
 **Target Audience:** LLM agents debugging or modifying this feature
-**Last Updated:** 2025-12-12 (v2.1 - Added real-time promotion per BUG-REALTIME-PROMOTION)
+**Last Updated:** 2025-12-13 (v2.3 - Added Tasks 8.3.3-8.3.4 with full code snippets, call chains, schema refs per FSDocumentationMVP.md)
 
 ---
 
@@ -11,8 +11,8 @@
 
 **Steps Documented:**
 - Step 8.1 - Cron Infrastructure ✅
-- Step 8.2 - Daily Sales Sync ✅ (Tasks 8.2.0a-8.2.5)
-- Step 8.3 - Tier Calculation ✅ (Tasks 8.3.0a-8.3.2) | ⏳ (8.3.3-4 pending)
+- Step 8.2 - Daily Sales Sync ✅ (Tasks 8.2.0a-8.2.5, GAP-MISSION-PROGRESS-ROWS, BUG-MISSION-PROGRESS-UPDATE)
+- Step 8.3 - Tier Calculation ✅ (Tasks 8.3.0a-8.3.4 COMPLETE)
 - Step 8.3b - Real-Time Promotion ✅ (BUG-REALTIME-PROMOTION)
 - Step 8.4 - Manual Upload (pending)
 - Step 8.5 - Cron Testing (pending)
@@ -21,13 +21,15 @@
 | File | Lines | Purpose |
 |------|-------|---------|
 | `vercel.json` | 13 | Vercel cron configuration |
-| `appcode/app/api/cron/daily-automation/route.ts` | 227 | Cron route handler (6-step orchestration) |
-| `appcode/lib/services/salesService.ts` | 355 | Sales sync orchestration |
-| `appcode/lib/services/tierCalculationService.ts` | 455 | Checkpoint eval + real-time promotion |
-| `appcode/lib/repositories/syncRepository.ts` | 575 | Database operations for sync |
+| `appcode/app/api/cron/daily-automation/route.ts` | 302 | Cron route handler (6-step orchestration + notifications + raffle) |
+| `appcode/lib/services/salesService.ts` | 369 | Sales sync orchestration |
+| `appcode/lib/services/tierCalculationService.ts` | 457 | Checkpoint eval + real-time promotion |
+| `appcode/lib/repositories/syncRepository.ts` | 710 | Database operations for sync + raffle queries |
 | `appcode/lib/repositories/tierRepository.ts` | 755 | Tier + checkpoint + promotion functions |
 | `appcode/lib/utils/alertService.ts` | 353 | Admin failure alerts via Resend |
+| `appcode/lib/utils/notificationService.ts` | 370 | User tier change notifications via Resend |
 | `appcode/lib/utils/cronAuth.ts` | 171 | Cron secret validation |
+| `appcode/lib/utils/googleCalendar.ts` | 499 | Google Calendar event creation |
 
 **Cron Schedule:** `0 19 * * *` (7 PM UTC / 2 PM EST daily)
 
@@ -36,6 +38,8 @@
 - [Step 8.2 - Daily Sales Sync](#step-82---daily-sales-sync)
 - [Step 8.3 - Tier Calculation](#step-83---tier-calculation)
 - [Step 8.3b - Real-Time Promotion](#step-83b---real-time-promotion-bug-realtime-promotion)
+- [Task 8.3.3 - Tier Change Notifications](#task-833---tier-change-notifications)
+- [Task 8.3.4 - Raffle Drawing Calendar Event](#task-834---raffle-drawing-calendar-event)
 - [Configuration Files](#configuration-files)
 - [Timing Rationale](#timing-rationale)
 
@@ -170,17 +174,18 @@ cat vercel.json | jq '.crons[0].schedule'
 GET /api/cron/daily-automation (route.ts:69)
   ├─→ withCronAuth() validates CRON_SECRET (cronAuth.ts:88-120)
   │
-  ├─→ processDailySales(clientId) (salesService.ts:59-262)
+  ├─→ processDailySales(clientId) (salesService.ts:59-276)
   │   ├─→ syncRepository.createSyncLog() (syncRepository.ts:176-207)
   │   ├─→ downloadCruvaCSV() (cruvaDownloader.ts)
   │   ├─→ parseCruvaCSV() (csvParser.ts)
   │   ├─→ syncRepository.upsertVideo() per row (syncRepository.ts:231-280)
-  │   ├─→ syncRepository.updatePrecomputedFields() RPC (syncRepository.ts:313-345)
+  │   ├─→ syncRepository.updatePrecomputedFields() RPC (syncRepository.ts:313-335)
   │   ├─→ syncRepository.updateLeaderboardRanks() RPC (syncRepository.ts:348-380)
-  │   ├─→ syncRepository.updateMissionProgress() (syncRepository.ts:487-530)
-  │   ├─→ createRedemptionsForCompletedMissions() (salesService.ts:327-354)
-  │   │   └─→ syncRepository.findNewlyCompletedMissions() (syncRepository.ts:354-420)
-  │   │   └─→ syncRepository.createRedemptionForCompletedMission() (syncRepository.ts:423-470)
+  │   ├─→ syncRepository.createMissionProgressForEligibleUsers() RPC (syncRepository.ts:381-396) ← Step 5.5 (GAP-MISSION-PROGRESS-ROWS)
+  │   ├─→ syncRepository.updateMissionProgress() RPC (syncRepository.ts:337-360) ← Step 6 (BUG-MISSION-PROGRESS-UPDATE)
+  │   ├─→ createRedemptionsForCompletedMissions() (salesService.ts:341-368)
+  │   │   └─→ syncRepository.findNewlyCompletedMissions() (syncRepository.ts:398-456)
+  │   │   └─→ syncRepository.createRedemptionForCompletedMission() (syncRepository.ts:459-506)
   │   └─→ syncRepository.updateSyncLog() (syncRepository.ts:209-228)
   │
   └─→ On failure: sendAdminAlert() (alertService.ts:264-317)
@@ -188,9 +193,332 @@ GET /api/cron/daily-automation (route.ts:69)
 
 ---
 
+### Task 8.2.1: CSV Parser with CRUVA Column Mapping
+
+**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/utils/csvParser.ts` (228 lines)
+
+**Purpose:** Centralized mapping from CRUVA CSV headers to database column names. If CRUVA changes their column names, update ONLY this file.
+
+**CRUVA_COLUMN_MAP** (csvParser.ts:24-35):
+```typescript
+export const CRUVA_COLUMN_MAP: Record<string, string> = {
+  'Handle': 'tiktok_handle',      // Used for user lookup (not stored in videos table)
+  'Video': 'video_url',           // videos.video_url
+  'Views': 'views',               // videos.views
+  'Likes': 'likes',               // videos.likes
+  'Comments': 'comments',         // videos.comments
+  'GMV': 'gmv',                   // videos.gmv
+  'CTR': 'ctr',                   // videos.ctr
+  'Units Sold': 'units_sold',     // videos.units_sold
+  'Post Date': 'post_date',       // videos.post_date
+  'Video Title': 'video_title',   // videos.video_title
+};
+```
+
+**Column Mapping Table:**
+| CRUVA CSV Header | Database Column | Target Table |
+|------------------|-----------------|--------------|
+| Handle | tiktok_handle | users (lookup only) |
+| Video | video_url | videos |
+| Views | views | videos |
+| Likes | likes | videos |
+| Comments | comments | videos |
+| GMV | gmv | videos |
+| CTR | ctr | videos |
+| Units Sold | units_sold | videos |
+| Post Date | post_date | videos |
+| Video Title | video_title | videos |
+
+**Exported Interfaces** (csvParser.ts:40-62):
+```typescript
+export interface ParsedVideoRow {
+  tiktok_handle: string;
+  video_url: string;
+  views: number;
+  likes: number;
+  comments: number;
+  gmv: number;
+  ctr: number;
+  units_sold: number;
+  post_date: string;
+  video_title: string;
+}
+
+export interface ParseResult {
+  success: boolean;
+  rows: ParsedVideoRow[];
+  errors: string[];
+  totalRows: number;
+  skippedRows: number;
+}
+```
+
+**parseCruvaCSV Function** (csvParser.ts:70):
+```typescript
+export function parseCruvaCSV(csvContent: string | Buffer): ParseResult
+```
+
+**Exports Summary:**
+| Export | Type | Line |
+|--------|------|------|
+| `CRUVA_COLUMN_MAP` | const | 24 |
+| `ParsedVideoRow` | interface | 40 |
+| `ParseResult` | interface | 56 |
+| `parseCruvaCSV()` | function | 70 |
+| `getCruvaColumnHeaders()` | function | 219 |
+| `getDatabaseColumnNames()` | function | 226 |
+
+---
+
+### Task 8.2.2: Sales Service File
+
+**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/services/salesService.ts` (369 lines)
+
+**Purpose:** Business logic for daily sales sync from CRUVA platform. Orchestrates CSV processing, video upserts, precomputed field updates, mission progress tracking, and redemption creation.
+
+**ProcessDailySalesResult Interface** (salesService.ts:23-31):
+```typescript
+export interface ProcessDailySalesResult {
+  success: boolean;
+  recordsProcessed: number;
+  usersUpdated: number;
+  newUsersCreated: number;
+  missionsUpdated: number;
+  redemptionsCreated: number;
+  errors: string[];
+}
+```
+
+**Exports Summary:**
+| Export | Type | Line | Status |
+|--------|------|------|--------|
+| `ProcessDailySalesResult` | interface | 23 | ✅ Implemented |
+| `processDailySales()` | async function | 59 | ✅ Implemented (8-step workflow) |
+| `processManualUpload()` | async function | 289 | ⏳ Stub (Task 8.4.1) |
+| `updatePrecomputedFields()` | async function | 310 | ✅ Delegates to syncRepository |
+| `updateLeaderboardRanks()` | async function | 324 | ✅ Delegates to syncRepository |
+| `createRedemptionsForCompletedMissions()` | async function | 341 | ✅ Implemented |
+
+**processDailySales 8-Step Workflow** (salesService.ts:59-284):
+| Step | Description | Line |
+|------|-------------|------|
+| 1 | Create sync log to track automation run | 73-74 |
+| 2 | Download CSV from CRUVA via Puppeteer | 77-94 |
+| 3 | Parse CSV using csvParser utility | 97-102 |
+| 4 | For each row: match user, auto-create if needed, upsert video | 119-175 |
+| 5 | Update user precomputed fields (RPC) | 178-193 |
+| 5.5 | Create mission_progress rows for eligible users (GAP fix) | 195-207 |
+| 6 | Update mission progress (RPC) | 209-217 |
+| 7 | Create redemptions for newly completed missions | 219-227 |
+| 8 | Update sync log with final status | 229-284 |
+
+**Function Signatures:**
+```typescript
+// Main workflow (salesService.ts:59)
+export async function processDailySales(
+  clientId: string
+): Promise<ProcessDailySalesResult>
+
+// Manual upload stub (salesService.ts:289) - Task 8.4.1
+export async function processManualUpload(
+  clientId: string,
+  csvBuffer: Buffer,
+  triggeredBy: string
+): Promise<ProcessDailySalesResult>
+
+// Helper - precomputed fields (salesService.ts:310)
+export async function updatePrecomputedFields(
+  clientId: string,
+  userIds?: string[]
+): Promise<void>
+
+// Helper - leaderboard ranks (salesService.ts:324)
+export async function updateLeaderboardRanks(
+  clientId: string
+): Promise<void>
+
+// Helper - redemption creation (salesService.ts:341)
+export async function createRedemptionsForCompletedMissions(
+  clientId: string,
+  errors?: string[]
+): Promise<number>
+```
+
+---
+
+### Task 8.2.2a: syncRepository for Daily Sync Database Operations
+
+**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/syncRepository.ts` (627 lines)
+
+**Purpose:** Data access layer for daily sync operations (CRUVA CSV processing). Used by salesService for all database operations per ARCHITECTURE.md Section 4 (Repository Layer).
+
+**Exported Types** (syncRepository.ts:36-83):
+```typescript
+export interface VideoUpsertData {
+  videoUrl: string;
+  videoTitle: string;
+  postDate: string;
+  views: number;
+  likes: number;
+  comments: number;
+  gmv: number;
+  ctr: number;
+  unitsSold: number;
+}
+
+export interface BulkVideoUpsert {
+  userId: string;
+  videoData: VideoUpsertData;
+}
+
+export interface SyncUserData {
+  id: string;
+  currentTier: string;
+}
+
+export interface CompletedMissionData {
+  missionProgressId: string;
+  userId: string;
+  missionId: string;
+  rewardId: string;
+  currentTier: string;  // From users table JOIN - for tier_at_claim
+}
+
+export interface SyncLogInput {
+  source: 'auto' | 'manual';
+  fileName?: string;
+  triggeredBy?: string;
+}
+```
+
+**syncRepository Functions (12 total):**
+| # | Function | Line | Signature | Purpose |
+|---|----------|------|-----------|---------|
+| 1 | `upsertVideo` | 101 | `(clientId, userId, videoData): Promise<string>` | Upsert video using video_url as unique key |
+| 2 | `bulkUpsertVideos` | 149 | `(clientId, videos[]): Promise<{inserted, updated}>` | Batch upsert for efficiency |
+| 3 | `findUserByTiktokHandle` | 201 | `(clientId, handle): Promise<SyncUserData \| null>` | Lookup user for CSV row processing |
+| 4 | `createUserFromCruva` | 240 | `(clientId, handle, postDate): Promise<string>` | Auto-create user with tier='tier_1' |
+| 5 | `updatePrecomputedFields` | 284 | `(clientId, userIds?): Promise<void>` | RPC call to update 16 user fields |
+| 6 | `updateLeaderboardRanks` | 313 | `(clientId): Promise<void>` | RPC call for ROW_NUMBER() ranks |
+| 7 | `updateMissionProgress` | 337 | `(clientId, userIds[]): Promise<number>` | RPC call to update current_value |
+| 8 | `createMissionProgressForEligibleUsers` | 381 | `(clientId): Promise<number>` | RPC call to create mission_progress rows |
+| 9 | `findNewlyCompletedMissions` | 406 | `(clientId): Promise<CompletedMissionData[]>` | Find missions ready for redemption |
+| 10 | `createRedemptionForCompletedMission` | 479 | `(clientId, data): Promise<string>` | Create redemption with status='claimable' |
+| 11 | `createSyncLog` | 544 | `(clientId, input): Promise<string>` | Create sync_log entry |
+| 12 | `updateSyncLog` | 577 | `(syncLogId, status, count, error?): Promise<void>` | Update sync_log status |
+| 13 | `applyPendingSalesAdjustments` | 609 | `(clientId): Promise<number>` | RPC call for sales adjustments |
+
+**Multi-tenant Filters (All functions filter by client_id):**
+| Function | Line | Filter |
+|----------|------|--------|
+| `upsertVideo` | 112 | `client_id: clientId` (INSERT) |
+| `bulkUpsertVideos` | 156 | `client_id: clientId` (INSERT) |
+| `findUserByTiktokHandle` | 213 | `.eq('client_id', clientId)` |
+| `createUserFromCruva` | 257 | `client_id: clientId` (INSERT) |
+| `updatePrecomputedFields` | 291 | `p_client_id: clientId` (RPC param) |
+| `updateLeaderboardRanks` | 320 | `p_client_id: clientId` (RPC param) |
+| `updateMissionProgress` | 350 | `p_client_id: clientId` (RPC param) |
+| `createMissionProgressForEligibleUsers` | 388 | `p_client_id: clientId` (RPC param) |
+| `findNewlyCompletedMissions` | 430 | `.eq('client_id', clientId)` |
+| `createRedemptionForCompletedMission` | 497 | `client_id: clientId` (INSERT) |
+| `createSyncLog` | 556 | `client_id: clientId` (INSERT) |
+| `updateSyncLog` | 590 | `.eq('id', syncLogId)` |
+| `applyPendingSalesAdjustments` | 618 | `p_client_id: clientId` (RPC param) |
+
+**RPC Functions Used:**
+| Repository Function | RPC Name | Migration File |
+|---------------------|----------|----------------|
+| `updatePrecomputedFields` | `update_precomputed_fields` | 20251211_add_phase8_rpc_functions.sql |
+| `updateLeaderboardRanks` | `update_leaderboard_ranks` | 20251211_add_phase8_rpc_functions.sql |
+| `applyPendingSalesAdjustments` | `apply_pending_sales_adjustments` | 20251211_add_phase8_rpc_functions.sql |
+| `updateMissionProgress` | `update_mission_progress` | 20251212_add_update_mission_progress_rpc.sql |
+| `createMissionProgressForEligibleUsers` | `create_mission_progress_for_eligible_users` | 20251212_add_create_mission_progress_rpc.sql |
+
+---
+
+### Task 8.2.3-rpc: Phase 8 RPC Migration for Bulk Operations
+
+**File:** `/home/jorge/Loyalty/Rumi/supabase/migrations/20251211_add_phase8_rpc_functions.sql` (225 lines)
+
+**Purpose:** PostgreSQL RPC functions for O(1) bulk UPDATE operations during daily automation. All functions are vip_metric aware and enforce multi-tenant isolation.
+
+**Functions Overview:**
+| Function | Line | Signature | Returns |
+|----------|------|-----------|---------|
+| `update_precomputed_fields` | 18 | `(p_client_id UUID, p_user_ids UUID[] DEFAULT NULL)` | `INTEGER` |
+| `update_leaderboard_ranks` | 120 | `(p_client_id UUID)` | `VOID` |
+| `apply_pending_sales_adjustments` | 171 | `(p_client_id UUID)` | `INTEGER` |
+
+**Security & Multi-tenancy:**
+| Requirement | Implementation | Lines |
+|-------------|----------------|-------|
+| SECURITY DEFINER | All 3 functions | 24, 125, 176 |
+| GRANT EXECUTE to service_role | All 3 functions | 113, 163, 224 |
+| client_id filter | WHERE clauses | 51, 69, 87, 145, 148, 155, 158, 189, 195, 205, 211, 216 |
+
+**vip_metric Validation (RAISE EXCEPTION if NULL/invalid):**
+```sql
+-- Lines 34-35, 134-135 (functions 1 & 2)
+IF v_vip_metric IS NULL OR v_vip_metric NOT IN ('sales', 'units') THEN
+  RAISE EXCEPTION 'Client % has NULL or invalid vip_metric: %', p_client_id, v_vip_metric;
+END IF;
+```
+
+**Function 1: update_precomputed_fields** (lines 18-111)
+
+Updates 13 precomputed fields on users table:
+| Field | Aggregation |
+|-------|-------------|
+| `total_sales` | `SUM(gmv)` from all videos |
+| `total_units` | `SUM(units_sold)` from all videos |
+| `checkpoint_sales_current` | `SUM(gmv)` since tier_achieved_at |
+| `checkpoint_units_current` | `SUM(units_sold)` since tier_achieved_at |
+| `checkpoint_videos_posted` | `COUNT(*)` since tier_achieved_at |
+| `checkpoint_total_views` | `SUM(views)` since tier_achieved_at |
+| `checkpoint_total_likes` | `SUM(likes)` since tier_achieved_at |
+| `checkpoint_total_comments` | `SUM(comments)` since tier_achieved_at |
+| `projected_tier_at_checkpoint` | Highest tier where threshold met (vip_metric aware) |
+| `next_tier_name` | Next tier's name |
+| `next_tier_threshold` | Next tier's sales_threshold |
+| `next_tier_threshold_units` | Next tier's units_threshold |
+| `checkpoint_progress_updated_at` | `NOW()` |
+
+**vip_metric Branching** (lines 63-64):
+```sql
+(v_vip_metric = 'sales' AND u.checkpoint_sales_current >= COALESCE(t.sales_threshold, 0))
+OR (v_vip_metric = 'units' AND u.checkpoint_units_current >= COALESCE(t.units_threshold, 0))
+```
+
+**Function 2: update_leaderboard_ranks** (lines 120-161)
+
+Calculates leaderboard ranks using ROW_NUMBER():
+```sql
+-- vip_metric = 'units' (line 143)
+ROW_NUMBER() OVER (ORDER BY total_units DESC) as rank
+
+-- vip_metric = 'sales' (line 153)
+ROW_NUMBER() OVER (ORDER BY total_sales DESC) as rank
+```
+
+**Function 3: apply_pending_sales_adjustments** (lines 171-222)
+
+Atomically applies pending sales_adjustments:
+1. Updates `total_sales` and `manual_adjustments_total` from `amount` field
+2. Updates `total_units` and `manual_adjustments_units` from `amount_units` field
+3. Marks adjustments as applied (`applied_at = NOW()`)
+
+**Call Sequence (per RPCMigrationFixIMPL.md):**
+```
+1. applyPendingSalesAdjustments()  ← MUST be first (adjusts totals)
+2. updatePrecomputedFields()       ← Uses adjusted totals
+3. updateLeaderboardRanks()        ← Uses updated totals
+```
+
+---
+
 ### Task 8.2.4: Daily Automation Route
 
-**File:** `/home/jorge/Loyalty/Rumi/appcode/app/api/cron/daily-automation/route.ts` (169 lines)
+**File:** `/home/jorge/Loyalty/Rumi/appcode/app/api/cron/daily-automation/route.ts` (227 lines)
 
 **Route Handler** (route.ts:69-117):
 ```typescript
@@ -514,6 +842,221 @@ export async function createRedemptionsForCompletedMissions(
 
 ---
 
+### Task 8.2.x: Mission Progress Row Creation (GAP-MISSION-PROGRESS-ROWS)
+
+**Gap Fixed:** GAP-MISSION-PROGRESS-ROWS
+- **Documentation:** `BugFixes/MissionProgressRowCreationGap.md`, `BugFixes/MissionProgressRowCreationGapIMPL.md`
+
+**Problem:** No code existed to create `mission_progress` rows. The system assumed rows existed but never created them. Without rows, `updateMissionProgress` RPC had nothing to update.
+
+**Solution:** New Step 5.5 in salesService.ts that calls `createMissionProgressForEligibleUsers()` RPC before Step 6 (update).
+
+**Step 5.5 in salesService.ts** (salesService.ts:195-207):
+```typescript
+    // Step 5.5: Create mission_progress rows for eligible users (GAP-MISSION-PROGRESS-ROWS)
+    console.log('[SalesService] Step 5.5: Creating mission progress rows for eligible users...');
+    let missionRowsCreated = 0;
+    try {
+      missionRowsCreated = await syncRepository.createMissionProgressForEligibleUsers(clientId);
+      if (missionRowsCreated > 0) {
+        console.log(`[SalesService] Created ${missionRowsCreated} mission progress rows`);
+      }
+    } catch (createError) {
+      // Non-fatal: Log error, continue
+      const errorMsg = createError instanceof Error ? createError.message : String(createError);
+      console.warn(`[SalesService] Mission progress row creation failed (non-fatal): ${errorMsg}`);
+    }
+```
+
+**Repository Function** (syncRepository.ts:381-396):
+```typescript
+  async createMissionProgressForEligibleUsers(
+    clientId: string
+  ): Promise<number> {
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase.rpc(
+      'create_mission_progress_for_eligible_users',
+      { p_client_id: clientId }
+    );
+
+    if (error) {
+      throw new Error(`Failed to create mission progress rows: ${error.message}`);
+    }
+
+    return data ?? 0;
+  },
+```
+
+**RPC Function** (20251212_add_create_mission_progress_rpc.sql:11-62):
+```sql
+CREATE OR REPLACE FUNCTION create_mission_progress_for_eligible_users(
+  p_client_id UUID
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_created_count INTEGER := 0;
+BEGIN
+  INSERT INTO mission_progress (
+    client_id, mission_id, user_id, current_value, status,
+    checkpoint_start, checkpoint_end, created_at, updated_at
+  )
+  SELECT
+    p_client_id, m.id, u.id, 0,
+    CASE WHEN m.activated THEN 'active' ELSE 'dormant' END,
+    u.tier_achieved_at, u.next_checkpoint_at, NOW(), NOW()
+  FROM missions m
+  CROSS JOIN users u
+  LEFT JOIN tiers ut ON u.current_tier = ut.tier_id AND ut.client_id = p_client_id
+  LEFT JOIN tiers mt ON m.tier_eligibility = mt.tier_id AND mt.client_id = p_client_id
+  WHERE m.client_id = p_client_id
+    AND u.client_id = p_client_id
+    AND m.enabled = true
+    AND (
+      m.tier_eligibility = 'all'
+      OR (ut.tier_order IS NOT NULL AND mt.tier_order IS NOT NULL AND ut.tier_order >= mt.tier_order)
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM mission_progress mp
+      WHERE mp.mission_id = m.id AND mp.user_id = u.id AND mp.client_id = p_client_id
+    );
+
+  GET DIAGNOSTICS v_created_count = ROW_COUNT;
+  RETURN v_created_count;
+END;
+$$;
+```
+
+**Tier Eligibility Logic:**
+| tier_eligibility Value | Behavior |
+|------------------------|----------|
+| `'all'` | ALL users get mission_progress rows (for raffles, universal missions) |
+| `'tier_2'` | Only users with tier_order >= tier_2's tier_order |
+| `'tier_3'` | Only users with tier_order >= tier_3's tier_order |
+
+**Multi-tenant Filters (6 total):**
+- Line 44: `ut.client_id = p_client_id` (user tier join)
+- Line 45: `mt.client_id = p_client_id` (mission tier join)
+- Line 46: `m.client_id = p_client_id` (missions)
+- Line 47: `u.client_id = p_client_id` (users)
+- Line 57: `mp.client_id = p_client_id` (NOT EXISTS subquery)
+- Line 33: `p_client_id` in INSERT values
+
+---
+
+### Task 8.2.x: Mission Progress Update (BUG-MISSION-PROGRESS-UPDATE)
+
+**Bug Fixed:** BUG-MISSION-PROGRESS-UPDATE
+- **Documentation:** `BugFixes/MissionProgressUpdateFix.md`, `BugFixes/MissionProgressUpdateFixIMPL.md`
+
+**Problem:** `updateMissionProgress` was a stub throwing "Not implemented". Mission progress `current_value` was never updated, missions never completed.
+
+**Solution:** New RPC function that aggregates videos table data within checkpoint window, updates `current_value`, and marks missions as completed when target reached.
+
+**Repository Function** (syncRepository.ts:337-360):
+```typescript
+  async updateMissionProgress(
+    clientId: string,
+    userIds: string[]
+  ): Promise<number> {
+    const supabase = createAdminClient();
+
+    // Per Codex audit: empty/null userIds means "update all users for this client"
+    // RPC handles this internally with conditional logic
+    const { data, error } = await (supabase.rpc as Function)(
+      'update_mission_progress',
+      {
+        p_client_id: clientId,
+        p_user_ids: userIds.length > 0 ? userIds : null,  // null = all users
+      }
+    );
+
+    if (error) {
+      throw new Error(`Failed to update mission progress: ${error.message}`);
+    }
+
+    return (data as number) ?? 0;
+  },
+```
+
+**RPC Function - Value Update** (20251212_add_update_mission_progress_rpc.sql:24-78):
+```sql
+  UPDATE mission_progress mp
+  SET
+    current_value = CASE m.mission_type
+      WHEN 'sales_dollars' THEN (
+        SELECT COALESCE(SUM(v.gmv), 0)::INTEGER FROM videos v
+        WHERE v.user_id = mp.user_id AND v.client_id = p_client_id
+          AND v.post_date >= mp.checkpoint_start AND v.post_date < mp.checkpoint_end
+      )
+      WHEN 'sales_units' THEN (
+        SELECT COALESCE(SUM(v.units_sold), 0) FROM videos v
+        WHERE v.user_id = mp.user_id AND v.client_id = p_client_id
+          AND v.post_date >= mp.checkpoint_start AND v.post_date < mp.checkpoint_end
+      )
+      WHEN 'videos' THEN (
+        SELECT COUNT(*)::INTEGER FROM videos v
+        WHERE v.user_id = mp.user_id AND v.client_id = p_client_id
+          AND v.post_date >= mp.checkpoint_start AND v.post_date < mp.checkpoint_end
+      )
+      WHEN 'views' THEN (
+        SELECT COALESCE(SUM(v.views), 0)::INTEGER FROM videos v ...
+      )
+      WHEN 'likes' THEN (
+        SELECT COALESCE(SUM(v.likes), 0)::INTEGER FROM videos v ...
+      )
+      ELSE mp.current_value
+    END,
+    updated_at = NOW()
+  FROM missions m
+  WHERE mp.mission_id = m.id
+    AND mp.client_id = p_client_id
+    AND m.client_id = p_client_id
+    AND (p_user_ids IS NULL OR mp.user_id = ANY(p_user_ids))
+    AND mp.status = 'active'
+    AND m.enabled = true AND m.activated = true;
+```
+
+**RPC Function - Completion Detection** (20251212_add_update_mission_progress_rpc.sql:82-97):
+```sql
+  UPDATE mission_progress mp
+  SET
+    status = 'completed',
+    completed_at = NOW(),
+    updated_at = NOW()
+  FROM missions m
+  WHERE mp.mission_id = m.id
+    AND mp.client_id = p_client_id
+    AND m.client_id = p_client_id
+    AND (p_user_ids IS NULL OR mp.user_id = ANY(p_user_ids))
+    AND mp.status = 'active'
+    AND m.enabled = true AND m.activated = true
+    AND COALESCE(m.target_value, 0) > 0
+    AND mp.current_value >= m.target_value;
+```
+
+**Mission Type Aggregations:**
+| mission_type | Aggregation | Source Column |
+|--------------|-------------|---------------|
+| `sales_dollars` | `SUM(gmv)` | videos.gmv |
+| `sales_units` | `SUM(units_sold)` | videos.units_sold |
+| `videos` | `COUNT(*)` | videos (row count) |
+| `views` | `SUM(views)` | videos.views |
+| `likes` | `SUM(likes)` | videos.likes |
+
+**Checkpoint Window Filter:**
+- `v.post_date >= mp.checkpoint_start` - Videos posted on or after checkpoint start
+- `v.post_date < mp.checkpoint_end` - Videos posted before checkpoint end (exclusive)
+
+**Completion Logic:**
+- `mp.current_value >= m.target_value` → `status = 'completed'`, `completed_at = NOW()`
+- Only active missions with `target_value > 0` are evaluated
+
+---
+
 ### Environment Variables Required
 
 | Variable | Purpose | Used At |
@@ -548,7 +1091,31 @@ grep -n "users.client_id" appcode/lib/repositories/syncRepository.ts
 **Test 4: createRedemptionsForCompletedMissions at documented line**
 ```bash
 grep -n "export async function createRedemptionsForCompletedMissions" appcode/lib/services/salesService.ts
-# Expected: 327:export async function createRedemptionsForCompletedMissions(
+# Expected: 341:export async function createRedemptionsForCompletedMissions(
+```
+
+**Test 5: createMissionProgressForEligibleUsers at documented line (GAP-MISSION-PROGRESS-ROWS)**
+```bash
+grep -n "async createMissionProgressForEligibleUsers" appcode/lib/repositories/syncRepository.ts
+# Expected: 381:  async createMissionProgressForEligibleUsers(
+```
+
+**Test 6: updateMissionProgress RPC call at documented line (BUG-MISSION-PROGRESS-UPDATE)**
+```bash
+grep -n "async updateMissionProgress" appcode/lib/repositories/syncRepository.ts
+# Expected: 337:  async updateMissionProgress(
+```
+
+**Test 7: Step 5.5 exists in salesService**
+```bash
+grep -n "Step 5.5" appcode/lib/services/salesService.ts
+# Expected: 195:    // Step 5.5: Create mission_progress rows
+```
+
+**Test 8: Mission progress RPC functions exist in Supabase types**
+```bash
+grep -n "create_mission_progress_for_eligible_users\|update_mission_progress" appcode/lib/types/database.ts | head -4
+# Expected: Both RPC functions appear in generated types
 ```
 
 ---
@@ -593,7 +1160,7 @@ runCheckpointEvaluation(clientId) (tierCalculationService.ts:129)
 
 ### Task 8.3.1: Tier Calculation Service
 
-**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/services/tierCalculationService.ts` (301 lines)
+**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/services/tierCalculationService.ts` (455 lines)
 
 **Main Export** (tierCalculationService.ts:129-301):
 ```typescript
@@ -669,7 +1236,7 @@ function calculateCheckpointValue(user: CheckpointUserData): number {
 
 ### Task 8.3.0a: Checkpoint Repository Functions
 
-**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/tierRepository.ts` (597 lines)
+**File:** `/home/jorge/Loyalty/Rumi/appcode/lib/repositories/tierRepository.ts` (755 lines)
 
 **Checkpoint Types** (tierRepository.ts:102-158):
 ```typescript
@@ -709,7 +1276,7 @@ export interface CheckpointLogData {
 }
 ```
 
-**getUsersDueForCheckpoint** (tierRepository.ts:401-466):
+**getUsersDueForCheckpoint** (tierRepository.ts:416-489):
 ```typescript
 async getUsersDueForCheckpoint(clientId: string): Promise<CheckpointUserData[]> {
   const supabase = await createClient();
@@ -1120,12 +1687,407 @@ grep -n "checkForPromotions" appcode/app/api/cron/daily-automation/route.ts
 
 ---
 
+## Task 8.3.3 - Tier Change Notifications
+
+**Status:** Complete
+**File:** `lib/utils/notificationService.ts` (370 lines)
+**References:** EXECUTION_PLAN.md Task 8.3.3, Loyalty.md Flow 7 lines 1606-1610
+
+### Problem Solved
+
+Users were not notified when their tier changed. Both promotion (congratulations) and demotion (encouragement) emails needed to be sent.
+
+**Dual Sources:** Tier changes occur in TWO places:
+1. `checkForPromotions()` → promotions only (real-time threshold check)
+2. `runCheckpointEvaluation()` → promotions AND demotions (checkpoint maintenance)
+
+### Function Call Chain
+
+```
+Daily Cron (route.ts:92)
+  └─ checkForPromotions(clientId)              # Step 3b (route.ts:129)
+  │   └─► FOR each promotion:
+  │       └─ sendTierChangeNotification()      # Step 3b.1 (route.ts:142)
+  │           ├─→ supabase.from('users')       # notificationService.ts:98
+  │           ├─→ supabase.from('tiers')       # notificationService.ts:126
+  │           ├─→ supabase.from('clients')     # notificationService.ts:147
+  │           ├─→ buildPromotionEmail()        # notificationService.ts:181
+  │           └─→ resend.emails.send()         # notificationService.ts:170
+  │
+  └─ runCheckpointEvaluation(clientId)         # Step 3c (route.ts:152)
+      └─► FOR each change (promoted/demoted):
+          └─ sendTierChangeNotification()      # Step 3c.1 (route.ts:174)
+              ├─→ (same flow as above)
+              └─→ buildDemotionEmail()         # notificationService.ts:242 (if demotion)
+```
+
+### Database Tables Used
+
+| Table | Purpose | SchemaFinalv2.md |
+|-------|---------|------------------|
+| `users` | email, tiktok_handle (line 130), next_tier_threshold (line 146) | Section 2.2 |
+| `tiers` | tier_name (line 263) | Section 2.4 |
+| `clients` | name (line 112), vip_metric (line 118) | Section 2.1 |
+
+### New File: notificationService.ts
+
+**Purpose:** Send transactional emails to users via Resend (separate from alertService.ts which handles admin alerts).
+
+**Types** (notificationService.ts:21-44):
+```typescript
+export type TierChangeType = 'promotion' | 'demotion';
+
+export interface TierChangeNotificationParams {
+  userId: string;
+  fromTier: string;      // tier_id (e.g., 'tier_1')
+  toTier: string;        // tier_id (e.g., 'tier_2')
+  changeType: TierChangeType;
+  totalValue: number;    // total_sales or total_units
+  periodStartDate?: string;  // For demotions: tier_achieved_at
+  periodEndDate?: string;    // For demotions: next_checkpoint_at
+}
+
+export interface NotificationResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  skipped?: boolean;     // True if user has no email
+}
+```
+
+**sendTierChangeNotification** (notificationService.ts:78-169):
+```typescript
+export async function sendTierChangeNotification(
+  clientId: string,
+  params: TierChangeNotificationParams
+): Promise<NotificationResult> {
+  const { userId, fromTier, toTier, changeType, totalValue, periodStartDate, periodEndDate } = params;
+
+  // Check if Resend is configured
+  if (!process.env.RESEND_API_KEY) {
+    return { success: false, error: 'RESEND_API_KEY not configured', skipped: true };
+  }
+
+  const supabase = await createClient();
+
+  // Fetch user data
+  const { data: userData } = await supabase
+    .from('users')
+    .select('email, tiktok_handle, next_tier_threshold, next_tier_threshold_units')
+    .eq('id', userId)
+    .eq('client_id', clientId)             // ⚠️ Multi-tenant filter
+    .single();
+
+  // Fetch tier names (old and new)
+  const { data: tiersData } = await supabase
+    .from('tiers')
+    .select('tier_id, tier_name')
+    .eq('client_id', clientId)             // ⚠️ Multi-tenant filter
+    .in('tier_id', [fromTier, toTier]);
+
+  // Fetch client data
+  const { data: clientData } = await supabase
+    .from('clients')
+    .select('name, vip_metric')
+    .eq('id', clientId)                    // ⚠️ Client lookup
+    .single();
+
+  // Build email content
+  const { subject, html, text } = changeType === 'promotion'
+    ? buildPromotionEmail(user, oldTierName, newTierName, totalValue, client)
+    : buildDemotionEmail(user, oldTierName, newTierName, totalValue, client, periodStartDate, periodEndDate);
+
+  // Send via Resend
+  const { data, error } = await resend.emails.send({
+    from: `${client.name} <onboarding@resend.dev>`,
+    to: user.email,
+    subject, html, text,
+  });
+
+  return { success: !error, messageId: data?.id };
+}
+```
+
+**buildPromotionEmail** (notificationService.ts:181-237):
+- Subject: `🎉 You've been promoted to {NewTierName}!`
+- Body: Congratulations message with tier progress, new benefits
+- Signature: Dynamic `{CompanyName} Team`
+
+**buildDemotionEmail** (notificationService.ts:242-310):
+- Subject: `Important: Your tier status has changed`
+- Body: Encouragement message with how to level up
+- Includes: Checkpoint period dates, threshold to regain tier
+- Signature: Dynamic `{CompanyName} Team`
+
+### Route Integration (route.ts)
+
+**Imports** (route.ts:29):
+```typescript
+import { sendTierChangeNotification } from '@/lib/utils/notificationService';
+```
+
+**Step 3b.1: Promotion notifications** (route.ts:139-147):
+```typescript
+// Step 3b.1: Send promotion notifications (Task 8.3.3)
+console.log(`[DailyAutomation] Sending promotion notifications`);
+for (const promotion of promotionResult.promotions) {
+  await sendTierChangeNotification(clientId, {
+    userId: promotion.userId,
+    fromTier: promotion.fromTier,
+    toTier: promotion.toTier,
+    changeType: 'promotion',
+    totalValue: promotion.totalValue,
+  });
+}
+```
+
+**Step 3c.1: Checkpoint notifications** (route.ts:168-181):
+```typescript
+// Step 3c.1: Send tier change notifications from checkpoint evaluation (Task 8.3.3)
+const checkpointChanges = tierResult.results.filter(r => r.status !== 'maintained');
+if (checkpointChanges.length > 0) {
+  for (const change of checkpointChanges) {
+    await sendTierChangeNotification(clientId, {
+      userId: change.userId,
+      fromTier: change.tierBefore,
+      toTier: change.tierAfter,
+      changeType: change.status === 'promoted' ? 'promotion' : 'demotion',
+      totalValue: change.checkpointValue,
+      periodStartDate: change.periodStartDate,
+      periodEndDate: change.periodEndDate,
+    });
+  }
+}
+```
+
+### Service Interface Update (tierCalculationService.ts)
+
+**CheckpointEvaluationResult** extended (tierCalculationService.ts:36-45):
+```typescript
+export interface CheckpointEvaluationResult {
+  userId: string;
+  tierBefore: string;
+  tierAfter: string;
+  status: 'maintained' | 'promoted' | 'demoted';
+  checkpointValue: number;
+  threshold: number;
+  periodStartDate: string;  // For notifications (Task 8.3.3)
+  periodEndDate: string;    // For notifications (Task 8.3.3)
+}
+```
+
+### Multi-Tenant Filters Summary (Task 8.3.3)
+
+| Function | File:Line | Filter |
+|----------|-----------|--------|
+| `sendTierChangeNotification` (users) | notificationService.ts:101-102 | `.eq('id', userId).eq('client_id', clientId)` |
+| `sendTierChangeNotification` (tiers) | notificationService.ts:129 | `.eq('client_id', clientId)` |
+| `sendTierChangeNotification` (clients) | notificationService.ts:150 | `.eq('id', clientId)` |
+
+### Verification Commands (Task 8.3.3)
+
+**Test 1: sendTierChangeNotification at documented line**
+```bash
+grep -n "export async function sendTierChangeNotification" appcode/lib/utils/notificationService.ts
+# Expected: 78:export async function sendTierChangeNotification(
+```
+
+**Test 2: Route calls notification for both sources**
+```bash
+grep -n "sendTierChangeNotification" appcode/app/api/cron/daily-automation/route.ts
+# Expected: Lines 29 (import), 142 (promotions), 174 (checkpoint)
+```
+
+**Test 3: Multi-tenant filters present**
+```bash
+grep -n "eq('client_id'" appcode/lib/utils/notificationService.ts
+# Expected: Lines 102, 129
+```
+
+---
+
+## Task 8.3.4 - Raffle Drawing Calendar Event
+
+**Status:** Complete
+**References:** EXECUTION_PLAN.md Task 8.3.4, Loyalty.md lines 1772-1783
+
+### Problem Solved
+
+Admin needed calendar reminders when raffles end so they can draw winners. The daily cron now creates Google Calendar events for raffles ending TODAY.
+
+### Function Call Chain
+
+```
+Daily Cron (route.ts:92)
+  └─ syncRepository.findRafflesEndingToday(clientId)   # Step 3d (route.ts:191)
+  │   ├─→ supabase.from('missions')                    # syncRepository.ts:656
+  │   └─→ supabase.from('raffle_participations')       # syncRepository.ts:686 (count)
+  │
+  └─► FOR each raffle ending today:
+      └─ createRaffleDrawingEvent()                    # route.ts:201
+          └─→ createCalendarEvent()                    # googleCalendar.ts:119
+              └─→ google.calendar.events.insert()      # googleCalendar.ts:162
+```
+
+### Database Tables Used
+
+| Table | Purpose | SchemaFinalv2.md |
+|-------|---------|------------------|
+| `missions` | raffle_end_date (line 380), display_name (line 371) | Section 2.5 |
+| `rewards` | name (via JOIN with missions.reward_id) | Section 2.6 |
+| `raffle_participations` | participant count | Section 8 (line 894) |
+
+### New Repository Function (syncRepository.ts)
+
+**RaffleEndingTodayData** (syncRepository.ts:88-94):
+```typescript
+export interface RaffleEndingTodayData {
+  missionId: string;
+  missionName: string;
+  prizeName: string;
+  participantCount: number;
+  raffleEndDate: string;
+}
+```
+
+**findRafflesEndingToday** (syncRepository.ts:649-709):
+```typescript
+async findRafflesEndingToday(clientId: string): Promise<RaffleEndingTodayData[]> {
+  const supabase = createAdminClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Query missions with raffle_end_date = TODAY
+  const { data: missions } = await supabase
+    .from('missions')
+    .select(`
+      id, display_name, raffle_end_date, reward_id,
+      rewards!inner ( name )
+    `)
+    .eq('client_id', clientId)           // ⚠️ Multi-tenant filter
+    .eq('mission_type', 'raffle')
+    .eq('activated', true)
+    .eq('enabled', true)
+    .gte('raffle_end_date', `${today}T00:00:00`)
+    .lt('raffle_end_date', `${today}T23:59:59`);
+
+  // Get participant counts for each raffle
+  for (const mission of missions) {
+    const { count } = await supabase
+      .from('raffle_participations')
+      .select('*', { count: 'exact', head: true })
+      .eq('client_id', clientId)         // ⚠️ Multi-tenant filter
+      .eq('mission_id', mission.id);
+    // ... build result
+  }
+}
+```
+
+### Route Integration (route.ts)
+
+**Imports** (route.ts:30-31):
+```typescript
+import { createRaffleDrawingEvent } from '@/lib/utils/googleCalendar';
+import { syncRepository } from '@/lib/repositories/syncRepository';
+```
+
+**Step 3d: Raffle calendar events** (route.ts:186-217):
+```typescript
+// Step 3d: Create calendar events for raffles ending today (Task 8.3.4)
+console.log(`[DailyAutomation] Checking for raffles ending today`);
+let raffleEventsCreated = 0;
+try {
+  const rafflesEndingToday = await syncRepository.findRafflesEndingToday(clientId);
+
+  if (rafflesEndingToday.length > 0) {
+    for (const raffle of rafflesEndingToday) {
+      // Set due time to 12:00 PM EST on raffle_end_date
+      const drawingDateTime = new Date(raffle.raffleEndDate);
+      drawingDateTime.setHours(12, 0, 0, 0); // 12:00 PM
+
+      const calendarResult = await createRaffleDrawingEvent(
+        raffle.missionName,
+        raffle.prizeName,
+        raffle.participantCount,
+        drawingDateTime
+      );
+
+      if (calendarResult.success) {
+        raffleEventsCreated++;
+      }
+    }
+  }
+} catch (raffleError) {
+  // Non-fatal: Log error, continue
+}
+```
+
+**Response Interface Updated** (route.ts:61-63):
+```typescript
+raffleCalendar: {
+  eventsCreated: number;
+};
+```
+
+### Pre-existing Helper (googleCalendar.ts)
+
+**createRaffleDrawingEvent** (googleCalendar.ts:479-498):
+```typescript
+export async function createRaffleDrawingEvent(
+  missionName: string,
+  prizeName: string,
+  participantCount: number,
+  drawingDateTime: Date
+): Promise<CalendarEventResult> {
+  const title = `🎲 Draw Raffle Winner: ${missionName}`;
+  const description = `Raffle: ${missionName}
+Prize: ${prizeName}
+Total Participants: ${participantCount}
+
+Action: Select winner in Admin UI`;
+
+  return createCalendarEvent({
+    title, description,
+    dueDateTime: drawingDateTime,
+    reminderMinutes: 15,
+  });
+}
+```
+
+### Multi-Tenant Filters Summary (Task 8.3.4)
+
+| Function | File:Line | Filter |
+|----------|-----------|--------|
+| `findRafflesEndingToday` (missions) | syncRepository.ts:667 | `.eq('client_id', clientId)` |
+| `findRafflesEndingToday` (raffle_participations) | syncRepository.ts:689 | `.eq('client_id', clientId)` |
+
+### Verification Commands (Task 8.3.4)
+
+**Test 1: findRafflesEndingToday at documented line**
+```bash
+grep -n "async findRafflesEndingToday" appcode/lib/repositories/syncRepository.ts
+# Expected: 649:  async findRafflesEndingToday(clientId: string): Promise<RaffleEndingTodayData[]> {
+```
+
+**Test 2: Route calls raffle calendar creation**
+```bash
+grep -n "createRaffleDrawingEvent\|findRafflesEndingToday" appcode/app/api/cron/daily-automation/route.ts
+# Expected: Lines 30 (import), 191, 201
+```
+
+**Test 3: Multi-tenant filters present**
+```bash
+grep -n "eq('client_id'" appcode/lib/repositories/syncRepository.ts | tail -3
+# Expected: Lines 667, 689 show client_id filters in raffle function
+```
+
+---
+
 ## Pending Implementation
 
 ### Step 8.3 - Remaining Tasks
 - ~~Task 8.3.2: Integrate with daily-automation~~ ✅ Complete
-- Task 8.3.3: Tier change notifications (needs dual-source: promotions + demotions)
-- Task 8.3.4: Raffle drawing calendar event
+- ~~Task 8.3.3: Tier change notifications~~ ✅ Complete
+- ~~Task 8.3.4: Raffle drawing calendar event~~ ✅ Complete
 
 ### Step 8.4 - Manual Upload
 - Task 8.4.1: Manual upload route (admin fallback)
@@ -1163,7 +2125,7 @@ grep -n "checkForPromotions" appcode/app/api/cron/daily-automation/route.ts
 
 ---
 
-**Document Version:** 2.1
+**Document Version:** 2.2
 **Created:** 2025-12-10
-**Last Updated:** 2025-12-12
+**Last Updated:** 2025-12-12 (v2.2 - Added mission progress creation per GAP-MISSION-PROGRESS-ROWS, mission progress update per BUG-MISSION-PROGRESS-UPDATE)
 **Phase:** 8 - Automation & Cron Jobs

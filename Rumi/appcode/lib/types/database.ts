@@ -1,4 +1,3 @@
-Using workdir /home/jorge/Loyalty/Rumi
 export type Json =
   | string
   | number
@@ -1466,6 +1465,10 @@ export type Database = {
       auth_update_last_login: {
         Args: { p_user_id: string }
         Returns: undefined
+      }
+      create_mission_progress_for_eligible_users: {
+        Args: { p_client_id: string }
+        Returns: number
       }
       get_available_missions: {
         Args: { p_client_id: string; p_current_tier: string; p_user_id: string }

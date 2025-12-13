@@ -40,6 +40,8 @@ export interface CheckpointEvaluationResult {
   status: 'maintained' | 'promoted' | 'demoted';
   checkpointValue: number;
   threshold: number;
+  periodStartDate: string;  // For notifications (Task 8.3.3)
+  periodEndDate: string;    // For notifications (Task 8.3.3)
 }
 
 /**
@@ -283,6 +285,8 @@ export async function runCheckpointEvaluation(
         status,
         checkpointValue,
         threshold: newTier.threshold,
+        periodStartDate: user.tierAchievedAt,
+        periodEndDate: new Date().toISOString(),
       });
 
       // Update counters

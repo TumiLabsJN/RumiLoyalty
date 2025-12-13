@@ -26,6 +26,10 @@ import { withCronAuth } from '@/lib/utils/cronAuth';
 import { processDailySales } from '@/lib/services/salesService';
 import { runCheckpointEvaluation, checkForPromotions } from '@/lib/services/tierCalculationService';
 import { sendAdminAlert, determineAlertType } from '@/lib/utils/alertService';
+import { sendTierChangeNotification } from '@/lib/utils/notificationService';
+import { createRaffleDrawingEvent } from '@/lib/utils/googleCalendar';
+import { syncRepository } from '@/lib/repositories/syncRepository';
+import { commissionBoostRepository } from '@/lib/repositories/commissionBoostRepository';
 
 /**
  * Response type for successful cron execution
@@ -54,6 +58,14 @@ interface CronSuccessResponse {
       promoted: number;
       maintained: number;
       demoted: number;
+    };
+    raffleCalendar: {
+      eventsCreated: number;
+    };
+    boostActivation: {
+      activatedCount: number;
+      expiredCount: number;
+      transitionedToPendingInfoCount: number;
     };
   };
   timestamp: string;
@@ -129,6 +141,18 @@ export const GET = withCronAuth(async () => {
         console.log(
           `[DailyAutomation] Promoted ${promotionResult.usersPromoted} users to higher tiers`
         );
+
+        // Step 3b.1: Send promotion notifications (Task 8.3.3)
+        console.log(`[DailyAutomation] Sending promotion notifications`);
+        for (const promotion of promotionResult.promotions) {
+          await sendTierChangeNotification(clientId, {
+            userId: promotion.userId,
+            fromTier: promotion.fromTier,
+            toTier: promotion.toTier,
+            changeType: 'promotion',
+            totalValue: promotion.totalValue,
+          });
+        }
       }
 
       // Step 3c: Run tier checkpoint evaluation (Task 8.3.2)
@@ -146,6 +170,124 @@ export const GET = withCronAuth(async () => {
         `[DailyAutomation] Tier calculation completed: ${tierResult.usersEvaluated} users evaluated ` +
           `(${tierResult.promoted} promoted, ${tierResult.maintained} maintained, ${tierResult.demoted} demoted)`
       );
+
+      // Step 3c.1: Send tier change notifications from checkpoint evaluation (Task 8.3.3)
+      // Promotions and demotions only - no email for 'maintained'
+      const checkpointChanges = tierResult.results.filter(r => r.status !== 'maintained');
+      if (checkpointChanges.length > 0) {
+        console.log(`[DailyAutomation] Sending ${checkpointChanges.length} tier change notifications from checkpoint`);
+        for (const change of checkpointChanges) {
+          await sendTierChangeNotification(clientId, {
+            userId: change.userId,
+            fromTier: change.tierBefore,
+            toTier: change.tierAfter,
+            changeType: change.status === 'promoted' ? 'promotion' : 'demotion',
+            totalValue: change.checkpointValue,
+            periodStartDate: change.periodStartDate,
+            periodEndDate: change.periodEndDate,
+          });
+        }
+      }
+
+      // Step 3d: Create calendar events for raffles ending today (Task 8.3.4)
+      // Per Loyalty.md lines 1772-1783: Create reminder at 12:00 PM EST
+      console.log(`[DailyAutomation] Checking for raffles ending today`);
+      let raffleEventsCreated = 0;
+      try {
+        const rafflesEndingToday = await syncRepository.findRafflesEndingToday(clientId);
+
+        if (rafflesEndingToday.length > 0) {
+          console.log(`[DailyAutomation] Found ${rafflesEndingToday.length} raffles ending today`);
+
+          for (const raffle of rafflesEndingToday) {
+            // Set due time to 12:00 PM EST on raffle_end_date
+            const drawingDateTime = new Date(raffle.raffleEndDate);
+            drawingDateTime.setHours(12, 0, 0, 0); // 12:00 PM
+
+            const calendarResult = await createRaffleDrawingEvent(
+              raffle.missionName,
+              raffle.prizeName,
+              raffle.participantCount,
+              drawingDateTime
+            );
+
+            if (calendarResult.success) {
+              raffleEventsCreated++;
+              console.log(`[DailyAutomation] Created calendar event for raffle: ${raffle.missionName}`);
+            } else {
+              console.warn(`[DailyAutomation] Failed to create calendar event for raffle ${raffle.missionName}: ${calendarResult.error}`);
+            }
+          }
+        }
+      } catch (raffleError) {
+        // Non-fatal: Log error, continue
+        const errorMsg = raffleError instanceof Error ? raffleError.message : String(raffleError);
+        console.warn(`[DailyAutomation] Raffle calendar check failed (non-fatal): ${errorMsg}`);
+      }
+
+      // Step 3e: Activate/expire commission boosts (GAP-BOOST-ACTIVATION + BUG-BOOST-EXPIRATION-STATE fix)
+      // Per Loyalty.md line 416: "Aligned with commission boost activation (2 PM EST)"
+      console.log(`[DailyAutomation] Processing commission boost lifecycle`);
+      let boostActivatedCount = 0;
+      let boostExpiredCount = 0;
+      let boostTransitionedCount = 0;
+      try {
+        // Step 4: Activate scheduled boosts (scheduled → active)
+        const activationResult = await commissionBoostRepository.activateScheduledBoosts(clientId);
+        boostActivatedCount = activationResult.activatedCount;
+
+        if (activationResult.activatedCount > 0) {
+          console.log(
+            `[DailyAutomation] Activated ${activationResult.activatedCount} commission boosts`
+          );
+        }
+
+        if (activationResult.errors.length > 0) {
+          console.warn(
+            `[DailyAutomation] Boost activation had ${activationResult.errors.length} errors`
+          );
+        }
+
+        // Step 5: Expire active boosts (active → expired)
+        // Per BUG-BOOST-EXPIRATION-STATE fix: now ends in 'expired' state
+        const expirationResult = await commissionBoostRepository.expireActiveBoosts(clientId);
+        boostExpiredCount = expirationResult.expiredCount;
+
+        if (expirationResult.expiredCount > 0) {
+          console.log(
+            `[DailyAutomation] Expired ${expirationResult.expiredCount} commission boosts ` +
+            `(total payout: $${expirationResult.expirations.reduce((sum, e) => sum + e.finalPayoutAmount, 0).toFixed(2)})`
+          );
+        }
+
+        if (expirationResult.errors.length > 0) {
+          console.warn(
+            `[DailyAutomation] Boost expiration had ${expirationResult.errors.length} errors`
+          );
+        }
+
+        // Step 6: Transition expired boosts to pending_info (expired → pending_info)
+        // Per BUG-BOOST-EXPIRATION-STATE fix: separate operation
+        // NOTE: For MVP, called immediately. Future: configurable dwell time.
+        const transitionResult = await commissionBoostRepository.transitionExpiredToPendingInfo(clientId);
+        boostTransitionedCount = transitionResult.transitionedCount;
+
+        if (transitionResult.transitionedCount > 0) {
+          console.log(
+            `[DailyAutomation] Transitioned ${transitionResult.transitionedCount} boosts to pending_info`
+          );
+        }
+
+        if (transitionResult.errors.length > 0) {
+          console.warn(
+            `[DailyAutomation] Boost transition had ${transitionResult.errors.length} errors`
+          );
+        }
+      } catch (boostError) {
+        // Non-fatal: Log error, continue
+        const errorMsg = boostError instanceof Error ? boostError.message : String(boostError);
+        console.warn(`[DailyAutomation] Boost lifecycle processing failed (non-fatal): ${errorMsg}`);
+      }
 
       return NextResponse.json(
         {
@@ -167,6 +309,14 @@ export const GET = withCronAuth(async () => {
               promoted: tierResult.promoted,
               maintained: tierResult.maintained,
               demoted: tierResult.demoted,
+            },
+            raffleCalendar: {
+              eventsCreated: raffleEventsCreated,
+            },
+            boostActivation: {
+              activatedCount: boostActivatedCount,
+              expiredCount: boostExpiredCount,
+              transitionedToPendingInfoCount: boostTransitionedCount,
             },
           },
           timestamp,

@@ -82,6 +82,17 @@ export interface SyncLogInput {
   triggeredBy?: string;
 }
 
+/**
+ * Data for raffle calendar event creation (Task 8.3.4)
+ */
+export interface RaffleEndingTodayData {
+  missionId: string;
+  missionName: string;
+  prizeName: string;
+  participantCount: number;
+  raffleEndDate: string;
+}
+
 // ============================================
 // Repository Implementation
 // ============================================
@@ -360,6 +371,42 @@ export const syncRepository = {
   },
 
   /**
+   * Create mission_progress rows for eligible users
+   * Per MissionsRewardsFlows.md Step 0.5 and GAP-MISSION-PROGRESS-ROWS
+   *
+   * For each enabled mission:
+   * - tier_eligibility='all' → all users eligible
+   * - tier_eligibility='tier_X' → users with tier_order >= mission tier_order
+   *
+   * Creates rows with:
+   * - checkpoint_start = user.tier_achieved_at (snapshot)
+   * - checkpoint_end = user.next_checkpoint_at (snapshot)
+   * - status = 'active' (if activated) or 'dormant' (if not)
+   * - current_value = 0
+   *
+   * Skips users who already have progress for that mission (NOT EXISTS)
+   *
+   * @param clientId - Client ID for multi-tenant isolation
+   * @returns Count of progress records created
+   */
+  async createMissionProgressForEligibleUsers(
+    clientId: string
+  ): Promise<number> {
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase.rpc(
+      'create_mission_progress_for_eligible_users',
+      { p_client_id: clientId }
+    );
+
+    if (error) {
+      throw new Error(`Failed to create mission progress rows: ${error.message}`);
+    }
+
+    return data ?? 0;
+  },
+
+  /**
    * Find missions where status just changed to 'completed'
    * (current_value >= target_value AND status was 'in_progress' AND no existing redemption)
    * Per TierAtClaimLookupFix.md - JOINs users table to get current_tier
@@ -587,5 +634,77 @@ export const syncRepository = {
     }
 
     return (data as number) ?? 0;
+  },
+
+  // ========== Raffle Calendar Events (Task 8.3.4) ==========
+
+  /**
+   * Find raffles ending today for calendar event creation
+   * Per EXECUTION_PLAN.md Task 8.3.4: Query missions WHERE mission_type='raffle'
+   * AND raffle_end_date = TODAY AND activated = true
+   *
+   * @param clientId - Client ID for multi-tenant isolation
+   * @returns Array of raffle data needed for calendar events
+   */
+  async findRafflesEndingToday(clientId: string): Promise<RaffleEndingTodayData[]> {
+    const supabase = createAdminClient();
+
+    // Get today's date in YYYY-MM-DD format for comparison
+    const today = new Date().toISOString().split('T')[0];
+
+    // Query missions with raffle_end_date = TODAY
+    const { data: missions, error: missionsError } = await supabase
+      .from('missions')
+      .select(`
+        id,
+        display_name,
+        raffle_end_date,
+        reward_id,
+        rewards!inner (
+          name
+        )
+      `)
+      .eq('client_id', clientId)
+      .eq('mission_type', 'raffle')
+      .eq('activated', true)
+      .eq('enabled', true)
+      .gte('raffle_end_date', `${today}T00:00:00`)
+      .lt('raffle_end_date', `${today}T23:59:59`);
+
+    if (missionsError) {
+      throw new Error(`Failed to query raffles ending today: ${missionsError.message}`);
+    }
+
+    if (!missions || missions.length === 0) {
+      return [];
+    }
+
+    // Get participant counts for each raffle
+    const results: RaffleEndingTodayData[] = [];
+
+    for (const mission of missions) {
+      const { count, error: countError } = await supabase
+        .from('raffle_participations')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+        .eq('mission_id', mission.id);
+
+      if (countError) {
+        console.warn(`Failed to count participants for raffle ${mission.id}: ${countError.message}`);
+      }
+
+      // Extract reward name from joined data
+      const rewardData = mission.rewards as unknown as { name: string } | null;
+
+      results.push({
+        missionId: mission.id,
+        missionName: mission.display_name,
+        prizeName: rewardData?.name ?? 'Unknown Prize',
+        participantCount: count ?? 0,
+        raffleEndDate: mission.raffle_end_date!,
+      });
+    }
+
+    return results;
   },
 };
