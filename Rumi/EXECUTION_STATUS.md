@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-13 (BUG-BOOST-EXPIRATION-STATE fix COMPLETE) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-14 (Step 8.4 Tasks 8.4.1-8.4.2 COMPLETE) [Update this timestamp when you modify this document]
 
 ---
 
@@ -182,17 +182,16 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**BUG-BOOST-EXPIRATION-STATE Fix COMPLETE** (2025-12-13)
-- **Bug:** `expire_active_boosts` RPC skipped `expired` state, went directly to `pending_info`
-- **Fix:** Split into two separate operations matching 6-state lifecycle:
-  - `expire_active_boosts` → ends in `'expired'` state
-  - `transition_expired_to_pending_info` → moves `expired` → `pending_info`
-- **Files modified:**
-  - `supabase/migrations/20251213_boost_activation_rpcs.sql` - 3 RPCs (replaced)
-  - `lib/repositories/commissionBoostRepository.ts` - +77 lines (new interface + function)
-  - `app/api/cron/daily-automation/route.ts` - +22 lines (calls new function)
-- **Tested:** Integration test passes (3/3), unit tests pass (28/28)
-- **EXECUTION_PLAN.md:** Task 6.4.3 updated to reflect 6-state lifecycle
+**Step 8.4 Tasks 8.4.1-8.4.2 COMPLETE** (2025-12-14)
+- **Task 8.4.1:** Created `/tests/integration/cron/daily-automation.test.ts` (290 lines)
+  - 8 describe blocks: CSV parsing, sales upsert, real-time promotion, checkpoint evaluation, boost activation, mission progress creation, mission progress update, processDailySales invocation
+  - 34 tests passing
+  - Mock signatures verified against actual service interfaces
+- **Task 8.4.2:** Updated CSV parsing tests with real `parseCruvaCSV()` function
+  - 5 fixture CSVs matching CRUVA format (10 columns)
+  - Tests: valid CSV, empty rows, special chars, GMV currency, invalid CSV
+  - All signatures verified: ParseResult, ParsedVideoRow, parseCruvaCSV
+- **Next:** Task 8.4.3 (Test daily automation updates user metrics)
 
 ---
 
@@ -212,16 +211,16 @@ If either check fails, FIX before proceeding with task.
 
 **Count:** 10/10 ✅ AT LIMIT
 
-1. [x] **BUG-BOOST-EXPIRATION-STATE** (2025-12-13) - 6-state lifecycle fix, 3 RPCs, integration tested
-2. [x] **Step 8.3 COMPLETE** Tasks 8.3.3-8.3.4 (2025-12-13) - Notifications + raffle calendar, AUTOMATION_IMPL.md v2.3
-3. [x] **Phase 8 Bug Fixes** (2025-12-12) - GAP-MISSION-PROGRESS-ROWS + BUG-MISSION-PROGRESS-UPDATE
-4. [x] **Task 8.3.2** Integration with daily-automation (2025-12-12) - checkForPromotions + runCheckpointEvaluation
-5. [x] **Task 8.3.1** tierCalculationService (2025-12-12) - 455 lines, 7-step workflow, VIP reward discovery
-6. [x] **Task 8.3.0a** Extend tierRepository (2025-12-12) - 4 checkpoint functions (VIP funcs removed)
-7. [x] **Step 8.2 COMPLETE** Daily Sales Sync (2025-12-11) - Tasks 8.2.4-5, cron route + alertService
-8. [x] **Task 8.2.3c** TierAtClaimLookup Bug Fix (2025-12-11) - multi-tenant filter, single source of truth
-9. [x] **RPC Migration** Tasks 8.2.3-rpc, 8.2.3a, 8.2.3b, 8.3.1a (2025-12-11) - 3 RPCs, O(1) perf
-10. [x] **Task 8.2.2a** Create syncRepository (2025-12-11) - 627 lines, 13 functions, client_id filtering
+1. [x] **Tasks 8.4.1-8.4.2** (2025-12-14) - Cron integration tests + CSV parsing tests, 34 tests passing
+2. [x] **BUG-BOOST-EXPIRATION-STATE** (2025-12-13) - 6-state lifecycle fix, 3 RPCs, integration tested
+3. [x] **Step 8.3 COMPLETE** Tasks 8.3.3-8.3.4 (2025-12-13) - Notifications + raffle calendar, AUTOMATION_IMPL.md v2.3
+4. [x] **Phase 8 Bug Fixes** (2025-12-12) - GAP-MISSION-PROGRESS-ROWS + BUG-MISSION-PROGRESS-UPDATE
+5. [x] **Task 8.3.2** Integration with daily-automation (2025-12-12) - checkForPromotions + runCheckpointEvaluation
+6. [x] **Task 8.3.1** tierCalculationService (2025-12-12) - 455 lines, 7-step workflow, VIP reward discovery
+7. [x] **Task 8.3.0a** Extend tierRepository (2025-12-12) - 4 checkpoint functions (VIP funcs removed)
+8. [x] **Step 8.2 COMPLETE** Daily Sales Sync (2025-12-11) - Tasks 8.2.4-5, cron route + alertService
+9. [x] **Task 8.2.3c** TierAtClaimLookup Bug Fix (2025-12-11) - multi-tenant filter, single source of truth
+10. [x] **RPC Migration** Tasks 8.2.3-rpc, 8.2.3a, 8.2.3b, 8.3.1a (2025-12-11) - 3 RPCs, O(1) perf
 
 ---
 
