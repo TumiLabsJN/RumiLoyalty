@@ -1,6 +1,10 @@
 /**
  * Tier Repository
  *
+ * ⚠️  INTERNAL - CRON/ADMIN USE ONLY
+ * This module uses createAdminClient (bypasses RLS).
+ * DO NOT import from user-facing routes or components.
+ *
  * Data access layer for tiers and tier-related reward aggregation.
  * Enforces multi-tenant isolation via client_id filtering.
  *
@@ -11,7 +15,7 @@
  * - SchemaFinalv2.md lines 254-272 (tiers table)
  */
 
-import { createClient } from '@/lib/supabase/server-client';
+import { createAdminClient } from '@/lib/supabase/admin-client';
 import type { Database } from '@/lib/types/database';
 
 type TierRow = Database['public']['Tables']['tiers']['Row'];
@@ -180,7 +184,7 @@ export const tierRepository = {
    * SECURITY: Validates client_id match (multitenancy)
    */
   async getAllTiers(clientId: string): Promise<TierData[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('tiers')
@@ -216,7 +220,7 @@ export const tierRepository = {
     userId: string,
     clientId: string
   ): Promise<UserTierContext | null> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Get user with current tier info
     const { data: user, error: userError } = await supabase
@@ -272,7 +276,7 @@ export const tierRepository = {
    * SECURITY: Validates client_id match (multitenancy)
    */
   async getVipSystemSettings(clientId: string): Promise<VipSystemSettings> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('clients')
@@ -301,7 +305,7 @@ export const tierRepository = {
    * SECURITY: Validates client_id match (multitenancy)
    */
   async getVipTierRewards(clientId: string): Promise<TierRewardData[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('rewards')
@@ -339,7 +343,7 @@ export const tierRepository = {
    * SECURITY: Validates client_id match on BOTH missions AND rewards (multitenancy)
    */
   async getTierMissions(clientId: string): Promise<TierMissionData[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('missions')
@@ -414,7 +418,7 @@ export const tierRepository = {
    * SECURITY: Filters by client_id (multitenancy)
    */
   async getUsersDueForCheckpoint(clientId: string): Promise<CheckpointUserData[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Get users due for checkpoint with client's VIP settings
     // Join clients to get vip_metric and checkpoint_months
@@ -493,7 +497,7 @@ export const tierRepository = {
     clientId: string,
     vipMetric: 'sales' | 'units'
   ): Promise<TierThreshold[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('tiers')
@@ -535,7 +539,7 @@ export const tierRepository = {
     userId: string,
     data: CheckpointUpdateData
   ): Promise<void> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const now = new Date();
     const nextCheckpoint = new Date(now);
@@ -581,7 +585,7 @@ export const tierRepository = {
     clientId: string,
     data: CheckpointLogData
   ): Promise<string> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: result, error } = await supabase
       .from('tier_checkpoints')
@@ -620,7 +624,7 @@ export const tierRepository = {
    * SECURITY: Filters by client_id (multitenancy)
    */
   async getUsersForPromotionCheck(clientId: string): Promise<PromotionCandidate[]> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Get all users with their current tier
     const { data: users, error: userError } = await supabase
@@ -723,7 +727,7 @@ export const tierRepository = {
     checkpointMonths: number,
     vipMetric: 'sales' | 'units'
   ): Promise<void> {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const now = new Date();
     const nextCheckpoint = new Date(now);

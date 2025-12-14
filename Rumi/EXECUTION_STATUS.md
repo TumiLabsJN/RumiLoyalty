@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-14 (Step 8.4 Tasks 8.4.1-8.4.2 COMPLETE) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-14 (Task 8.4.8 COMPLETE) [Update this timestamp when you modify this document]
 
 ---
 
@@ -8,7 +8,7 @@
 
 **FILE SIZE LIMIT: 250 lines maximum**
 
-**Current size:** 248 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
+**Current size:** 243 lines ← Run `wc -l EXECUTION_STATUS.md` and update this
 **Status:** ✅ WITHIN LIMIT (max 250)
 
 **PRE-MODIFICATION CHECK:**
@@ -182,16 +182,13 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**Step 8.4 Tasks 8.4.1-8.4.2 COMPLETE** (2025-12-14)
-- **Task 8.4.1:** Created `/tests/integration/cron/daily-automation.test.ts` (290 lines)
-  - 8 describe blocks: CSV parsing, sales upsert, real-time promotion, checkpoint evaluation, boost activation, mission progress creation, mission progress update, processDailySales invocation
-  - 34 tests passing
-  - Mock signatures verified against actual service interfaces
-- **Task 8.4.2:** Updated CSV parsing tests with real `parseCruvaCSV()` function
-  - 5 fixture CSVs matching CRUVA format (10 columns)
-  - Tests: valid CSV, empty rows, special chars, GMV currency, invalid CSV
-  - All signatures verified: ParseResult, ParsedVideoRow, parseCruvaCSV
-- **Next:** Task 8.4.3 (Test daily automation updates user metrics)
+**Task 8.4.8 COMPLETE** (2025-12-14)
+- Created `appcode/tests/integration/cron/scheduled-activation.test.ts` (822 lines, 8 tests)
+- Tests `activate_scheduled_boosts` RPC function directly
+- Test cases: (1) future date stays scheduled, (2) today/past activates, (3) activated_at set, (4) sales_at_activation captured, (5) discount fulfilled, (6) multi-tenant
+- Verified against SchemaFinalv2.md lines 609-612, 693-700
+- Type check: 0 errors
+- **Next:** Task 8.4.9 (Manual dry run)
 
 ---
 
@@ -211,16 +208,16 @@ If either check fails, FIX before proceeding with task.
 
 **Count:** 10/10 ✅ AT LIMIT
 
-1. [x] **Tasks 8.4.1-8.4.2** (2025-12-14) - Cron integration tests + CSV parsing tests, 34 tests passing
-2. [x] **BUG-BOOST-EXPIRATION-STATE** (2025-12-13) - 6-state lifecycle fix, 3 RPCs, integration tested
-3. [x] **Step 8.3 COMPLETE** Tasks 8.3.3-8.3.4 (2025-12-13) - Notifications + raffle calendar, AUTOMATION_IMPL.md v2.3
-4. [x] **Phase 8 Bug Fixes** (2025-12-12) - GAP-MISSION-PROGRESS-ROWS + BUG-MISSION-PROGRESS-UPDATE
-5. [x] **Task 8.3.2** Integration with daily-automation (2025-12-12) - checkForPromotions + runCheckpointEvaluation
-6. [x] **Task 8.3.1** tierCalculationService (2025-12-12) - 455 lines, 7-step workflow, VIP reward discovery
-7. [x] **Task 8.3.0a** Extend tierRepository (2025-12-12) - 4 checkpoint functions (VIP funcs removed)
-8. [x] **Step 8.2 COMPLETE** Daily Sales Sync (2025-12-11) - Tasks 8.2.4-5, cron route + alertService
-9. [x] **Task 8.2.3c** TierAtClaimLookup Bug Fix (2025-12-11) - multi-tenant filter, single source of truth
-10. [x] **RPC Migration** Tasks 8.2.3-rpc, 8.2.3a, 8.2.3b, 8.3.1a (2025-12-11) - 3 RPCs, O(1) perf
+1. [x] **Task 8.4.8** (2025-12-14) - Scheduled activation tests, 8 tests, RPC signature verified
+2. [x] **Task 8.4.7** (2025-12-14) - Tier demotion soft-delete, 7 tests, Pattern 6 verified
+3. [x] **Task 8.4.6** (2025-12-14) - Tier promotion reward visibility, 5 tests, API_CONTRACTS.md verified
+4. [x] **GAP-TIER-CALC-TEST** (2025-12-14) - Rewrote tests to call production checkForPromotions(), 7 tests
+5. [x] **Task 8.4.5** (2025-12-14) - Tier calculation thresholds, 11 tests, >= operator verified
+6. [x] **Task 8.4.4** (2025-12-14) - Video upsert duplicate handling, 4 tests, schema verified
+7. [x] **Task 8.4.3a** (2025-12-14) - RPC function behaviors, 8 tests (cases 3-10), signatures verified
+8. [x] **Task 8.4.3** (2025-12-14) - Test daily automation updates user metrics, 9 tests, local Supabase
+9. [x] **Tasks 8.4.1-8.4.2** (2025-12-14) - Cron integration tests + CSV parsing tests, 34 tests passing
+10. [x] **BUG-BOOST-EXPIRATION-STATE** (2025-12-13) - 6-state lifecycle fix, 3 RPCs, integration tested
 
 ---
 

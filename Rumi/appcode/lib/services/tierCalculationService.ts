@@ -1,6 +1,10 @@
 /**
  * Tier Calculation Service
  *
+ * ⚠️  INTERNAL - CRON/ADMIN USE ONLY
+ * This module uses createAdminClient (bypasses RLS).
+ * DO NOT import from user-facing routes or components.
+ *
  * Implements Flow 7: Daily Tier Calculation from Loyalty.md lines 1452-1666.
  * Runs as part of daily cron after sales sync completes.
  *
@@ -20,7 +24,7 @@
  */
 
 import { syncRepository } from '@/lib/repositories/syncRepository';
-import { createClient } from '@/lib/supabase/server-client';
+import { createAdminClient } from '@/lib/supabase/admin-client';
 import {
   tierRepository,
   CheckpointUserData,
@@ -348,7 +352,7 @@ export async function checkForPromotions(
   // Get client settings (needed for checkpoint_months and vip_metric)
   let clientSettings: { checkpointMonths: number; vipMetric: 'sales' | 'units' };
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data: client, error } = await supabase
       .from('clients')
       .select('checkpoint_months, vip_metric')
