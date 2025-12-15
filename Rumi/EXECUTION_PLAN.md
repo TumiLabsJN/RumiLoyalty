@@ -1551,77 +1551,263 @@
     - **Acceptance Criteria:** Manual verification MUST confirm: sync_logs shows success, sales_adjustments created, user metrics updated, tier changes applied, boost activations work
     - **Completed (2025-12-15):** Validated via `manual-csv-upload.test.ts` (6 test cases) since no live CRUVA data available. Tests cover: CSV parsing, video insertion, handle-based lookup, metrics RPC, tier promotion, multi-tenant isolation. Unblocked by BUG-RPC-PROJECTED-TIER-TYPE-MISMATCH fix (changed `projected_tier_at_checkpoint` from UUID to VARCHAR(50)).
 
+## Phase 8 Test Verification Summary
+
+**Final Test Results:** 87/87 tests passing (2025-12-15)
+
+**Bug Fixes Applied (see `BugFixes/Phase8TestBugs.md`):**
+
+| Bug | Type | Fix | Tests Unblocked |
+|-----|------|-----|-----------------|
+| Bug 1 | TEST | Factory missing redemption_frequency defaults | 20 |
+| Bug 2 | PRODUCTION | Ambiguous column in RPC (migration) | 2 |
+| Bug 3 | PRODUCTION | RPC overwrites manual adjustments (migration) | 1 |
+| Bug 4 | TEST | Invalid tier_eligibility on rewards | 2 |
+| Bug 5 | TEST | vip_metric test value too long for VARCHAR | 1 |
+| Bug 6 | TEST | Invalid target_unit on missions | 1 |
+| Bug 7 | TEST | Same as Bug 6 | 1 |
+| Bug 8 | PRODUCTION | TIMESTAMP type mismatch (schema fix) | 7 |
+| Bug 9 | TEST | Timezone parsing after Bug 8 fix | 1 |
+
+**What Tests Validate:**
+- RPC function behaviors (vip_metric branching, call sequence, mission progress)
+- Tier calculations (promotions, demotions, threshold boundaries)
+- Commission boost activation (scheduled date, sales capture)
+- Multi-tenant isolation (client_id filtering)
+- Database constraints (CHECK, UNIQUE, FK)
+
+**What Tests Do NOT Cover:**
+- HTTP endpoint `/api/cron/daily-automation` (tests call RPCs directly)
+- End-to-end pipeline with real CRUVA data
+- Error recovery scenarios
+- Large dataset performance
+
+**CRUVA Integration Manual Test (2025-12-15):**
+
+| Step | Status | Notes |
+|------|--------|-------|
+| Puppeteer launches | ✅ | headless Chrome with --no-sandbox |
+| Login authentication | ✅ | Fixed: click fields before typing, add delay |
+| Navigate to dashboard | ✅ | Redirects to /dashboard after login |
+| Navigate to My Videos | ✅ | /dashboard/videos |
+| Find "Export to CSV" button | ✅ | XPath selector works |
+| Click export button | ✅ | Click executes |
+| CSV download | ⏸️ | No data to export (expected) |
+
+**Bug Fixed:** `cruvaDownloader.ts` login was failing because form fields needed `.click()` before `.type()` and typing needed `{ delay: 50 }` for reliability. Fixed 2025-12-15.
+
 ---
 
-# PHASE 9: FRONTEND INTEGRATION (MSW → Real APIs)
+# PHASE 9: FRONTEND INTEGRATION (Mock Data → Real APIs)
 
-**Objective:** Toggle frontend from mock data to real API calls page by page.
+**Objective:** Replace hardcoded mock data in frontend pages with real API calls, page by page.
 
-## Step 9.1: Environment Flags
-- [ ] **Task 9.1.1:** Add feature flags to `.env.local`
-    - **Action:** Add NEXT_PUBLIC_USE_REAL_API_AUTH=true, etc. for each page
-    - **References:** ARCHITECTURE.md (Folder Structure)
-    - **Acceptance Criteria:** Flags documented in README
+**Context:** Frontend pages currently use hardcoded mock data objects with debug scenario switchers. Backend APIs are fully implemented and tested. This phase wires frontend to backend.
 
-## Step 9.2: Page-by-Page Toggle
-- [ ] **Task 9.2.1:** Toggle Auth pages
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_AUTH=true
-    - **Acceptance Criteria:** Signup/login/OTP flows hit real APIs, MSW disabled for /api/auth/*
+## Step 9.0: Pre-requisites (Test Data)
+- [x] **Task 9.0.1:** Create test user seed script
+    - **Action:** Create `scripts/seed-test-users.ts` that creates 1 test client, 4 tiers, and 4 test users with varied VIP levels
+    - **References:** SchemaFinalv2.md (clients table lines 106-120, users table lines 123-155, tiers table lines 254-272, videos table lines 227-251)
+    - **Implementation Guide:** Script MUST create: (1) Test client with vip_metric='sales', (2) 4 tiers: tier_1 (Bronze, $0), tier_2 (Silver, $1000), tier_3 (Gold, $3000), tier_4 (Platinum, $5000), (3) 4 users with `current_tier` using internal IDs: @testbronze (current_tier='tier_1', checkpoint_sales_current=250, 2 videos), @testsilver (current_tier='tier_2', checkpoint_sales_current=1500, next_checkpoint_at=60 days, 10 videos), @testgold (current_tier='tier_3', checkpoint_sales_current=3500, next_checkpoint_at=90 days, 25 videos), @testplatinum (current_tier='tier_4', checkpoint_sales_current=8000, 50 videos). Each user needs: video records for dashboard stats. Password MUST be hashed with bcrypt rounds=10.
+    - **Acceptance Criteria:** Script runs without errors, 1 client + 4 tiers + 4 test users exist in database with correct tier IDs and sample data
 
-- [ ] **Task 9.2.2:** Test Auth pages manually
-    - **Action:** Complete full signup → OTP → login flow in browser
-    - **Acceptance Criteria:** No errors, session created, redirected to dashboard
+- [ ] **Task 9.0.2:** Run seed script and verify data
+    - **Command:** `npx ts-node scripts/seed-test-users.ts`
+    - **Acceptance Criteria:** Can query `SELECT tiktok_handle, current_tier FROM users WHERE tiktok_handle LIKE 'test%'` and see 4 users
 
-- [ ] **Task 9.2.3:** Toggle Dashboard page
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_DASHBOARD=true
-    - **Acceptance Criteria:** Dashboard fetches from real /api/dashboard
+## Step 9.1: Auth Integration (COMPLETE)
+- [x] **Task 9.1.1:** Auth pages already use real APIs
+    - **Action:** No action needed - verified during context refresh
+    - **References:** `app/login/start/page.tsx` line 59 (POST /api/auth/check-handle), `app/login/wb/page.tsx` line 74 (POST /api/auth/login), `app/login/otp/page.tsx` lines 134, 181 (verify-otp, resend-otp), `app/login/forgotpw/page.tsx` line 56, `app/login/resetpw/page.tsx` line 110
+    - **Acceptance Criteria:** ✅ All 8 auth pages call real APIs: start, wb, signup, otp, loading, forgotpw, resetpw, welcomeunr
 
-- [ ] **Task 9.2.4:** Test Dashboard manually
-    - **Action:** Load dashboard, verify correct user data displayed
-    - **Acceptance Criteria:** Points, tier, missions count match DB
+## Step 9.2: Home/Dashboard Integration
+- [ ] **Task 9.2.1:** Verify Dashboard backend API
+    - **Action:** Read DASHBOARD_IMPL.md and confirm `GET /api/dashboard` exists and response shape matches mock data
+    - **References:** DASHBOARD_IMPL.md (lines 48-78 for route, lines 634-654 for DashboardResponse), `app/home/page.tsx` lines 54-560 (mock data structure)
+    - **Acceptance Criteria:** API route exists at `app/api/dashboard/route.ts`, response interface matches mock data shape
 
-- [ ] **Task 9.2.5:** Toggle Missions page
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_MISSIONS=true
-    - **Acceptance Criteria:** Missions list fetches from real /api/missions/available
+- [ ] **Task 9.2.2:** Add data fetching to Home page
+    - **Action:** Replace mock `scenarios` object with `fetch('/api/dashboard')` call in `app/home/page.tsx`
+    - **References:** DASHBOARD_IMPL.md lines 48-78 (GET /api/dashboard endpoint)
+    - **Implementation Guide:** Add useState for `dashboardData`, `isLoading`, `error`. Add useEffect with fetch call. Include `credentials: 'include'` for auth cookie. Map response to existing variable names used in JSX
+    - **Acceptance Criteria:** Page fetches from `/api/dashboard` on mount, stores response in state
 
-- [ ] **Task 9.2.6:** Test Missions manually
-    - **Action:** View available missions, claim one, check history
-    - **Acceptance Criteria:** Claim succeeds, points added, history updated
+- [ ] **Task 9.2.3:** Add loading state to Home page
+    - **Action:** Add skeleton UI while `isLoading` is true
+    - **References:** Existing loading patterns in `app/login/loading/page.tsx`
+    - **Acceptance Criteria:** Loading skeleton displays during fetch, replaced by real content when loaded
 
-- [ ] **Task 9.2.7:** Toggle Rewards page
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_REWARDS=true
-    - **Acceptance Criteria:** Rewards list fetches from real /api/rewards
+- [ ] **Task 9.2.4:** Add error handling to Home page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state with retry button
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message with retry option
 
-- [ ] **Task 9.2.8:** Test Rewards manually
-    - **Action:** Claim instant reward, claim commission boost, check history
-    - **Acceptance Criteria:** Redemptions created, boost activated
+- [ ] **Task 9.2.5:** Remove debug panel from Home page
+    - **Action:** Delete debug scenario switcher (🧪 button) and all mock data
+    - **References:** `app/home/page.tsx` lines 16-17 (activeScenario state), lines 54-560 (scenarios object), lines 722-771 (debug panel JSX)
+    - **Acceptance Criteria:** No debug panel visible, no `scenarios` object in code, no `activeScenario` state
 
-- [ ] **Task 9.2.9:** Toggle History page
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_HISTORY=true
-    - **Acceptance Criteria:** History fetches from real APIs
+- [ ] **Task 9.2.6:** Manual test Home page
+    - **Action:** Login as each test user (@testbronze, @testsilver, @testgold, @testplatinum) and verify dashboard displays correctly
+    - **Acceptance Criteria:** Each user sees correct: tier badge color, sales amount, progress bar %, featured mission, tier rewards list
 
-- [ ] **Task 9.2.10:** Test History manually
-    - **Action:** Verify mission and reward history displays correctly
-    - **Acceptance Criteria:** All past actions visible
+## Step 9.3: Missions Integration
+- [ ] **Task 9.3.1:** Verify Missions backend API
+    - **Action:** Read MISSIONS_IMPL.md and confirm `GET /api/missions` exists and response shape matches mock data
+    - **References:** MISSIONS_IMPL.md, `app/missions/page.tsx` lines 62-641 (mock data structure)
+    - **Acceptance Criteria:** API route exists, response interface matches mock data shape
 
-- [ ] **Task 9.2.11:** Toggle Tiers page
-    - **Action:** Set NEXT_PUBLIC_USE_REAL_API_TIERS=true
-    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers)
-    - **Acceptance Criteria:** Tiers fetch from real /api/tiers, page receives complete response with user, progress, vipSystem, and tiers array
+- [ ] **Task 9.3.2:** Add data fetching to Missions page
+    - **Action:** Replace mock `mockData` object with `fetch('/api/missions')` call in `app/missions/page.tsx`
+    - **References:** MISSIONS_IMPL.md (GET /api/missions endpoint)
+    - **Implementation Guide:** Add useState for `missionsData`, `isLoading`, `error`. Add useEffect with fetch call. Include `credentials: 'include'` for auth cookie
+    - **Acceptance Criteria:** Page fetches from `/api/missions` on mount, stores response in state
 
-- [ ] **Task 9.2.12:** Test Tiers manually
-    - **Action:** View Tiers page with different user tier levels and VIP metrics
-    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers user-scoped filtering and VIP metric formatting)
-    - **Acceptance Criteria:** Verify: (1) Bronze user sees 4 tiers (Bronze through Platinum), Silver user sees 3 tiers (Silver through Platinum) per user-scoped filtering lines 6043-6050, (2) current tier highlighted with isUnlocked=true and isCurrent=true, (3) VIP metric formatting displays correctly (sales_dollars shows "$" prefix, sales_units shows "units" suffix), (4) progress bar shows correct percentage and "X to go" text, (5) rewards displayed with max 4 per tier sorted by priority, (6) raffle rewards show "Chance to win!" text, (7) expiration section hidden for Bronze (showExpiration=false), visible for Silver+ with formatted date, (8) commission rates display correctly, (9) totalPerksCount shows on each tier card
+- [ ] **Task 9.3.3:** Add loading state to Missions page
+    - **Action:** Add skeleton UI while `isLoading` is true
+    - **Acceptance Criteria:** Loading skeleton displays during fetch
 
-## Step 9.3: Full Integration Test
-- [ ] **Task 9.3.1:** Enable all real API flags
-    - **Action:** Set all NEXT_PUBLIC_USE_REAL_API_* to true
-    - **Acceptance Criteria:** All pages use real APIs
+- [ ] **Task 9.3.4:** Add error handling to Missions page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
 
-- [ ] **Task 9.3.2:** Run full user journey
-    - **Action:** Signup → Dashboard → Claim mission → Redeem reward → Check history → View tiers
-    - **Acceptance Criteria:** Complete flow works without errors
+- [ ] **Task 9.3.5:** Remove debug panel from Missions page
+    - **Action:** Delete debug scenario switcher and all mock data from `app/missions/page.tsx`
+    - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+
+- [ ] **Task 9.3.6:** Manual test Missions page
+    - **Action:** Login as test users and verify missions display correctly with real data
+    - **Acceptance Criteria:** Missions list shows correct status, progress, rewards for each tier
+
+## Step 9.4: Mission History Integration
+- [ ] **Task 9.4.1:** Verify Mission History backend API
+    - **Action:** Confirm `GET /api/missions/history` exists and response shape matches mock data
+    - **References:** MISSIONS_IMPL.md, `app/missions/missionhistory/page.tsx` lines 24-166 (mockApiResponse)
+    - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+
+- [ ] **Task 9.4.2:** Add data fetching to Mission History page
+    - **Action:** Replace mock `mockApiResponse` with `fetch('/api/missions/history')` call
+    - **Implementation Guide:** Add useState for data, loading, error. Add useEffect with fetch call
+    - **Acceptance Criteria:** Page fetches from `/api/missions/history` on mount
+
+- [ ] **Task 9.4.3:** Add loading state to Mission History page
+    - **Action:** Add skeleton UI while loading
+    - **Acceptance Criteria:** Loading skeleton displays during fetch
+
+- [ ] **Task 9.4.4:** Add error handling to Mission History page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+
+- [ ] **Task 9.4.5:** Remove debug panel from Mission History page
+    - **Action:** Delete any debug/mock data from `app/missions/missionhistory/page.tsx`
+    - **Acceptance Criteria:** No mock data objects in code
+
+- [ ] **Task 9.4.6:** Manual test Mission History page
+    - **Action:** Login as test users and verify history displays correctly
+    - **Acceptance Criteria:** Completed and claimed missions show with correct dates and rewards
+
+## Step 9.5: Rewards Integration
+- [ ] **Task 9.5.1:** Verify Rewards backend API
+    - **Action:** Read REWARDS_IMPL.md and confirm `GET /api/rewards` exists and response shape matches mock data
+    - **References:** REWARDS_IMPL.md, `app/rewards/page.tsx` lines 319-615 (mock data structure)
+    - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+
+- [ ] **Task 9.5.2:** Add data fetching to Rewards page
+    - **Action:** Replace mock `mockData` object with `fetch('/api/rewards')` call in `app/rewards/page.tsx`
+    - **References:** REWARDS_IMPL.md (GET /api/rewards endpoint)
+    - **Implementation Guide:** Add useState for `rewardsData`, `isLoading`, `error`. Add useEffect with fetch call
+    - **Acceptance Criteria:** Page fetches from `/api/rewards` on mount, stores response in state
+
+- [ ] **Task 9.5.3:** Add loading state to Rewards page
+    - **Action:** Add skeleton UI while `isLoading` is true
+    - **Acceptance Criteria:** Loading skeleton displays during fetch
+
+- [ ] **Task 9.5.4:** Add error handling to Rewards page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+
+- [ ] **Task 9.5.5:** Remove debug panel from Rewards page
+    - **Action:** Delete debug scenario switcher and all mock data from `app/rewards/page.tsx`
+    - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+
+- [ ] **Task 9.5.6:** Manual test Rewards page
+    - **Action:** Login as test users and verify rewards display correctly
+    - **Acceptance Criteria:** Available rewards show with correct eligibility, amounts, claim status
+
+## Step 9.6: Rewards History Integration
+- [ ] **Task 9.6.1:** Verify Rewards History backend API
+    - **Action:** Confirm `GET /api/rewards/history` exists and response shape matches mock data
+    - **References:** REWARDS_IMPL.md, `app/rewards/rewardshistory/page.tsx` lines 39-329 (scenarios object)
+    - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+
+- [ ] **Task 9.6.2:** Add data fetching to Rewards History page
+    - **Action:** Replace mock `scenarios` object with `fetch('/api/rewards/history')` call
+    - **Implementation Guide:** Add useState for data, loading, error. Add useEffect with fetch call
+    - **Acceptance Criteria:** Page fetches from `/api/rewards/history` on mount
+
+- [ ] **Task 9.6.3:** Add loading state to Rewards History page
+    - **Action:** Add skeleton UI while loading
+    - **Acceptance Criteria:** Loading skeleton displays during fetch
+
+- [ ] **Task 9.6.4:** Add error handling to Rewards History page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+
+- [ ] **Task 9.6.5:** Remove debug panel from Rewards History page
+    - **Action:** Delete debug scenario switcher and mock data from `app/rewards/rewardshistory/page.tsx`
+    - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+
+- [ ] **Task 9.6.6:** Manual test Rewards History page
+    - **Action:** Login as test users and verify history displays correctly
+    - **Acceptance Criteria:** Redeemed rewards show with correct dates, statuses, amounts
+
+## Step 9.7: Tiers Integration
+- [ ] **Task 9.7.1:** Verify Tiers backend API
+    - **Action:** Read TIERS_IMPL.md and confirm `GET /api/tiers` exists and response shape matches mock data
+    - **References:** TIERS_IMPL.md, `app/tiers/page.tsx` lines 38-429 (scenarios object)
+    - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+
+- [ ] **Task 9.7.2:** Add data fetching to Tiers page
+    - **Action:** Replace mock `scenarios` object with `fetch('/api/tiers')` call in `app/tiers/page.tsx`
+    - **References:** TIERS_IMPL.md (GET /api/tiers endpoint)
+    - **Implementation Guide:** Add useState for `tiersData`, `isLoading`, `error`. Add useEffect with fetch call
+    - **Acceptance Criteria:** Page fetches from `/api/tiers` on mount, stores response in state
+
+- [ ] **Task 9.7.3:** Add loading state to Tiers page
+    - **Action:** Add skeleton UI while `isLoading` is true
+    - **Acceptance Criteria:** Loading skeleton displays during fetch
+
+- [ ] **Task 9.7.4:** Add error handling to Tiers page
+    - **Action:** Handle fetch errors and 401 responses
+    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+
+- [ ] **Task 9.7.5:** Remove debug panel from Tiers page
+    - **Action:** Delete debug scenario switcher and all mock data from `app/tiers/page.tsx`
+    - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+
+- [ ] **Task 9.7.6:** Manual test Tiers page
+    - **Action:** Login as each test user and verify tiers display correctly
+    - **References:** API_CONTRACTS.md lines 5559-6140 (GET /api/tiers response)
+    - **Acceptance Criteria:** Verify: (1) correct tiers visible based on user level, (2) current tier highlighted, (3) progress bar shows correct %, (4) rewards per tier display correctly, (5) expiration shows for Silver+ users
+
+## Step 9.8: Full Integration Test
+- [ ] **Task 9.8.1:** Run full user journey as Bronze user
+    - **Action:** Login as @testbronze → View Dashboard → View Missions → View Rewards → View History → View Tiers
+    - **Acceptance Criteria:** Complete flow works, all pages show Bronze-appropriate data
+
+- [ ] **Task 9.8.2:** Run full user journey as Platinum user
+    - **Action:** Login as @testplatinum → View Dashboard → View Missions → View Rewards → View History → View Tiers
+    - **Acceptance Criteria:** Complete flow works, all pages show Platinum-appropriate data with expiration info
+
+- [ ] **Task 9.8.3:** Verify error states
+    - **Action:** Test with invalid/expired auth token to verify 401 handling redirects to login
+    - **Acceptance Criteria:** All pages redirect to `/login/start` on 401
 
 ---
 

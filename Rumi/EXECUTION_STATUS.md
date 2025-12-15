@@ -1,6 +1,6 @@
 # Execution Status Tracker
 
-**Last Updated:** 2025-12-15 (Task 8.4.9 COMPLETE + BUG-RPC-PROJECTED-TIER-TYPE-MISMATCH fixed) [Update this timestamp when you modify this document]
+**Last Updated:** 2025-12-15 (Phase 8 COMPLETE - 87/87 tests passing after 9 bug fixes) [Update this timestamp when you modify this document]
 
 ---
 
@@ -182,14 +182,12 @@ If either check fails, FIX before proceeding with task.
 
 ## 📝 LAST COMPLETED STEP
 
-**Task 8.4.9 COMPLETE** (2025-12-15)
-- Created `appcode/tests/integration/cron/manual-csv-upload.test.ts` (6 tests, all passing)
-- Tests CSV upload pipeline: parsing, video insertion, handle lookup, metrics RPC, tier promotion, multi-tenant
-- **Bug Fixed:** BUG-RPC-PROJECTED-TIER-TYPE-MISMATCH - changed `projected_tier_at_checkpoint` from UUID to VARCHAR(50)
-- Migration: `20251215074915_fix_projected_tier_type.sql` with safe USING cast
-- Verified function signatures match spec exactly
-- Type check: 0 errors
-- **Next:** Phase 8 complete → Phase 9 (Frontend Integration)
+**Phase 8 COMPLETE** (2025-12-15)
+- **Tests:** 87/87 passing after 9 bug fixes (see `BugFixes/Phase8TestBugs.md`)
+- **Production bugs fixed (3):** Bug 2 (ambiguous column), Bug 3 (overwrites adjustments), Bug 8 (TIMESTAMP type mismatch)
+- **Test bugs fixed (6):** Bug 1 (factory defaults), Bug 4-7 (invalid test values), Bug 9 (timezone parsing)
+- **CRUVA Integration:** Manually tested - login, navigation, export button all working. Fixed `cruvaDownloader.ts` (click before type + delay). No CSV data available to download.
+- **Next:** Phase 9 (Frontend Integration)
 
 ---
 
@@ -209,16 +207,16 @@ If either check fails, FIX before proceeding with task.
 
 **Count:** 10/10 ✅ AT LIMIT
 
-1. [x] **Task 8.4.9 + BUG-RPC-PROJECTED-TIER-TYPE-MISMATCH** (2025-12-15) - Manual CSV upload tests (6), fixed UUID→VARCHAR(50) column type
-2. [x] **Task 8.4.8** (2025-12-14) - Scheduled activation tests, 8 tests, RPC signature verified
-3. [x] **Task 8.4.7** (2025-12-14) - Tier demotion soft-delete, 7 tests, Pattern 6 verified
-4. [x] **Task 8.4.6** (2025-12-14) - Tier promotion reward visibility, 5 tests, API_CONTRACTS.md verified
-5. [x] **GAP-TIER-CALC-TEST** (2025-12-14) - Rewrote tests to call production checkForPromotions(), 7 tests
-6. [x] **Task 8.4.5** (2025-12-14) - Tier calculation thresholds, 11 tests, >= operator verified
-7. [x] **Task 8.4.4** (2025-12-14) - Video upsert duplicate handling, 4 tests, schema verified
-8. [x] **Task 8.4.3a** (2025-12-14) - RPC function behaviors, 8 tests (cases 3-10), signatures verified
-9. [x] **Task 8.4.3** (2025-12-14) - Test daily automation updates user metrics, 9 tests, local Supabase
-10. [x] **Tasks 8.4.1-8.4.2** (2025-12-14) - Cron integration tests + CSV parsing tests, 34 tests passing
+1. [x] **Phase 8 Bug Fixes (9 bugs)** (2025-12-15) - 87/87 tests passing. See `BugFixes/Phase8TestBugs.md`
+2. [x] **Task 8.4.9 + BUG-RPC-PROJECTED-TIER-TYPE-MISMATCH** (2025-12-15) - Manual CSV upload tests (6), fixed UUID→VARCHAR(50)
+3. [x] **Task 8.4.8** (2025-12-14) - Scheduled activation tests, 8 tests, RPC signature verified
+4. [x] **Task 8.4.7** (2025-12-14) - Tier demotion soft-delete, 7 tests, Pattern 6 verified
+5. [x] **Task 8.4.6** (2025-12-14) - Tier promotion reward visibility, 5 tests, API_CONTRACTS.md verified
+6. [x] **GAP-TIER-CALC-TEST** (2025-12-14) - Rewrote tests to call production checkForPromotions(), 7 tests
+7. [x] **Task 8.4.5** (2025-12-14) - Tier calculation thresholds, 11 tests, >= operator verified
+8. [x] **Task 8.4.4** (2025-12-14) - Video upsert duplicate handling, 4 tests, schema verified
+9. [x] **Task 8.4.3a** (2025-12-14) - RPC function behaviors, 8 tests (cases 3-10), signatures verified
+10. [x] **Task 8.4.3** (2025-12-14) - Test daily automation updates user metrics, 9 tests, local Supabase
 
 ---
 

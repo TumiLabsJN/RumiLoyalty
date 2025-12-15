@@ -427,7 +427,8 @@ describe('Scheduled Activation (Task 8.4.8)', () => {
 
       expect(boostAfter?.activated_at).not.toBeNull();
 
-      const activatedAt = new Date(boostAfter!.activated_at!);
+      // Note: TIMESTAMP columns return without timezone suffix. Append 'Z' for UTC.
+      const activatedAt = new Date(`${boostAfter!.activated_at!}Z`);
       expect(activatedAt.getTime()).toBeGreaterThanOrEqual(beforeActivation.getTime() - 1000);
       expect(activatedAt.getTime()).toBeLessThanOrEqual(afterActivation.getTime() + 1000);
 

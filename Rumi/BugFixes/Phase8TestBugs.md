@@ -14,10 +14,11 @@
 | Bug 2 | PRODUCTION | ✅ FIXED | 2 tests |
 | Bug 3 | PRODUCTION | ✅ FIXED | 1 test |
 | Bug 4 | TEST | ✅ FIXED | 2 tests |
-| Bug 5 | TEST | ❌ NOT FIXED | 1 test |
-| Bug 6 | TEST/RPC | ❌ NOT FIXED | 1 test |
-| Bug 7 | TEST | ❌ NOT FIXED | 1 test |
-| Bug 8 | PRODUCTION | ❌ NOT FIXED | 7 tests |
+| Bug 5 | TEST | ✅ FIXED | 1 test |
+| Bug 6 | TEST | ✅ FIXED | 1 test |
+| Bug 7 | TEST | ✅ FIXED | 1 test |
+| Bug 8 | PRODUCTION | ✅ FIXED | 7 tests |
+| Bug 9 | TEST | ✅ FIXED | 1 test |
 
 ---
 
@@ -241,47 +242,47 @@ Use a shorter invalid value that fits VARCHAR(10) but violates CHECK:
 
 ---
 
-### Bug 6: Test Case 8 - create_mission_progress Returns 0 Instead of 1
-- [ ] **NOT FIXED**
+### Bug 6: Test Case 8 - Invalid target_unit Value
+- [x] **FIXED** (2025-12-15)
 
 **Error:**
 ```
-expect(received).toBe(expected) // Object.is equality
-Expected: 1
-Received: 0
+new row for relation "missions" violates check constraint "missions_target_unit_check"
 ```
 
 **Root Cause:**
-The `create_mission_progress_for_eligible_users` RPC returns 0 rows created, but test expects 1. Investigation needed - likely the user doesn't meet tier eligibility criteria (missing `current_tier` or tier_order mismatch).
+Test Case 8 used `target_unit: 'videos'` but the missions table CHECK constraint only allows `'dollars'`, `'units'`, or `'count'`. The mission insert failed silently (before error checks were added), causing the RPC to return 0.
 
-**Type:** TEST BUG or RPC BUG (needs investigation)
+**Type:** TEST BUG
 
 **Affected Tests:**
 - `daily-automation-metrics.test.ts` - Test Case 8
 
-**Fix Location:**
-- Needs investigation of RPC logic and test setup
+**Fix Applied:**
+- Changed line 966: `target_unit: 'videos'` → `target_unit: 'count'`
+- Documentation: `BugFixes/BUG-TEST-CASE-8-10-INVALID-TARGET-UNIT.md`
 
 ---
 
-### Bug 7: Test Case 10 - Mission Insert Fails (NULL)
-- [ ] **NOT FIXED**
+### Bug 7: Test Case 10 - Invalid target_unit Value
+- [x] **FIXED** (2025-12-15)
 
 **Error:**
 ```
-TypeError: Cannot read properties of null (reading 'id')
+new row for relation "missions" violates check constraint "missions_target_unit_check"
 ```
 
 **Root Cause:**
-The mission insert at line ~1133 returns null, causing subsequent code to fail when accessing `mission!.id`. Investigation needed - the insert might be failing silently (not checking error).
+Same as Bug 6. Test Case 10 used `target_unit: 'videos'` but the missions table CHECK constraint only allows `'dollars'`, `'units'`, or `'count'`. The mission insert returned null, causing `mission!.id` to throw.
 
-**Type:** TEST BUG (needs investigation)
+**Type:** TEST BUG
 
 **Affected Tests:**
 - `daily-automation-metrics.test.ts` - Test Case 10
 
-**Fix Location:**
-- `appcode/tests/integration/cron/daily-automation-metrics.test.ts` - around line 1133
+**Fix Applied:**
+- Changed line 1146: `target_unit: 'videos'` → `target_unit: 'count'`
+- Documentation: `BugFixes/BUG-TEST-CASE-8-10-INVALID-TARGET-UNIT.md`
 
 ---
 
@@ -349,9 +350,9 @@ RETURNS TABLE (
 | `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 4 | Change `tier_eligibility: 'all'` to `'tier_1'` on rewards inserts | ✅ DONE |
 | `appcode/tests/helpers/factories.ts` | Bug 4 | Change default tier_eligibility from 'all' to 'tier_1' | ✅ DONE |
 | `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 5 | Change 'invalid_value' to 'invalid' (fits VARCHAR(10)) | Pending |
-| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 6 | Investigate RPC/test setup | Pending |
-| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 7 | Investigate mission insert failure | Pending |
-| `supabase/migrations/[new]_fix_activate_scheduled_boosts.sql` | Bug 8 | Fix RETURNS TABLE to match SELECT columns | Pending |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 6 | Change `target_unit: 'videos'` to `'count'` (line 966) | ✅ DONE |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 7 | Change `target_unit: 'videos'` to `'count'` (line 1146) | ✅ DONE |
+| `supabase/migrations/20251215113550_fix_boost_timestamp_types.sql` | Bug 8 | ALTER columns to TIMESTAMP to match SOT | ✅ DONE |
 
 ---
 
@@ -383,7 +384,7 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 
 ---
 
-## Current Test Status (After Bug 1, 2, 3, 4 & 8 Fixes)
+## Current Test Status (All Bugs Fixed)
 
 | Test File | Passed | Failed | Total |
 |-----------|--------|--------|-------|
@@ -392,20 +393,13 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 | `manual-csv-upload.test.ts` | 6 | 0 | 6 |
 | `tier-promotion-rewards.test.ts` | 5 | 0 | 5 |
 | `tier-demotion-rewards.test.ts` | 6 | 0 | 6 |
-| `scheduled-activation.test.ts` | 7 | 1 | 8 |
-| `daily-automation-metrics.test.ts` | 18 | 3 | 21 |
-| **TOTAL** | **83** | **4** | **87** |
+| `scheduled-activation.test.ts` | 8 | 0 | 8 |
+| `daily-automation-metrics.test.ts` | 21 | 0 | 21 |
+| **TOTAL** | **87** | **0** | **87** |
 
-**Remaining failures (4 tests):**
-
-| Bug | Test File | Test Case | Failure Type |
-|-----|-----------|-----------|--------------|
-| Bug 5 | daily-automation-metrics.test.ts | Test Case 4 | TEST BUG - 'invalid_value' too long for VARCHAR(10) |
-| Bug 6 | daily-automation-metrics.test.ts | Test Case 8 | TEST/RPC BUG - returns 0 instead of 1 |
-| Bug 7 | daily-automation-metrics.test.ts | Test Case 10 | TEST BUG - mission insert fails (null) |
-| Bug 9 | scheduled-activation.test.ts | Test Case 3 | TEST BUG - timezone handling after TIMESTAMP change |
+**All tests passing!**
 
 ---
 
-**Document Version:** 1.3
+**Document Version:** 1.6
 **Last Updated:** 2025-12-15

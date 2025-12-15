@@ -647,7 +647,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
       // Try to set invalid vip_metric (should fail CHECK constraint)
       const { error: updateError } = await supabase
         .from('clients')
-        .update({ vip_metric: 'invalid_value' })
+        .update({ vip_metric: 'bad' })  // 3 chars fits VARCHAR(10), violates CHECK
         .eq('id', testClientId);
 
       // CHECK constraint should prevent invalid values
@@ -936,7 +936,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
 
       // Create reward and mission
       // Note: rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
-      const { data: reward } = await supabase
+      const { data: reward, error: rewardError } = await supabase
         .from('rewards')
         .insert({
           client_id: testClientId,
@@ -951,8 +951,10 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
         .select('id')
         .single();
 
+      expect(rewardError).toBeNull();
+
       // missions table DOES allow tier_eligibility='all'
-      const { data: mission } = await supabase
+      const { data: mission, error: missionError } = await supabase
         .from('missions')
         .insert({
           client_id: testClientId,
@@ -961,7 +963,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           description: 'Test',
           mission_type: 'videos',
           target_value: 5,
-          target_unit: 'videos',
+          target_unit: 'count',
           reward_id: reward!.id,
           tier_eligibility: 'all',
           display_order: 1,
@@ -970,6 +972,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
         })
         .select('id')
         .single();
+
+      expect(missionError).toBeNull();
 
       // Call RPC first time
       const { data: count1 } = await (supabase.rpc as unknown as RpcFunction)('create_mission_progress_for_eligible_users', {
@@ -1139,7 +1143,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           description: 'Post 2 videos',
           mission_type: 'videos',
           target_value: 2,
-          target_unit: 'videos',
+          target_unit: 'count',
           reward_id: reward!.id,
           tier_eligibility: 'all',
           display_order: 1,

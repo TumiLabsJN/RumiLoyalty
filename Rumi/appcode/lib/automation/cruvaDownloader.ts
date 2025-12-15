@@ -114,15 +114,36 @@ export async function downloadCruvaCSV(maxRetries: number = 3): Promise<Download
       // Fill login form
       console.log('[CruvaDownloader] Filling login credentials...');
       await page.waitForSelector(SELECTORS.emailInput);
-      await page.type(SELECTORS.emailInput, username);
-      await page.type(SELECTORS.passwordInput, password);
+      await page.waitForSelector(SELECTORS.passwordInput);
+
+      // Click fields before typing and add delay for reliability
+      const emailField = await page.$(SELECTORS.emailInput);
+      const passwordField = await page.$(SELECTORS.passwordInput);
+
+      if (emailField) {
+        await emailField.click();
+        await emailField.type(username, { delay: 50 });
+      }
+
+      if (passwordField) {
+        await passwordField.click();
+        await passwordField.type(password, { delay: 50 });
+      }
 
       // Click login button and wait for navigation
       console.log('[CruvaDownloader] Submitting login form...');
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle2' }),
-        page.click(SELECTORS.loginButton),
-      ]);
+      const submitButton = await page.$(SELECTORS.loginButton);
+      if (submitButton) {
+        await submitButton.click();
+      }
+
+      // Wait for navigation (with timeout fallback)
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {
+        console.log('[CruvaDownloader] Navigation timeout - checking current state...');
+      });
+
+      // Small delay to ensure page state is settled
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify login succeeded (check we're not still on signin page)
       const currentUrl = page.url();
