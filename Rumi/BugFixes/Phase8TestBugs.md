@@ -2,11 +2,26 @@
 
 **Created:** 2025-12-15
 **Status:** In Progress
-**Context:** Full Phase 8 test suite run revealed 25 failing tests across 4 test files
+**Context:** Full Phase 8 test suite run revealed bugs affecting 10 remaining tests (77/87 passing)
 
 ---
 
-## Test Results Summary
+## Bug Summary
+
+| Bug | Type | Status | Tests Affected |
+|-----|------|--------|----------------|
+| Bug 1 | TEST | ✅ FIXED | 20 tests |
+| Bug 2 | PRODUCTION | ✅ FIXED | 2 tests |
+| Bug 3 | PRODUCTION | ✅ FIXED | 1 test |
+| Bug 4 | TEST | ✅ FIXED | 2 tests |
+| Bug 5 | TEST | ❌ NOT FIXED | 1 test |
+| Bug 6 | TEST/RPC | ❌ NOT FIXED | 1 test |
+| Bug 7 | TEST | ❌ NOT FIXED | 1 test |
+| Bug 8 | PRODUCTION | ❌ NOT FIXED | 7 tests |
+
+---
+
+## Initial Test Results (Before Fixes)
 
 | Test File | Passed | Failed | Total |
 |-----------|--------|--------|-------|
@@ -110,7 +125,7 @@ FROM (
 ---
 
 ### Bug 3: `update_precomputed_fields` Overwrites Manual Adjustments
-- [ ] **NOT FIXED**
+- [x] **FIXED** (2025-12-15)
 
 **Error:**
 ```
@@ -150,7 +165,7 @@ total_units = COALESCE((SELECT SUM(units_sold) FROM videos WHERE user_id = u.id 
 ---
 
 ### Bug 4: Test Code Uses Invalid `tier_eligibility: 'all'` on Rewards Table
-- [ ] **NOT FIXED**
+- [x] **FIXED** (2025-12-15)
 
 **Error:**
 ```
@@ -188,14 +203,155 @@ tier_eligibility: 'tier_1',
 
 ---
 
+### Bug 5: Test Case 4 - vip_metric Test Uses Value Too Long for VARCHAR(10)
+- [ ] **NOT FIXED**
+
+**Error:**
+```
+expect(received).toContain(expected) // indexOf
+Expected substring: "violates check constraint"
+Received string:    "value too long for type character varying(10)"
+```
+
+**Root Cause:**
+Test Case 4 in `daily-automation-metrics.test.ts` tries to set `vip_metric: 'invalid_value'` to test CHECK constraint validation. However, `'invalid_value'` is 13 characters, which exceeds the VARCHAR(10) column limit. PostgreSQL rejects it for length before evaluating the CHECK constraint.
+
+**Type:** TEST BUG
+
+**Current Code (problematic):**
+```typescript
+// Line 650
+const { error: updateError } = await supabase
+  .from('clients')
+  .update({ vip_metric: 'invalid_value' })  // 13 chars, VARCHAR(10) max
+  .eq('id', testClientId);
+```
+
+**Affected Tests:**
+- `daily-automation-metrics.test.ts` - Test Case 4
+
+**Fix Location:**
+- `appcode/tests/integration/cron/daily-automation-metrics.test.ts` - line 650
+
+**Proposed Fix:**
+Use a shorter invalid value that fits VARCHAR(10) but violates CHECK:
+```typescript
+.update({ vip_metric: 'invalid' })  // 7 chars, fits VARCHAR(10), violates CHECK
+```
+
+---
+
+### Bug 6: Test Case 8 - create_mission_progress Returns 0 Instead of 1
+- [ ] **NOT FIXED**
+
+**Error:**
+```
+expect(received).toBe(expected) // Object.is equality
+Expected: 1
+Received: 0
+```
+
+**Root Cause:**
+The `create_mission_progress_for_eligible_users` RPC returns 0 rows created, but test expects 1. Investigation needed - likely the user doesn't meet tier eligibility criteria (missing `current_tier` or tier_order mismatch).
+
+**Type:** TEST BUG or RPC BUG (needs investigation)
+
+**Affected Tests:**
+- `daily-automation-metrics.test.ts` - Test Case 8
+
+**Fix Location:**
+- Needs investigation of RPC logic and test setup
+
+---
+
+### Bug 7: Test Case 10 - Mission Insert Fails (NULL)
+- [ ] **NOT FIXED**
+
+**Error:**
+```
+TypeError: Cannot read properties of null (reading 'id')
+```
+
+**Root Cause:**
+The mission insert at line ~1133 returns null, causing subsequent code to fail when accessing `mission!.id`. Investigation needed - the insert might be failing silently (not checking error).
+
+**Type:** TEST BUG (needs investigation)
+
+**Affected Tests:**
+- `daily-automation-metrics.test.ts` - Test Case 10
+
+**Fix Location:**
+- `appcode/tests/integration/cron/daily-automation-metrics.test.ts` - around line 1133
+
+---
+
+### Bug 8: activate_scheduled_boosts RPC Structure Mismatch
+- [ ] **NOT FIXED**
+
+**Error:**
+```
+RPC activate_scheduled_boosts failed: structure of query does not match function result type
+```
+
+**Root Cause:**
+The `activate_scheduled_boosts` RPC function declares `TIMESTAMP` in its RETURNS TABLE, but the actual `commission_boost_redemptions` table columns are `TIMESTAMP WITH TIME ZONE`. PostgreSQL enforces strict type matching.
+
+**Type:** PRODUCTION BUG
+
+**Type Mismatch Details:**
+
+| Column | Function Declares | Actual Table Type | Match? |
+|--------|------------------|-------------------|--------|
+| `activated_at` | `TIMESTAMP` | `timestamp with time zone` | ❌ NO |
+| `expires_at` | `TIMESTAMP` | `timestamp with time zone` | ❌ NO |
+
+**Current Code (problematic):**
+```sql
+-- File: supabase/migrations/20251213135422_boost_activation_rpcs.sql lines 23-30
+RETURNS TABLE (
+  boost_redemption_id UUID,
+  redemption_id UUID,
+  user_id UUID,
+  sales_at_activation DECIMAL(10,2),
+  activated_at TIMESTAMP,           -- ❌ Wrong type
+  expires_at TIMESTAMP              -- ❌ Wrong type
+)
+```
+
+**Affected Tests:**
+- `scheduled-activation.test.ts` - 7 out of 8 tests (Test Cases 1-4, multi-tenant)
+
+**Fix Location:**
+- `supabase/migrations/20251213135422_boost_activation_rpcs.sql` - lines 28-29
+- Need new migration to `CREATE OR REPLACE FUNCTION`
+
+**Proposed Fix:**
+```sql
+RETURNS TABLE (
+  boost_redemption_id UUID,
+  redemption_id UUID,
+  user_id UUID,
+  sales_at_activation DECIMAL(10,2),
+  activated_at TIMESTAMPTZ,         -- ✅ Fixed
+  expires_at TIMESTAMPTZ            -- ✅ Fixed
+)
+```
+
+---
+
 ## Files to Modify
 
-| File | Bug | Action |
-|------|-----|--------|
-| `appcode/tests/helpers/factories.ts` | Bug 1 | Add `redemption_frequency` and `redemption_quantity` defaults |
-| `supabase/migrations/20251215091818_fix_rpc_ambiguous_column.sql` | Bug 2 | CREATE OR REPLACE FUNCTION with fixed column references (DONE) |
-| `supabase/migrations/[new]_fix_precomputed_fields_adjustments.sql` | Bug 3 | CREATE OR REPLACE FUNCTION to preserve manual adjustments |
-| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 4 | Change `tier_eligibility: 'all'` to `'tier_1'` on rewards inserts |
+| File | Bug | Action | Status |
+|------|-----|--------|--------|
+| `appcode/tests/helpers/factories.ts` | Bug 1 | Add `redemption_frequency` and `redemption_quantity` defaults | ✅ DONE |
+| `supabase/migrations/20251215091818_fix_rpc_ambiguous_column.sql` | Bug 2 | CREATE OR REPLACE FUNCTION with fixed column references | ✅ DONE |
+| `supabase/migrations/20251215101202_fix_precomputed_fields_adjustments.sql` | Bug 3 | CREATE OR REPLACE FUNCTION to preserve manual adjustments | ✅ DONE |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 4 | Change `tier_eligibility: 'all'` to `'tier_1'` on rewards inserts | ✅ DONE |
+| `appcode/tests/helpers/factories.ts` | Bug 4 | Change default tier_eligibility from 'all' to 'tier_1' | ✅ DONE |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 5 | Change 'invalid_value' to 'invalid' (fits VARCHAR(10)) | Pending |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 6 | Investigate RPC/test setup | Pending |
+| `appcode/tests/integration/cron/daily-automation-metrics.test.ts` | Bug 7 | Investigate mission insert failure | Pending |
+| `supabase/migrations/[new]_fix_activate_scheduled_boosts.sql` | Bug 8 | Fix RETURNS TABLE to match SELECT columns | Pending |
 
 ---
 
@@ -217,13 +373,17 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 - These bugs are **pre-existing** and were exposed when running the full test suite
 - Bug 1 affects test factory code, not production code - **FIXED**
 - Bug 2 affects production RPC (ambiguous column) - **FIXED** via migration `20251215091818_fix_rpc_ambiguous_column.sql`
-- Bug 3 affects production RPC (design contradiction) - discovered after Bug 2 fix unmasked it
-- Bug 4 affects test code (invalid tier_eligibility value) - discovered after Bug 2 fix unmasked it
-- Bugs 3 and 4 were **masked** by Bug 2's earlier failure in the test execution chain
+- Bug 3 affects production RPC (design contradiction) - **FIXED** via migration `20251215101202_fix_precomputed_fields_adjustments.sql`
+- Bug 4 affects test code (invalid tier_eligibility value) - **FIXED** in factories.ts and test file
+- Bug 5 affects test code (value too long for VARCHAR) - TEST BUG
+- Bug 6 affects test setup or RPC (returns 0 instead of 1) - needs investigation
+- Bug 7 affects test code (mission insert fails) - needs investigation
+- Bug 8 affects production RPC (structure mismatch) - **PRODUCTION BUG**
+- Bugs 3-7 were **masked** by earlier failures in the test execution chain
 
 ---
 
-## Current Test Status (After Bug 1 & 2 Fixes)
+## Current Test Status (After Bug 1, 2, 3 & 4 Fixes)
 
 | Test File | Passed | Failed | Total |
 |-----------|--------|--------|-------|
@@ -231,17 +391,21 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 | `tier-calculation.test.ts` | 7 | 0 | 7 |
 | `manual-csv-upload.test.ts` | 6 | 0 | 6 |
 | `tier-promotion-rewards.test.ts` | 5 | 0 | 5 |
-| `tier-demotion-rewards.test.ts` | 7 | 0 | 7 |
-| `scheduled-activation.test.ts` | 8 | 0 | 8 |
-| `daily-automation-metrics.test.ts` | 15 | 6 | 21 |
-| **TOTAL** | **74** | **13** | **87** |
+| `tier-demotion-rewards.test.ts` | 6 | 0 | 6 |
+| `scheduled-activation.test.ts` | 1 | 7 | 8 |
+| `daily-automation-metrics.test.ts` | 18 | 3 | 21 |
+| **TOTAL** | **77** | **10** | **87** |
 
-**Remaining failures (6 tests):**
-- Test Case 4: vip_metric invalid (investigation needed)
-- Test Case 5: Bug 3 (update_precomputed_fields overwrites adjustments)
-- Test Cases 6, 8, 9, 10: Bug 4 (invalid tier_eligibility on rewards)
+**Remaining failures (10 tests):**
+
+| Bug | Test File | Test Case | Failure Type |
+|-----|-----------|-----------|--------------|
+| Bug 5 | daily-automation-metrics.test.ts | Test Case 4 | TEST BUG - 'invalid_value' too long for VARCHAR(10) |
+| Bug 6 | daily-automation-metrics.test.ts | Test Case 8 | TEST/RPC BUG - returns 0 instead of 1 |
+| Bug 7 | daily-automation-metrics.test.ts | Test Case 10 | TEST BUG - mission insert fails (null) |
+| Bug 8 | scheduled-activation.test.ts | 7 tests | PRODUCTION BUG - RPC structure mismatch |
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** 2025-12-15

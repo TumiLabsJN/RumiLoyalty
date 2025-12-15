@@ -748,13 +748,14 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
       }
 
       // Create reward first (required for mission)
+      // Note: rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
       const { data: reward, error: rewardError } = await supabase
         .from('rewards')
         .insert({
           client_id: testClientId,
           type: 'gift_card',
           value_data: { amount: 50 },
-          tier_eligibility: 'all',
+          tier_eligibility: 'tier_1',
           redemption_type: 'instant',
           redemption_frequency: 'unlimited',
           redemption_quantity: null,
@@ -765,7 +766,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
 
       expect(rewardError).toBeNull();
 
-      // Create mission with tier_eligibility='all'
+      // Create mission with tier_eligibility='all' (missions table DOES allow 'all')
       const { data: mission, error: missionError } = await supabase
         .from('missions')
         .insert({
@@ -934,13 +935,14 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
       });
 
       // Create reward and mission
+      // Note: rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
       const { data: reward } = await supabase
         .from('rewards')
         .insert({
           client_id: testClientId,
           type: 'gift_card',
           value_data: { amount: 25 },
-          tier_eligibility: 'all',
+          tier_eligibility: 'tier_1',
           redemption_type: 'instant',
           redemption_frequency: 'unlimited',
           redemption_quantity: null,
@@ -949,6 +951,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
         .select('id')
         .single();
 
+      // missions table DOES allow tier_eligibility='all'
       const { data: mission } = await supabase
         .from('missions')
         .insert({
@@ -1012,13 +1015,14 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
       });
 
       // Create reward and mission (sales_dollars type)
+      // Note: rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
       const { data: reward } = await supabase
         .from('rewards')
         .insert({
           client_id: testClientId,
           type: 'gift_card',
           value_data: { amount: 100 },
-          tier_eligibility: 'all',
+          tier_eligibility: 'tier_1',
           redemption_type: 'instant',
           redemption_frequency: 'unlimited',
           redemption_quantity: null,
@@ -1027,6 +1031,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
         .select('id')
         .single();
 
+      // missions table DOES allow tier_eligibility='all'
       const { data: mission } = await supabase
         .from('missions')
         .insert({
@@ -1108,13 +1113,14 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
       });
 
       // Create reward and mission with low target
+      // Note: rewards.tier_eligibility only allows 'tier_1' through 'tier_6' (not 'all')
       const { data: reward } = await supabase
         .from('rewards')
         .insert({
           client_id: testClientId,
           type: 'gift_card',
           value_data: { amount: 50 },
-          tier_eligibility: 'all',
+          tier_eligibility: 'tier_1',
           redemption_type: 'instant',
           redemption_frequency: 'unlimited',
           redemption_quantity: null,
@@ -1123,6 +1129,7 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
         .select('id')
         .single();
 
+      // missions table DOES allow tier_eligibility='all'
       const { data: mission } = await supabase
         .from('missions')
         .insert({

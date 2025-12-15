@@ -240,7 +240,7 @@ export async function createTestReward(
     client_id: overrides.client_id,
     type: overrides.type || 'gift_card',
     value_data: overrides.value_data || { amount: 50 },
-    tier_eligibility: overrides.tier_eligibility || 'all',
+    tier_eligibility: overrides.tier_eligibility || 'tier_1',
     redemption_type: overrides.redemption_type || 'instant',
     redemption_frequency: overrides.redemption_frequency || 'unlimited',
     redemption_quantity: overrides.redemption_frequency && overrides.redemption_frequency !== 'unlimited' ? (overrides.redemption_quantity || 1) : null,
