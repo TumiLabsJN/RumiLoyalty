@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1318,6 +1338,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_scheduled_boosts: {
+        Args: { p_client_id: string }
+        Returns: {
+          activated_at: string
+          boost_redemption_id: string
+          expires_at: string
+          redemption_id: string
+          sales_at_activation: number
+          user_id: string
+        }[]
+      }
+      apply_pending_sales_adjustments: {
+        Args: { p_client_id: string }
+        Returns: number
+      }
       auth_create_otp: {
         Args: {
           p_access_token_encrypted?: string
@@ -1470,6 +1505,19 @@ export type Database = {
         Args: { p_client_id: string }
         Returns: number
       }
+      expire_active_boosts: {
+        Args: { p_client_id: string }
+        Returns: {
+          boost_rate: number
+          boost_redemption_id: string
+          final_payout_amount: number
+          redemption_id: string
+          sales_at_activation: number
+          sales_at_expiration: number
+          sales_delta: number
+          user_id: string
+        }[]
+      }
       get_available_missions: {
         Args: { p_client_id: string; p_current_tier: string; p_user_id: string }
         Returns: {
@@ -1600,7 +1648,24 @@ export type Database = {
         }[]
       }
       is_admin_of_client: { Args: { p_client_id: string }; Returns: boolean }
+      transition_expired_to_pending_info: {
+        Args: { p_client_id: string }
+        Returns: {
+          boost_redemption_id: string
+          final_payout_amount: number
+          redemption_id: string
+          user_id: string
+        }[]
+      }
+      update_leaderboard_ranks: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
       update_mission_progress: {
+        Args: { p_client_id: string; p_user_ids?: string[] }
+        Returns: number
+      }
+      update_precomputed_fields: {
         Args: { p_client_id: string; p_user_ids?: string[] }
         Returns: number
       }
@@ -1732,7 +1797,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

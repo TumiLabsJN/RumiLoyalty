@@ -756,6 +756,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           value_data: { amount: 50 },
           tier_eligibility: 'all',
           redemption_type: 'instant',
+          redemption_frequency: 'unlimited',
+          redemption_quantity: null,
           enabled: true,
         })
         .select('id')
@@ -864,6 +866,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           value_data: { amount: 100 },
           tier_eligibility: tier2!.tier_id,
           redemption_type: 'instant',
+          redemption_frequency: 'unlimited',
+          redemption_quantity: null,
           enabled: true,
         })
         .select('id')
@@ -938,6 +942,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           value_data: { amount: 25 },
           tier_eligibility: 'all',
           redemption_type: 'instant',
+          redemption_frequency: 'unlimited',
+          redemption_quantity: null,
           enabled: true,
         })
         .select('id')
@@ -1014,6 +1020,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           value_data: { amount: 100 },
           tier_eligibility: 'all',
           redemption_type: 'instant',
+          redemption_frequency: 'unlimited',
+          redemption_quantity: null,
           enabled: true,
         })
         .select('id')
@@ -1108,6 +1116,8 @@ describe('Daily Automation - User Metrics (Task 8.4.3)', () => {
           value_data: { amount: 50 },
           tier_eligibility: 'all',
           redemption_type: 'instant',
+          redemption_frequency: 'unlimited',
+          redemption_quantity: null,
           enabled: true,
         })
         .select('id')

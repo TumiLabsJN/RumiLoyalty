@@ -242,6 +242,8 @@ export async function createTestReward(
     value_data: overrides.value_data || { amount: 50 },
     tier_eligibility: overrides.tier_eligibility || 'all',
     redemption_type: overrides.redemption_type || 'instant',
+    redemption_frequency: overrides.redemption_frequency || 'unlimited',
+    redemption_quantity: overrides.redemption_frequency && overrides.redemption_frequency !== 'unlimited' ? (overrides.redemption_quantity || 1) : null,
     enabled: overrides.enabled ?? true,
   };
 
