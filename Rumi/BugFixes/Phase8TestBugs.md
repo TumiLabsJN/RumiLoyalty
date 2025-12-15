@@ -286,7 +286,7 @@ The mission insert at line ~1133 returns null, causing subsequent code to fail w
 ---
 
 ### Bug 8: activate_scheduled_boosts RPC Structure Mismatch
-- [ ] **NOT FIXED**
+- [x] **FIXED** (2025-12-15)
 
 **Error:**
 ```
@@ -383,7 +383,7 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 
 ---
 
-## Current Test Status (After Bug 1, 2, 3 & 4 Fixes)
+## Current Test Status (After Bug 1, 2, 3, 4 & 8 Fixes)
 
 | Test File | Passed | Failed | Total |
 |-----------|--------|--------|-------|
@@ -392,20 +392,20 @@ cd /home/jorge/Loyalty/Rumi/appcode && npm test -- tests/integration/cron/
 | `manual-csv-upload.test.ts` | 6 | 0 | 6 |
 | `tier-promotion-rewards.test.ts` | 5 | 0 | 5 |
 | `tier-demotion-rewards.test.ts` | 6 | 0 | 6 |
-| `scheduled-activation.test.ts` | 1 | 7 | 8 |
+| `scheduled-activation.test.ts` | 7 | 1 | 8 |
 | `daily-automation-metrics.test.ts` | 18 | 3 | 21 |
-| **TOTAL** | **77** | **10** | **87** |
+| **TOTAL** | **83** | **4** | **87** |
 
-**Remaining failures (10 tests):**
+**Remaining failures (4 tests):**
 
 | Bug | Test File | Test Case | Failure Type |
 |-----|-----------|-----------|--------------|
 | Bug 5 | daily-automation-metrics.test.ts | Test Case 4 | TEST BUG - 'invalid_value' too long for VARCHAR(10) |
 | Bug 6 | daily-automation-metrics.test.ts | Test Case 8 | TEST/RPC BUG - returns 0 instead of 1 |
 | Bug 7 | daily-automation-metrics.test.ts | Test Case 10 | TEST BUG - mission insert fails (null) |
-| Bug 8 | scheduled-activation.test.ts | 7 tests | PRODUCTION BUG - RPC structure mismatch |
+| Bug 9 | scheduled-activation.test.ts | Test Case 3 | TEST BUG - timezone handling after TIMESTAMP change |
 
 ---
 
-**Document Version:** 1.2
+**Document Version:** 1.3
 **Last Updated:** 2025-12-15
