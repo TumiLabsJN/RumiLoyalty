@@ -151,7 +151,7 @@ export const dashboardRepository = {
     const { data: currentTier, error: tierError } = await supabase
       .from('tiers')
       .select('*')
-      .eq('tier_id', user.current_tier)  // tier_id stores 'tier_1', 'tier_2', etc.
+      .eq('tier_id', user.current_tier)  // current_tier stores 'tier_1', 'tier_2', etc.
       .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
       .single();
 

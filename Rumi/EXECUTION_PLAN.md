@@ -1611,8 +1611,8 @@
     - **Implementation Guide:** Script MUST create: (1) Test client with vip_metric='sales', (2) 4 tiers: tier_1 (Bronze, $0), tier_2 (Silver, $1000), tier_3 (Gold, $3000), tier_4 (Platinum, $5000), (3) 4 users with `current_tier` using internal IDs: @testbronze (current_tier='tier_1', checkpoint_sales_current=250, 2 videos), @testsilver (current_tier='tier_2', checkpoint_sales_current=1500, next_checkpoint_at=60 days, 10 videos), @testgold (current_tier='tier_3', checkpoint_sales_current=3500, next_checkpoint_at=90 days, 25 videos), @testplatinum (current_tier='tier_4', checkpoint_sales_current=8000, 50 videos). Each user needs: video records for dashboard stats. Password MUST be hashed with bcrypt rounds=10.
     - **Acceptance Criteria:** Script runs without errors, 1 client + 4 tiers + 4 test users exist in database with correct tier IDs and sample data
 
-- [ ] **Task 9.0.2:** Run seed script and verify data
-    - **Command:** `npx ts-node scripts/seed-test-users.ts`
+- [x] **Task 9.0.2:** Run seed script and verify data
+    - **Command:** `npx tsx scripts/seed-test-users.ts`
     - **Acceptance Criteria:** Can query `SELECT tiktok_handle, current_tier FROM users WHERE tiktok_handle LIKE 'test%'` and see 4 users
 
 ## Step 9.1: Auth Integration (COMPLETE)
@@ -1622,23 +1622,23 @@
     - **Acceptance Criteria:** ✅ All 8 auth pages call real APIs: start, wb, signup, otp, loading, forgotpw, resetpw, welcomeunr
 
 ## Step 9.2: Home/Dashboard Integration
-- [ ] **Task 9.2.1:** Verify Dashboard backend API
+- [x] **Task 9.2.1:** Verify Dashboard backend API
     - **Action:** Read DASHBOARD_IMPL.md and confirm `GET /api/dashboard` exists and response shape matches mock data
     - **References:** DASHBOARD_IMPL.md (lines 48-78 for route, lines 634-654 for DashboardResponse), `app/home/page.tsx` lines 54-560 (mock data structure)
     - **Acceptance Criteria:** API route exists at `app/api/dashboard/route.ts`, response interface matches mock data shape
 
-- [ ] **Task 9.2.2:** Add data fetching to Home page
+- [x] **Task 9.2.2:** Add data fetching to Home page
     - **Action:** Replace mock `scenarios` object with `fetch('/api/dashboard')` call in `app/home/page.tsx`
     - **References:** DASHBOARD_IMPL.md lines 48-78 (GET /api/dashboard endpoint)
     - **Implementation Guide:** Add useState for `dashboardData`, `isLoading`, `error`. Add useEffect with fetch call. Include `credentials: 'include'` for auth cookie. Map response to existing variable names used in JSX
     - **Acceptance Criteria:** Page fetches from `/api/dashboard` on mount, stores response in state
 
-- [ ] **Task 9.2.3:** Add loading state to Home page
+- [x] **Task 9.2.3:** Add loading state to Home page
     - **Action:** Add skeleton UI while `isLoading` is true
     - **References:** Existing loading patterns in `app/login/loading/page.tsx`
     - **Acceptance Criteria:** Loading skeleton displays during fetch, replaced by real content when loaded
 
-- [ ] **Task 9.2.4:** Add error handling to Home page
+- [x] **Task 9.2.4:** Add error handling to Home page
     - **Action:** Handle fetch errors and 401 responses
     - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state with retry button
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message with retry option

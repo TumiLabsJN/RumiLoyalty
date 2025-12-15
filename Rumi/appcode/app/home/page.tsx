@@ -1,20 +1,114 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import type { Reward } from "@/types/dashboard"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar, DollarSign, Video, Eye, Heart, MessageCircle, Trophy, HandCoins, Megaphone, Gift, BadgePercent, Palmtree, Info, ArrowLeft, X } from "lucide-react"
+import { Calendar, DollarSign, Video, Eye, Heart, MessageCircle, Trophy, HandCoins, Megaphone, Gift, BadgePercent, Palmtree, Info, ArrowLeft, X, Loader2 } from "lucide-react"
 import { HomePageLayout } from "@/components/homepagelayout"
 import { ScheduleDiscountModal } from "@/components/schedule-discount-modal"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
+// Dashboard response type (matches DASHBOARD_IMPL.md lines 634-654)
+interface DashboardData {
+  user: { id: string; handle: string; email: string | null; clientName: string };
+  client: { id: string; vipMetric: 'sales' | 'units'; vipMetricLabel: string };
+  currentTier: { id: string; name: string; color: string; order: number; checkpointExempt: boolean };
+  nextTier: { id: string; name: string; color: string; minSalesThreshold: number } | null;
+  tierProgress: {
+    currentValue: number;
+    targetValue: number;
+    progressPercentage: number;
+    currentFormatted: string;
+    targetFormatted: string;
+    checkpointExpiresAt: string | null;
+    checkpointExpiresFormatted: string;
+    checkpointMonths: number;
+  };
+  featuredMission: {
+    status: string;
+    mission: {
+      id: string;
+      type: string;
+      displayName: string;
+      currentProgress: number;
+      targetValue: number;
+      progressPercentage: number;
+      currentFormatted: string;
+      targetFormatted: string;
+      targetText: string;
+      progressText: string;
+      isRaffle: boolean;
+      raffleEndDate: string | null;
+      rewardType: string;
+      rewardAmount: number | null;
+      rewardCustomText: string | null;
+    } | null;
+    tier: { name: string; color: string } | null;
+    showCongratsModal: boolean;
+    congratsMessage: string | null;
+    supportEmail: string;
+    emptyStateMessage: string | null;
+  };
+  currentTierRewards: Array<{
+    id: string;
+    type: string;
+    name: string;
+    displayText: string;
+    description: string;
+    valueData: Record<string, unknown> | null;
+    rewardSource: string;
+    redemptionQuantity: number;
+    displayOrder: number;
+  }>;
+  totalRewardsCount: number;
+}
+
 export default function Home() {
+  const router = useRouter()
+
   // ============================================
-  // DEBUG PANEL - Test Scenario Switcher
+  // DATA FETCHING - Real API Call
   // ============================================
-  const [activeScenario, setActiveScenario] = useState("scenario-1")
-  const [debugPanelOpen, setDebugPanelOpen] = useState(false)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch dashboard data - extracted for retry capability
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const response = await fetch('/api/dashboard', {
+        credentials: 'include', // Include auth cookie
+      })
+
+      // Handle 401 - redirect to login
+      if (response.status === 401) {
+        router.push('/login/start')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dashboard: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setDashboardData(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [router])
+
+  // Fetch dashboard data on mount
+  useEffect(() => {
+    fetchDashboard()
+  }, [fetchDashboard])
+
   // State for card flip animation
   const [isTierCardFlipped, setIsTierCardFlipped] = useState(false)
   // State for discount scheduling modal
@@ -32,536 +126,46 @@ export default function Home() {
     }
   }, [isTierCardFlipped])
 
-  // ============================================
-  // TEST SCENARIOS - 12 Comprehensive Cases
-  // ============================================
-  /**
-   * API CONTRACT MOCK DATA
-   *
-   * Each scenario represents the response shape from GET /api/home
-   *
-   * NEXT CLAIMABLE MISSION:
-   * - Backend determines which mission user is closest to completing
-   * - Could be any mission type: sales, videos, likes, views, raffle
-   * - Reward type determined by mission configuration in database
-   *
-   * Backend Service: HomeService.getNextClaimableMission(userId)
-   * Business Logic:
-   *   1. Get all active missions for user's tier
-   *   2. Calculate progress on each mission
-   *   3. Return mission with highest progressPercentage
-   */
-  const scenarios = {
-    "scenario-1": {
-      name: "Bronze - Sales Mission 25%",
-      mockData: {
-        user: { id: "1", handle: "newcreator", email: "new@example.com", clientName: "Stateside Growers" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-1", name: "Bronze", color: "#CD7F32", order: 1, checkpointExempt: true },
-        nextTier: { id: "tier-2", name: "Silver", color: "#94a3b8", minSalesThreshold: 1000 },
-        tierProgress: { currentValue: 250, targetValue: 1000, progressPercentage: 25, currentFormatted: "$250", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-100k",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 35000,
-            targetValue: 100000,
-            progressPercentage: 35,
-            currentFormatted: "$35,000",
-            targetFormatted: "$100,000",
-            targetText: "of $100,000 sales",
-            progressText: "$35,000 of $100,000 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "gift_card",
-            rewardAmount: 25,
-            rewardCustomText: null
-          },
-          tier: { name: "Bronze", color: "#CD7F32" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@statesidegrowers.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-1", type: "gift_card", name: "$25 Amazon Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-2", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-        ],
-        totalRewardsCount: 2
-      },
-    },
-
-    "scenario-2": {
-      name: "Silver - Videos Mission 50%",
-      mockData: {
-        user: { id: "2", handle: "silverstar", email: "silver@example.com", clientName: "Fizee" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-2", name: "Silver", color: "#94a3b8", order: 2, checkpointExempt: false },
-        nextTier: { id: "tier-3", name: "Gold", color: "#F59E0B", minSalesThreshold: 3000 },
-        tierProgress: { currentValue: 1500, targetValue: 3000, progressPercentage: 50, currentFormatted: "$1,500", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-videos-20",
-            type: "videos",
-            displayName: "Lights, Camera, Go!",
-            currentProgress: 10,
-            targetValue: 20,
-            progressPercentage: 50,
-            currentFormatted: "10",
-            targetFormatted: "20",
-            targetText: "of 20 videos",
-            progressText: "10 of 20 videos",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "physical_gift",
-            rewardAmount: null,
-            rewardCustomText: "Wireless Headphones"
-          },
-          tier: { name: "Silver", color: "#94a3b8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@fizee.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-3", type: "physical_gift", name: "Wireless Headphones", displayText: "Win a Wireless Headphones", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-4", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-5", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
-          { id: "reward-6", type: "discount", name: "8% Follower Discount", displayText: "+8% Deal Boost for 30 Days", description: "", valueData: { percent: 8, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 4 },
-        ],
-        totalRewardsCount: 4
-      },
-    },
-
-    "scenario-3": {
-      name: "Gold - Likes Mission 75%",
-      mockData: {
-        user: { id: "3", handle: "goldpro", email: "gold@example.com", clientName: "BrandCo" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-3", name: "Gold", color: "#F59E0B", order: 3, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 5000 },
-        tierProgress: { currentValue: 3750, targetValue: 5000, progressPercentage: 75, currentFormatted: "$3,750", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-likes-5k",
-            type: "likes",
-            displayName: "Fan Favorite",
-            currentProgress: 3750,
-            targetValue: 5000,
-            progressPercentage: 75,
-            currentFormatted: "3.8K",
-            targetFormatted: "5K",
-            targetText: "of 5K likes",
-            progressText: "3.8K of 5K likes",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "commission_boost",
-            rewardAmount: 5,
-            rewardCustomText: null
-          },
-          tier: { name: "Gold", color: "#F59E0B" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@brandco.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-7", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-8", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-9", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 3 },
-          { id: "reward-10", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 4 },
-        ],
-        totalRewardsCount: 6
-      },
-    },
-
-    "scenario-4": {
-      name: "Platinum - Views Mission 99%",
-      mockData: {
-        user: { id: "4", handle: "platinumstar", email: "plat@example.com", clientName: "Elite Brand" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-4", name: "Platinum", color: "#818CF8", order: 4, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 10000 },
-        tierProgress: { currentValue: 9900, targetValue: 10000, progressPercentage: 99, currentFormatted: "$9,900", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-views-100k",
-            type: "views",
-            displayName: "Road to Viral",
-            currentProgress: 99000,
-            targetValue: 100000,
-            progressPercentage: 99,
-            currentFormatted: "99K",
-            targetFormatted: "100K",
-            targetText: "of 100K views",
-            progressText: "99K of 100K views",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "spark_ads",
-            rewardAmount: 200,
-            rewardCustomText: null
-          },
-          tier: { name: "Platinum", color: "#818CF8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@elitebrand.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-11", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-12", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-13", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-14", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
-        ],
-        totalRewardsCount: 6
-      },
-    },
-
-    "scenario-5": {
-      name: "Mission Complete 100%",
-      mockData: {
-        user: { id: "5", handle: "winner", email: "win@example.com", clientName: "Stateside Growers" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-3", name: "Gold", color: "#F59E0B", order: 3, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 5000 },
-        tierProgress: { currentValue: 4200, targetValue: 5000, progressPercentage: 84, currentFormatted: "$4,200", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "completed",
-          mission: {
-            id: "mission-sales-500-complete",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 500,
-            targetValue: 500,
-            progressPercentage: 100,
-            currentFormatted: "$500",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$500 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "discount",
-            rewardAmount: 8,
-            rewardCustomText: null
-          },
-          tier: { name: "Gold", color: "#F59E0B" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@statesidegrowers.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-15", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 1 },
-          { id: "reward-16", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-17", type: "spark_ads", name: "$100 Ad Boost", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
-        ],
-        totalRewardsCount: 3
-      },
-    },
-
-    "scenario-6": {
-      name: "Commission Boost Reward",
-      mockData: {
-        user: { id: "6", handle: "booster", email: "boost@example.com", clientName: "BrandCo" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-2", name: "Silver", color: "#94a3b8", order: 2, checkpointExempt: false },
-        nextTier: { id: "tier-3", name: "Gold", color: "#F59E0B", minSalesThreshold: 3000 },
-        tierProgress: { currentValue: 1800, targetValue: 3000, progressPercentage: 60, currentFormatted: "$1,800", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 300,
-            targetValue: 500,
-            progressPercentage: 60,
-            currentFormatted: "$300",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$300 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "gift_card",
-            rewardAmount: 35,
-            rewardCustomText: null
-          },
-          tier: { name: "Silver", color: "#94a3b8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@brandco.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-18", type: "commission_boost", name: "5% Commission Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-19", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
-        ],
-        totalRewardsCount: 2
-      },
-    },
-
-    "scenario-7": {
-      name: "Spark Ads Reward",
-      mockData: {
-        user: { id: "7", handle: "advertiser", email: "ads@example.com", clientName: "Fizee" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-3", name: "Gold", color: "#F59E0B", order: 3, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 5000 },
-        tierProgress: { currentValue: 4000, targetValue: 5000, progressPercentage: 80, currentFormatted: "$4,000", targetFormatted: "$5,000", checkpointExpiresAt: "2025-03-20T00:00:00Z", checkpointExpiresFormatted: "March 20, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-spark",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 400,
-            targetValue: 500,
-            progressPercentage: 80,
-            currentFormatted: "$400",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$400 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "spark_ads",
-            rewardAmount: 100,
-            rewardCustomText: null
-          },
-          tier: { name: "Gold", color: "#F59E0B" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@fizee.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-20", type: "spark_ads", name: "$100 Spark Ads Budget", displayText: "+$100 Ads Boost", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 1 },
-          { id: "reward-21", type: "gift_card", name: "$50 Gift Card", displayText: "$50 Gift Card", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-22", type: "commission_boost", name: "5% Pay Boost", displayText: "+5% Pay boost for 30 Days", description: "", valueData: { percent: 5, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
-        ],
-        totalRewardsCount: 3
-      },
-    },
-
-    "scenario-8": {
-      name: "Follower Discount Reward",
-      mockData: {
-        user: { id: "8", handle: "discounter", email: "disc@example.com", clientName: "BrandCo" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-2", name: "Silver", color: "#94a3b8", order: 2, checkpointExempt: false },
-        nextTier: { id: "tier-3", name: "Gold", color: "#F59E0B", minSalesThreshold: 3000 },
-        tierProgress: { currentValue: 2100, targetValue: 3000, progressPercentage: 70, currentFormatted: "$2,100", targetFormatted: "$3,000", checkpointExpiresAt: "2025-04-01T00:00:00Z", checkpointExpiresFormatted: "April 1, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-discount",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 350,
-            targetValue: 500,
-            progressPercentage: 70,
-            currentFormatted: "$350",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$350 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "discount",
-            rewardAmount: 10,
-            rewardCustomText: null
-          },
-          tier: { name: "Silver", color: "#94a3b8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@brandco.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-23", type: "discount", name: "10% Follower Discount", displayText: "+10% Deal Boost for 30 Days", description: "", valueData: { percent: 10, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-24", type: "gift_card", name: "$35 Gift Card", displayText: "$35 Gift Card", description: "", valueData: { amount: 35 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 2 },
-          { id: "reward-25", type: "commission_boost", name: "4% Commission Boost", displayText: "+4% Pay boost for 30 Days", description: "", valueData: { percent: 4, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
-        ],
-        totalRewardsCount: 3
-      },
-    },
-
-    "scenario-9": {
-      name: "Physical Gift Reward",
-      mockData: {
-        user: { id: "9", handle: "giftwinner", email: "gift@example.com", clientName: "Elite Brand" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-4", name: "Platinum", color: "#818CF8", order: 4, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 10000 },
-        tierProgress: { currentValue: 8500, targetValue: 10000, progressPercentage: 85, currentFormatted: "$8,500", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-iphone",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 425,
-            targetValue: 500,
-            progressPercentage: 85,
-            currentFormatted: "$425",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$425 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "physical_gift",
-            rewardAmount: null,
-            rewardCustomText: "iPhone 16 Pro"
-          },
-          tier: { name: "Platinum", color: "#818CF8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@elitebrand.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-26", type: "physical_gift", name: "iPhone 16 Pro", displayText: "Win a iPhone 16 Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-27", type: "experience", name: "VIP Event Access", displayText: "Win a VIP Event Access", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-28", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-29", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
-        ],
-        totalRewardsCount: 4
-      },
-    },
-
-    "scenario-10": {
-      name: "Minimal Benefits (2)",
-      mockData: {
-        user: { id: "10", handle: "starter", email: "start@example.com", clientName: "Stateside Growers" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-1", name: "Bronze", color: "#CD7F32", order: 1, checkpointExempt: true },
-        nextTier: { id: "tier-2", name: "Silver", color: "#94a3b8", minSalesThreshold: 1000 },
-        tierProgress: { currentValue: 100, targetValue: 1000, progressPercentage: 10, currentFormatted: "$100", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-starter",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 50,
-            targetValue: 500,
-            progressPercentage: 10,
-            currentFormatted: "$50",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$50 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "gift_card",
-            rewardAmount: 25,
-            rewardCustomText: null
-          },
-          tier: { name: "Bronze", color: "#CD7F32" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@statesidegrowers.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-30", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-31", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-        ],
-        totalRewardsCount: 2
-      },
-    },
-
-    "scenario-11": {
-      name: "Low Progress 5%",
-      mockData: {
-        user: { id: "11", handle: "beginner", email: "begin@example.com", clientName: "Fizee" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-1", name: "Bronze", color: "#CD7F32", order: 1, checkpointExempt: true },
-        nextTier: { id: "tier-2", name: "Silver", color: "#94a3b8", minSalesThreshold: 1000 },
-        tierProgress: { currentValue: 50, targetValue: 1000, progressPercentage: 5, currentFormatted: "$50", targetFormatted: "$1,000", checkpointExpiresAt: "2025-03-15T00:00:00Z", checkpointExpiresFormatted: "March 15, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-beginner",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 25,
-            targetValue: 500,
-            progressPercentage: 5,
-            currentFormatted: "$25",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$25 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "gift_card",
-            rewardAmount: 25,
-            rewardCustomText: null
-          },
-          tier: { name: "Bronze", color: "#CD7F32" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@fizee.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-32", type: "gift_card", name: "$25 Gift Card", displayText: "$25 Gift Card", description: "", valueData: { amount: 25 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-33", type: "commission_boost", name: "3% Commission Boost", displayText: "+3% Pay boost for 30 Days", description: "", valueData: { percent: 3, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-34", type: "spark_ads", name: "$50 Ad Boost", displayText: "+$50 Ads Boost", description: "", valueData: { amount: 50 }, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 3 },
-        ],
-        totalRewardsCount: 3
-      },
-    },
-
-    "scenario-12": {
-      name: "🔥 All Reward Types",
-      mockData: {
-        user: { id: "12", handle: "poweruser", email: "power@example.com", clientName: "Elite Brand" },
-        client: { id: "client-1", vipMetric: "sales", vipMetricLabel: "sales" },
-        currentTier: { id: "tier-4", name: "Platinum", color: "#818CF8", order: 4, checkpointExempt: false },
-        nextTier: { id: "tier-4", name: "Platinum", color: "#818CF8", minSalesThreshold: 10000 },
-        tierProgress: { currentValue: 9000, targetValue: 10000, progressPercentage: 90, currentFormatted: "$9,000", targetFormatted: "$10,000", checkpointExpiresAt: "2025-03-25T00:00:00Z", checkpointExpiresFormatted: "March 25, 2025", checkpointMonths: 4 },
-        featuredMission: {
-          status: "active",
-          mission: {
-            id: "mission-sales-500-experience",
-            type: "sales_dollars",
-            displayName: "Unlock Payday",
-            currentProgress: 450,
-            targetValue: 500,
-            progressPercentage: 90,
-            currentFormatted: "$450",
-            targetFormatted: "$500",
-            targetText: "of $500 sales",
-            progressText: "$450 of $500 sales",
-            isRaffle: false,
-            raffleEndDate: null,
-            rewardType: "experience",
-            rewardAmount: null,
-            rewardCustomText: "Exclusive Brand Summit"
-          },
-          tier: { name: "Platinum", color: "#818CF8" },
-          showCongratsModal: false,
-          congratsMessage: null,
-          supportEmail: "support@elitebrand.com",
-          emptyStateMessage: null
-        },
-        currentTierRewards: [
-          { id: "reward-35", type: "experience", name: "Exclusive Brand Summit", displayText: "Win a Exclusive Brand Summit", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 1 },
-          { id: "reward-36", type: "physical_gift", name: "MacBook Pro", displayText: "Win a MacBook Pro", description: "", valueData: null, rewardSource: "vip_tier", redemptionQuantity: 1, displayOrder: 2 },
-          { id: "reward-37", type: "gift_card", name: "$100 Gift Card", displayText: "$100 Gift Card", description: "", valueData: { amount: 100 }, rewardSource: "vip_tier", redemptionQuantity: 3, displayOrder: 3 },
-          { id: "reward-38", type: "commission_boost", name: "7% Pay Boost", displayText: "+7% Pay boost for 30 Days", description: "", valueData: { percent: 7, durationDays: 30 }, rewardSource: "vip_tier", redemptionQuantity: 2, displayOrder: 4 },
-        ],
-        totalRewardsCount: 6
-      },
-    },
+  // Loading state - show spinner while fetching data
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
+        <div className="flex flex-col items-center space-y-6">
+          <Loader2 className="h-16 w-16 text-pink-600 animate-spin" />
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-bold text-slate-900">Loading your dashboard...</h1>
+            <p className="text-sm text-slate-600">This will only take a moment</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  // Get current scenario data
-  const currentScenario = scenarios[activeScenario as keyof typeof scenarios]
-  const mockData = currentScenario.mockData
+  // Error state - show error message with retry button
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
+        <div className="flex flex-col items-center space-y-6 max-w-md text-center">
+          <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center">
+            <X className="h-8 w-8 text-red-600" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-slate-900">Something went wrong</h1>
+            <p className="text-sm text-slate-600">{error}</p>
+          </div>
+          <Button
+            onClick={() => fetchDashboard()}
+            className="bg-pink-600 hover:bg-pink-700 text-white"
+          >
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Dashboard data is guaranteed to be defined here (loading/error states return early)
+  const mockData = dashboardData!
 
   /**
    * CURRENT TIER REWARDS (from backend API)
@@ -718,58 +322,6 @@ export default function Home() {
 
   return (
     <>
-      {/* DEBUG PANEL TOGGLE BUTTON - Always visible */}
-      <button
-        onClick={() => setDebugPanelOpen(!debugPanelOpen)}
-        className="fixed top-4 right-4 z-50 bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-2xl border-2 border-white"
-        aria-label="Toggle test scenarios"
-      >
-        🧪
-      </button>
-
-      {/* Collapsible Debug Panel */}
-      {debugPanelOpen && (
-        <div className="fixed top-16 right-4 z-50 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border-2 border-purple-500 p-4 w-64 max-h-[70vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              🧪 Test Scenarios
-              <span className="text-xs text-slate-500">({Object.keys(scenarios).length})</span>
-            </h3>
-            <button
-              onClick={() => setDebugPanelOpen(false)}
-              className="text-slate-400 hover:text-slate-600"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            {Object.entries(scenarios).map(([key, scenario]) => (
-              <Button
-                key={key}
-                onClick={() => setActiveScenario(key)}
-                variant={activeScenario === key ? "default" : "outline"}
-                size="sm"
-                className={cn(
-                  "w-full justify-start text-xs h-auto py-2 px-3",
-                  activeScenario === key && "bg-purple-600 hover:bg-purple-700"
-                )}
-              >
-                <span className="font-semibold truncate w-full text-left">
-                  {scenario.name}
-                </span>
-              </Button>
-            ))}
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-slate-200">
-            <p className="text-xs text-slate-600">
-              <span className="font-semibold">Active:</span> {currentScenario.name}
-            </p>
-          </div>
-        </div>
-      )}
-
       <HomePageLayout title={`Hi, @${mockData.user.handle}`}>
       {/* Section 1: Circular Progress (NO CARD - directly on gray background) */}
       <div className="flex flex-col items-center text-center space-y-3 py-2">
@@ -879,24 +431,24 @@ export default function Home() {
           <div style={{ backfaceVisibility: 'hidden' }}>
             <Card className="bg-white rounded-xl shadow-sm">
               <CardContent className="px-6 py-2 space-y-3">
-                {/* Title with gradient ribbon */}
+                {/* Title with gradient ribbon - shows "Unlock [NextTier]" or "You're at the Top!" */}
                 <div className="relative inline-block">
                   <div
                     className="absolute inset-0 opacity-20 blur-sm rounded-lg -z-10"
                     style={{
-                      background: `linear-gradient(135deg, ${mockData.nextTier.color}, ${mockData.nextTier.color}80)`,
+                      background: `linear-gradient(135deg, ${mockData.nextTier?.color || currentTierColor}, ${mockData.nextTier?.color || currentTierColor}80)`,
                       transform: 'scale(1.1)',
                     }}
                   />
                   <h3
                     className="text-base font-bold text-slate-900 px-3 py-1 relative"
                     style={{
-                      background: `linear-gradient(135deg, ${mockData.nextTier.color}15, ${mockData.nextTier.color}25)`,
+                      background: `linear-gradient(135deg, ${mockData.nextTier?.color || currentTierColor}15, ${mockData.nextTier?.color || currentTierColor}25)`,
                       borderRadius: '0.5rem',
-                      boxShadow: `0 0 15px ${mockData.nextTier.color}40`,
+                      boxShadow: `0 0 15px ${mockData.nextTier?.color || currentTierColor}40`,
                     }}
                   >
-                    Unlock {mockData.nextTier.name}
+                    {mockData.nextTier ? `Unlock ${mockData.nextTier.name}` : "You're at the Top!"}
                   </h3>
                 </div>
 

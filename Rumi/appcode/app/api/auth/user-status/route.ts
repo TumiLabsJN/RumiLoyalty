@@ -22,9 +22,20 @@ import { formatErrorResponse } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
+    // DEBUG: Check if cookies are being received
+    const authToken = request.cookies.get('auth-token')?.value;
+    const refreshToken = request.cookies.get('auth-refresh-token')?.value;
+    console.log('[USER-STATUS] Cookies received:', {
+      hasAuthToken: !!authToken,
+      hasRefreshToken: !!refreshToken,
+      authTokenLength: authToken?.length || 0
+    });
+
     // Step 1: Validate session token BEFORE any database queries (line 1281)
     const supabase = await createClient();
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+    console.log('[USER-STATUS] getUser result:', { hasUser: !!authUser, error: authError?.message });
 
     if (authError || !authUser) {
       // Return 401 UNAUTHORIZED per API_CONTRACTS.md lines 1259-1264
@@ -51,10 +62,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 2: Query user info (id, email_verified, last_login_at) per lines 1200-1206
+    console.log('[USER-STATUS] Looking up user by authId:', authUser.id);
     const user = await userRepository.findByAuthId(authUser.id);
+    console.log('[USER-STATUS] User lookup result:', { found: !!user, userId: user?.id });
 
     if (!user) {
       // User exists in Supabase Auth but not in our users table
+      console.log('[USER-STATUS] User NOT found in users table - returning 401');
       return NextResponse.json(
         {
           error: 'UNAUTHORIZED',

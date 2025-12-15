@@ -258,6 +258,8 @@ export interface LoginResult {
   email: string;
   tiktokHandle: string;
   isAdmin: boolean;
+  accessToken: string;
+  refreshToken: string;
 }
 
 /**
@@ -704,6 +706,8 @@ export const authService = {
       email: user.email,
       tiktokHandle: user.tiktokHandle,
       isAdmin: user.isAdmin,
+      accessToken: authData.session?.access_token || '',
+      refreshToken: authData.session?.refresh_token || '',
     };
   },
 

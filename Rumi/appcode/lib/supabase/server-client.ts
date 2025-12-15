@@ -16,7 +16,7 @@ import type { Database } from '@/lib/types/database';
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(
+  const supabase = createServerClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_ANON_KEY!,
     {
@@ -43,6 +43,24 @@ export async function createClient() {
       },
     }
   );
+
+  // BUG-AUTH-COOKIE-SESSION Fix: Restore session from custom cookies
+  // Middleware handles token refresh; this ensures route handlers have valid session.
+  //
+  // IMPORTANT: Token refresh is MIDDLEWARE-ONLY. This setSession() call restores the
+  // session but does NOT have response access to persist refreshed tokens. If tokens
+  // expire mid-request (rare - tokens last ~1 hour), the refresh won't persist to browser.
+  // For MVP, this is acceptable; middleware handles 99.9% of refresh cases.
+  const authToken = cookieStore.get('auth-token')?.value;
+  const refreshToken = cookieStore.get('auth-refresh-token')?.value;
+  if (authToken) {
+    await supabase.auth.setSession({
+      access_token: authToken,
+      refresh_token: refreshToken || '',
+    });
+  }
+
+  return supabase;
 }
 
 /**

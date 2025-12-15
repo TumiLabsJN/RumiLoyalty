@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/authService';
 import { formatErrorResponse, BusinessError } from '@/lib/utils/errors';
-import { createClient } from '@/lib/supabase/server-client';
 import { checkLoginRateLimit, recordFailedLogin, clearLoginRateLimit } from '@/lib/utils/rateLimiter';
 
 /**
@@ -93,10 +92,17 @@ export async function POST(request: NextRequest) {
     // Clear rate limit on successful login
     clearLoginRateLimit(clientId, handle);
 
-    // Get session token from Supabase
-    const supabase = await createClient();
-    const { data: sessionData } = await supabase.auth.getSession();
-    const sessionToken = sessionData.session?.access_token || '';
+    // Get session tokens from login result (returned by authService.login)
+    const sessionToken = result.accessToken;
+    const refreshToken = result.refreshToken;
+
+    // DEBUG: Log token status
+    console.log('[AUTH] Tokens from authService:', {
+      hasAccessToken: !!sessionToken,
+      hasRefreshToken: !!refreshToken,
+      accessTokenLength: sessionToken?.length || 0,
+      refreshTokenLength: refreshToken?.length || 0
+    });
 
     // Build response per API_CONTRACTS.md lines 987-993
     const response = NextResponse.json(
@@ -108,14 +114,26 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    // Set auth-token HTTP-only cookie (7 days per API_CONTRACTS.md line 1028)
+    // Set auth-token HTTP-only cookie (30 days - aligned with OTP flow)
     if (sessionToken) {
       response.cookies.set('auth-token', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
         path: '/',
-        maxAge: 604800, // 7 days
+        maxAge: 2592000, // 30 days
+      });
+    }
+
+    // BUG-AUTH-COOKIE-SESSION Fix: Set refresh token cookie for session refresh
+    // Required for middleware to refresh expired access tokens
+    if (refreshToken) {
+      response.cookies.set('auth-refresh-token', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 2592000, // 30 days
       });
     }
 

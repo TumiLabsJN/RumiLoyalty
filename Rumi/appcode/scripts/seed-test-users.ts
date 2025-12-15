@@ -24,7 +24,14 @@ const BCRYPT_ROUNDS = 10;
 const TEST_PASSWORD = 'TestPass123!';
 
 // IDs for referential integrity
-const CLIENT_ID = randomUUID();
+// CLIENT_ID must be set in .env.local - fail fast if missing
+const CLIENT_ID = process.env.CLIENT_ID;
+if (!CLIENT_ID) {
+  console.error('❌ ERROR: CLIENT_ID not set in .env.local');
+  console.error('   The seed script requires a valid CLIENT_ID to match the app configuration.');
+  console.error('   Run: echo "CLIENT_ID=your-uuid-here" >> .env.local');
+  process.exit(1);
+}
 const TIER_IDS = {
   tier_1: randomUUID(),
   tier_2: randomUUID(),
@@ -81,8 +88,8 @@ const TIER_CONFIG = [
 ];
 
 // Test user configuration matching SchemaFinalv2.md lines 123-155
+// Note: id field removed - will be assigned from Supabase Auth user ID
 interface TestUser {
-  id: string;
   tiktok_handle: string;
   email: string;
   // current_tier uses tier_id string per schema line 137: VARCHAR(50) DEFAULT 'tier_1'
@@ -107,7 +114,6 @@ interface TestUser {
 
 const TEST_USERS: TestUser[] = [
   {
-    id: randomUUID(),
     tiktok_handle: 'testbronze',
     email: 'testbronze@test.com',
     current_tier: 'tier_1',
@@ -127,7 +133,6 @@ const TEST_USERS: TestUser[] = [
     checkpoint_total_comments: 50,
   },
   {
-    id: randomUUID(),
     tiktok_handle: 'testsilver',
     email: 'testsilver@test.com',
     current_tier: 'tier_2',
@@ -147,7 +152,6 @@ const TEST_USERS: TestUser[] = [
     checkpoint_total_comments: 250,
   },
   {
-    id: randomUUID(),
     tiktok_handle: 'testgold',
     email: 'testgold@test.com',
     current_tier: 'tier_3',
@@ -167,7 +171,6 @@ const TEST_USERS: TestUser[] = [
     checkpoint_total_comments: 750,
   },
   {
-    id: randomUUID(),
     tiktok_handle: 'testplatinum',
     email: 'testplatinum@test.com',
     current_tier: 'tier_4',
@@ -213,102 +216,247 @@ async function seedTestData() {
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, BCRYPT_ROUNDS);
   const now = new Date().toISOString();
 
-  // Step 1: Create test client (SchemaFinalv2.md lines 106-120)
-  console.log('1. Creating test client...');
-  const { error: clientError } = await supabase.from('clients').insert({
-    id: CLIENT_ID,
-    name: 'Test Client',
-    subdomain: 'test',
-    logo_url: 'https://placehold.co/200x200/EC4899/white?text=TEST', // Placeholder logo
-    primary_color: '#EC4899',
-    tier_calculation_mode: 'fixed_checkpoint',
-    checkpoint_months: 4,
-    vip_metric: 'sales',
-  });
+  // Step 0: Clean up existing test data (if any)
+  console.log('0. Cleaning up existing test data...');
 
-  if (clientError) {
-    if (clientError.code === '23505') {
-      console.log('   Client already exists, continuing...');
+  // Delete test users first (FK constraint)
+  const { error: deleteUsersError } = await supabase
+    .from('users')
+    .delete()
+    .like('tiktok_handle', 'test%');
+  if (deleteUsersError) {
+    console.log(`   Warning: Could not delete test users: ${deleteUsersError.message}`);
+  } else {
+    console.log('   Deleted existing test users');
+  }
+
+  // Delete test videos (orphaned after user delete)
+  // Videos are deleted via cascade from users
+
+  // Delete test tiers
+  const { data: existingClient } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('subdomain', 'test')
+    .single();
+
+  if (existingClient) {
+    const { error: deleteTiersError } = await supabase
+      .from('tiers')
+      .delete()
+      .eq('client_id', existingClient.id);
+    if (deleteTiersError) {
+      console.log(`   Warning: Could not delete test tiers: ${deleteTiersError.message}`);
     } else {
+      console.log('   Deleted existing test tiers');
+    }
+
+    // Delete test client
+    const { error: deleteClientError } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', existingClient.id);
+    if (deleteClientError) {
+      console.log(`   Warning: Could not delete test client: ${deleteClientError.message}`);
+    } else {
+      console.log('   Deleted existing test client');
+    }
+  }
+
+  // Step 1: Check if client exists or create test client
+  console.log('\n1. Checking/Creating client...');
+  const { data: configuredClient } = await supabase
+    .from('clients')
+    .select('id, name')
+    .eq('id', CLIENT_ID)
+    .single();
+
+  if (configuredClient) {
+    console.log(`   Using existing client: ${configuredClient.name} (${CLIENT_ID})`);
+  } else {
+    // Create new test client if doesn't exist
+    const { error: clientError } = await supabase.from('clients').insert({
+      id: CLIENT_ID,
+      name: 'Test Client',
+      subdomain: 'test',
+      logo_url: 'https://placehold.co/200x200/EC4899/white?text=TEST',
+      primary_color: '#EC4899',
+      tier_calculation_mode: 'fixed_checkpoint',
+      checkpoint_months: 4,
+      vip_metric: 'sales',
+    });
+
+    if (clientError) {
       throw new Error(`Failed to create client: ${clientError.message}`);
     }
-  } else {
     console.log(`   Created client: ${CLIENT_ID}`);
   }
 
-  // Step 2: Create tiers (SchemaFinalv2.md lines 254-272)
-  console.log('\n2. Creating tiers...');
-  for (const tier of TIER_CONFIG) {
-    const { error: tierError } = await supabase.from('tiers').insert({
-      ...tier,
-      client_id: CLIENT_ID,
-    });
-    if (tierError) {
-      if (tierError.code === '23505') {
-        console.log(`   Tier ${tier.tier_name} already exists, continuing...`);
+  // Step 2: Check existing tiers or create new ones
+  console.log('\n2. Checking/Creating tiers...');
+
+  // Check if tiers exist for this client
+  const { data: existingTiers } = await supabase
+    .from('tiers')
+    .select('id, tier_id, tier_name')
+    .eq('client_id', CLIENT_ID);
+
+  // Build tier ID mapping (use existing or create new)
+  const tierIdMap: Record<string, string> = {};
+
+  if (existingTiers && existingTiers.length > 0) {
+    // Use existing tier IDs
+    for (const tier of existingTiers) {
+      tierIdMap[tier.tier_id] = tier.id;
+      console.log(`   Using existing tier: ${tier.tier_name} (${tier.tier_id})`);
+    }
+  } else {
+    // Create new tiers
+    for (const tier of TIER_CONFIG) {
+      const { error: tierError } = await supabase.from('tiers').insert({
+        ...tier,
+        client_id: CLIENT_ID,
+      });
+      if (tierError) {
+        if (tierError.code === '23505') {
+          console.log(`   Tier ${tier.tier_name} already exists, continuing...`);
+        } else {
+          throw new Error(`Failed to create tier ${tier.tier_name}: ${tierError.message}`);
+        }
       } else {
-        throw new Error(`Failed to create tier ${tier.tier_name}: ${tierError.message}`);
+        console.log(`   Created tier: ${tier.tier_name} (${tier.tier_id})`);
       }
-    } else {
-      console.log(`   Created tier: ${tier.tier_name} (${tier.tier_id})`);
+      tierIdMap[tier.tier_id] = tier.id;
     }
   }
 
-  // Step 3: Create users (SchemaFinalv2.md lines 123-155)
-  console.log('\n3. Creating test users...');
+  // Helper to get tier UUID from tier_id string
+  const getTierUUID = (tierId: string): string => {
+    return tierIdMap[tierId] || TIER_IDS[tierId as keyof typeof TIER_IDS];
+  };
+
+  // Step 3: Create test users with proper Supabase Auth integration
+  // This mirrors production signup flow: Auth user first, then users table
+  console.log('\n3. Creating test users with Supabase Auth...');
+
+  // Track created user IDs for video creation
+  const userIdMap: Record<string, string> = {};
+
   for (const user of TEST_USERS) {
+    // 3a. Try to create Supabase Auth user FIRST (mirrors production signup)
+    let authUserId: string;
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: user.email,
+      password: TEST_PASSWORD,
+      email_confirm: true,  // Auto-confirm for test users
+    });
+
+    // 3b. Handle "already exists" error gracefully (avoids listUsers pagination issues)
+    if (authError?.message?.includes('already been registered')) {
+      console.log(`   Auth user exists for ${user.email}, finding and deleting...`);
+
+      // Find existing user by email (paginate through all users if needed)
+      let existingAuthId: string | null = null;
+      let page = 1;
+      const perPage = 100;
+
+      while (!existingAuthId) {
+        const { data: listData } = await supabase.auth.admin.listUsers({
+          page,
+          perPage,
+        });
+
+        const found = listData?.users?.find((u: { email?: string }) => u.email === user.email);
+        if (found) {
+          existingAuthId = found.id;
+          break;
+        }
+
+        // No more pages
+        if (!listData?.users?.length || listData.users.length < perPage) {
+          throw new Error(`Could not find existing Auth user for ${user.email}`);
+        }
+        page++;
+      }
+
+      // Delete existing Auth user
+      await supabase.auth.admin.deleteUser(existingAuthId);
+      console.log(`   Deleted existing Auth user: ${existingAuthId}`);
+
+      // Retry creation
+      const { data: retryData, error: retryError } = await supabase.auth.admin.createUser({
+        email: user.email,
+        password: TEST_PASSWORD,
+        email_confirm: true,
+      });
+
+      if (retryError || !retryData.user) {
+        throw new Error(`Failed to create Auth user for ${user.email}: ${retryError?.message}`);
+      }
+      authUserId = retryData.user.id;
+    } else if (authError || !authData.user) {
+      throw new Error(`Failed to create Auth user for ${user.email}: ${authError?.message}`);
+    } else {
+      authUserId = authData.user.id;
+    }
+
+    console.log(`   Created Auth user: ${user.email} (${authUserId})`);
+
+    // Store for video creation
+    userIdMap[user.tiktok_handle] = authUserId;
+
+    // 3c. Insert into users table with Auth ID (matches production flow)
     const { error: userError } = await supabase.from('users').insert({
-      // Core fields (lines 128-136)
-      id: user.id,
+      // Core fields - using Auth ID as users.id
+      id: authUserId,  // Uses Supabase Auth ID - matches production flow
       client_id: CLIENT_ID,
       tiktok_handle: user.tiktok_handle,
       email: user.email,
       email_verified: true,
-      password_hash: passwordHash,
+      password_hash: '[managed-by-supabase-auth]',  // Supabase manages password
       terms_accepted_at: now,
       terms_version: '2025-01-18',
       is_admin: false,
-      // Tier fields (lines 137-141)
-      current_tier: user.current_tier, // VARCHAR(50): 'tier_1', 'tier_2', etc.
+      // Tier fields
+      current_tier: user.current_tier,  // VARCHAR column - store 'tier_1' string directly
       tier_achieved_at: now,
       next_checkpoint_at: user.next_checkpoint_at?.toISOString() || null,
       checkpoint_sales_target: user.checkpoint_sales_target,
       checkpoint_units_target: user.checkpoint_units_target,
-      // Precomputed: Leaderboard (line 143)
+      // Precomputed: Leaderboard
       leaderboard_rank: user.leaderboard_rank,
       total_sales: user.checkpoint_sales_current,
       total_units: user.checkpoint_units_current,
       manual_adjustments_total: 0,
       manual_adjustments_units: 0,
-      // Precomputed: Checkpoint progress (line 144)
+      // Precomputed: Checkpoint progress
       checkpoint_sales_current: user.checkpoint_sales_current,
       checkpoint_units_current: user.checkpoint_units_current,
-      projected_tier_at_checkpoint: user.projected_tier_at_checkpoint,
-      // Precomputed: Engagement (line 145)
+      projected_tier_at_checkpoint: getTierUUID(user.projected_tier_at_checkpoint),
+      // Precomputed: Engagement
       checkpoint_videos_posted: user.video_count,
       checkpoint_total_views: user.checkpoint_total_views,
       checkpoint_total_likes: user.checkpoint_total_likes,
       checkpoint_total_comments: user.checkpoint_total_comments,
-      // Precomputed: Next tier (line 146)
+      // Precomputed: Next tier
       next_tier_name: user.next_tier_name,
       next_tier_threshold: user.next_tier_threshold,
       next_tier_threshold_units: user.next_tier_threshold_units,
-      // Precomputed: Historical (line 147)
+      // Precomputed: Historical
       checkpoint_progress_updated_at: now,
-      // Other fields (lines 152-154)
+      // Other fields
       first_video_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-      last_login_at: now,
+      last_login_at: null,  // Will be set on first login (for isRecognized detection)
     });
 
     if (userError) {
-      if (userError.code === '23505') {
-        console.log(`   User @${user.tiktok_handle} already exists, continuing...`);
-      } else {
-        throw new Error(`Failed to create user @${user.tiktok_handle}: ${userError.message}`);
-      }
-    } else {
-      console.log(`   Created user: @${user.tiktok_handle} (${user.current_tier})`);
+      // Rollback: delete Auth user if users table insert fails
+      await supabase.auth.admin.deleteUser(authUserId);
+      throw new Error(`Failed to create user @${user.tiktok_handle}: ${userError.message}`);
     }
+
+    console.log(`   Created user: @${user.tiktok_handle} (${user.current_tier})`);
   }
 
   // Step 4: Create video records (SchemaFinalv2.md lines 227-251)
@@ -322,7 +470,7 @@ async function seedTestData() {
     for (let i = 0; i < user.video_count; i++) {
       videos.push({
         id: randomUUID(),
-        user_id: user.id,
+        user_id: userIdMap[user.tiktok_handle],
         client_id: CLIENT_ID,
         video_url: `https://tiktok.com/@${user.tiktok_handle}/video/${randomUUID()}`,
         video_title: `Test Video ${i + 1} by @${user.tiktok_handle}`,

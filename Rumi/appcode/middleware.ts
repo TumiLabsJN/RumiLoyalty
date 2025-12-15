@@ -20,11 +20,6 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /admin/* pages (not API routes - those use adminMiddleware)
-  if (!pathname.startsWith('/admin')) {
-    return NextResponse.next();
-  }
-
   // Create response that we can modify
   let response = NextResponse.next({
     request: {
@@ -83,6 +78,67 @@ export async function middleware(request: NextRequest) {
 
   // Check for auth-token cookie (our custom session token)
   const authToken = request.cookies.get('auth-token')?.value;
+  const refreshToken = request.cookies.get('auth-refresh-token')?.value;
+
+  // BUG-AUTH-COOKIE-SESSION Fix: Restore session from custom cookies
+  // Supabase expects sb-xxx-auth-token but we use custom names.
+  // Call setSession() to restore session - this also handles token refresh.
+  if (authToken) {
+    const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+      access_token: authToken,
+      refresh_token: refreshToken || '',
+    });
+
+    // If tokens were refreshed, update our custom cookies
+    if (sessionData?.session) {
+      const newAccessToken = sessionData.session.access_token;
+      const newRefreshToken = sessionData.session.refresh_token;
+
+      // Update cookies if tokens changed (were refreshed)
+      if (newAccessToken && newAccessToken !== authToken) {
+        request.cookies.set({
+          name: 'auth-token',
+          value: newAccessToken,
+        });
+        response = NextResponse.next({
+          request: { headers: request.headers },
+        });
+        response.cookies.set('auth-token', newAccessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          path: '/',
+          maxAge: 2592000, // 30 days
+        });
+      }
+      if (newRefreshToken && newRefreshToken !== refreshToken) {
+        request.cookies.set({
+          name: 'auth-refresh-token',
+          value: newRefreshToken,
+        });
+        response = NextResponse.next({
+          request: { headers: request.headers },
+        });
+        response.cookies.set('auth-refresh-token', newRefreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          path: '/',
+          maxAge: 2592000, // 30 days
+        });
+      }
+    }
+  }
+
+  // For non-admin routes, session restoration is done - return response
+  // This allows the route handler to use the restored session
+  if (!pathname.startsWith('/admin')) {
+    return response;
+  }
+
+  // ============================================
+  // ADMIN-ONLY PROTECTION BELOW
+  // ============================================
 
   if (!authToken) {
     // No session - redirect to login
@@ -146,6 +202,20 @@ export async function middleware(request: NextRequest) {
  */
 export const config = {
   matcher: [
+    // Protected routes that need session refresh
+    // Note: Static assets (/_next/*, images, etc.) are NOT matched - explicit list is safer
     '/admin/:path*',
+    '/home/:path*',
+    '/home',
+    '/missions/:path*',
+    '/missions',
+    '/rewards/:path*',
+    '/rewards',
+    '/tiers/:path*',
+    '/tiers',
+    '/api/user/:path*',
+    '/api/missions/:path*',
+    '/api/rewards/:path*',
+    '/api/auth/user-status',
   ],
 };
