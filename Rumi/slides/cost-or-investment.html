@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost or Investment?</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .container {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 50px 60px;
+            max-width: 1100px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #ffffff;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+
+        .header-row {
+            display: grid;
+            grid-template-columns: 50px 1fr 40px 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #2a2a4a;
+        }
+
+        .header-row .col-header {
+            color: #667eea;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header-row .col-header:first-of-type {
+            grid-column: 2;
+        }
+
+        .header-row .col-header:last-of-type {
+            grid-column: 4;
+        }
+
+        .reward-row {
+            display: grid;
+            grid-template-columns: 50px 1fr 40px 1fr;
+            gap: 20px;
+            align-items: center;
+            padding: 18px 0;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .reward-row:last-child {
+            border-bottom: none;
+        }
+
+        .icon {
+            font-size: 1.8rem;
+            text-align: center;
+        }
+
+        .cost-text {
+            color: #ff6b6b;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .arrow {
+            color: #667eea;
+            font-size: 1.5rem;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .investment-text {
+            color: #4ecca3;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .highlight {
+            font-weight: 600;
+        }
+
+        .footer {
+            margin-top: 35px;
+            padding-top: 25px;
+            border-top: 2px solid #2a2a4a;
+            text-align: center;
+        }
+
+        .footer-icon {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        .footer-text {
+            color: #ffffff;
+            font-size: 1.15rem;
+            font-weight: 500;
+        }
+
+        .footer-subtext {
+            color: #a0a0a0;
+            font-size: 0.95rem;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>COST OR INVESTMENT?</h1>
+
+        <div class="header-row">
+            <span class="col-header">Sounds Like a Cost</span>
+            <span class="col-header">Actually an Investment</span>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">⚡</div>
+            <div class="cost-text">"Giving away ad credits"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text">Redirecting <span class="highlight">existing ad budget</span> to proven performers</div>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">🏷️</div>
+            <div class="cost-text">"Giving away discounts"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text">Replacing mass promos with <span class="highlight">targeted, creator-driven</span> sales</div>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">📈</div>
+            <div class="cost-text">"Paying higher commission"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text">Only paying when they <span class="highlight">sell MORE</span> (you profit too)</div>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">💳</div>
+            <div class="cost-text">"Giving away gift cards"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text">Cheaper than <span class="highlight">acquiring a new creator</span> (CAC savings)</div>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">📦</div>
+            <div class="cost-text">"Buying merch"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text"><span class="highlight">Branded content</span> + free marketing (they post wearing it)</div>
+        </div>
+
+        <div class="reward-row">
+            <div class="icon">✨</div>
+            <div class="cost-text">"Paying for events"</div>
+            <div class="arrow">→</div>
+            <div class="investment-text">VIP spots at events <span class="highlight">you're already hosting</span></div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-icon">💡</div>
+            <div class="footer-text">These are retention investments, not giveaways.</div>
+            <div class="footer-subtext">Same budgets. Smarter allocation. Better results.</div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Economics of Rewards</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .container {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 50px 60px;
+            max-width: 1100px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #ffffff;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            color: #a0a0a0;
+            text-align: center;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        .columns-header {
+            display: grid;
+            grid-template-columns: 1fr 60px 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .column-title {
+            text-align: center;
+            padding: 15px 20px;
+            border-radius: 10px;
+        }
+
+        .column-title.before {
+            background: rgba(255, 107, 107, 0.15);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+        }
+
+        .column-title.after {
+            background: rgba(78, 204, 163, 0.15);
+            border: 1px solid rgba(78, 204, 163, 0.3);
+        }
+
+        .column-title h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .column-title.before h2 {
+            color: #ff6b6b;
+        }
+
+        .column-title.after h2 {
+            color: #4ecca3;
+        }
+
+        .column-title p {
+            font-size: 0.85rem;
+            color: #a0a0a0;
+        }
+
+        .spacer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .comparison-row {
+            display: grid;
+            grid-template-columns: 1fr 60px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px 25px;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .card.before {
+            border-left: 3px solid #ff6b6b;
+        }
+
+        .card.after {
+            border-left: 3px solid #4ecca3;
+        }
+
+        .card-icon {
+            font-size: 1.8rem;
+            flex-shrink: 0;
+        }
+
+        .card-content {
+            flex: 1;
+        }
+
+        .card-text {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .card.before .card-text {
+            color: #e0e0e0;
+        }
+
+        .card.after .card-text {
+            color: #e0e0e0;
+        }
+
+        .card-highlight {
+            font-size: 0.85rem;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        .card.before .card-highlight {
+            color: #ff6b6b;
+        }
+
+        .card.after .card-highlight {
+            color: #4ecca3;
+        }
+
+        .arrow-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .arrow {
+            color: #667eea;
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 35px;
+            padding-top: 25px;
+            border-top: 2px solid #2a2a4a;
+            text-align: center;
+        }
+
+        .footer-text {
+            color: #ffffff;
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+
+        .footer-highlight {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>THE ECONOMICS OF REWARDS</h1>
+        <p class="subtitle">Same budgets. Smarter allocation.</p>
+
+        <div class="columns-header">
+            <div class="column-title before">
+                <h2>BEFORE</h2>
+                <p>How you spend now</p>
+            </div>
+            <div class="spacer"></div>
+            <div class="column-title after">
+                <h2>AFTER</h2>
+                <p>How loyalty redirects it</p>
+            </div>
+        </div>
+
+        <div class="comparison-row">
+            <div class="card before">
+                <div class="card-icon">⚡</div>
+                <div class="card-content">
+                    <div class="card-text">Ad budget goes to random campaigns</div>
+                    <div class="card-highlight">(uncertain ROI)</div>
+                </div>
+            </div>
+            <div class="arrow-container">
+                <span class="arrow">→</span>
+            </div>
+            <div class="card after">
+                <div class="card-icon">⚡</div>
+                <div class="card-content">
+                    <div class="card-text">Ad budget goes to TOP CREATORS as rewards</div>
+                    <div class="card-highlight">(guaranteed engagement)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-row">
+            <div class="card before">
+                <div class="card-icon">🏷️</div>
+                <div class="card-content">
+                    <div class="card-text">Discounts blasted to everyone</div>
+                    <div class="card-highlight">(devalues brand)</div>
+                </div>
+            </div>
+            <div class="arrow-container">
+                <span class="arrow">→</span>
+            </div>
+            <div class="card after">
+                <div class="card-icon">🏷️</div>
+                <div class="card-content">
+                    <div class="card-text">Discounts given to creators to SHARE</div>
+                    <div class="card-highlight">(content + exclusivity)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-row">
+            <div class="card before">
+                <div class="card-icon">📈</div>
+                <div class="card-content">
+                    <div class="card-text">Commission is fixed</div>
+                    <div class="card-highlight">(no motivation to overperform)</div>
+                </div>
+            </div>
+            <div class="arrow-container">
+                <span class="arrow">→</span>
+            </div>
+            <div class="card after">
+                <div class="card-icon">📈</div>
+                <div class="card-content">
+                    <div class="card-text">Bonus commission ONLY when they sell MORE</div>
+                    <div class="card-highlight">(performance-based)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-text">
+                <span class="footer-highlight">Same budgets.</span>
+                Smarter allocation.
+                <span class="footer-highlight">Better results.</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
