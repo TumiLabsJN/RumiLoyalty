@@ -79,6 +79,16 @@ Navigation Change in Phase 2:
 
 
 ## Phase 3
+### Architecture
+#### Defensive programming for missions
+If VIP level = UNITS
+All missions can only be units
+
+Right now, its not this way. BUT 
+**Admin Dashboard** is setup in a way where if client chooses units, sales missions are blocked automatically.
+
+\\wsl$\Ubuntu\home\jorge\Loyalty\Rumi\BugFixes\VipMetricMissionTypeMismatchFix.md
+
 
 ### SaaS Admin Creation
   Phase 2: LATER (when you need it)

@@ -133,104 +133,31 @@ export const raffleRepository = {
       };
     }
 
-    const now = new Date().toISOString();
-
-    // 6. Check if mission_progress exists, create if not
-    let { data: progress } = await supabase
-      .from('mission_progress')
-      .select('id, status')
-      .eq('mission_id', missionId)
-      .eq('user_id', userId)
-      .eq('client_id', clientId)
-      .single();
-
-    if (!progress) {
-      // Create mission_progress for raffle (auto-completed on participation)
-      const { data: newProgress, error: progressError } = await supabase
-        .from('mission_progress')
-        .insert({
-          mission_id: missionId,
-          user_id: userId,
-          client_id: clientId,
-          current_value: 0, // Raffles don't track progress
-          status: 'completed',
-          completed_at: now,
-        })
-        .select('id')
-        .single();
-
-      if (progressError || !newProgress) {
-        console.error('[RaffleRepository] Error creating progress:', progressError);
-        return {
-          success: false,
-          error: 'Failed to record participation',
-        };
-      }
-      progress = { id: newProgress.id, status: 'completed' };
-    } else if (progress.status !== 'completed') {
-      // Update existing progress to completed
-      await supabase
-        .from('mission_progress')
-        .update({
-          status: 'completed',
-          completed_at: now,
-          updated_at: now,
-        })
-        .eq('id', progress.id);
-    }
-
-    // 7. Create redemption record (status='claimable' for raffle winner to claim later)
-    const { data: redemption, error: redemptionError } = await supabase
-      .from('redemptions')
-      .insert({
-        user_id: userId,
-        reward_id: mission.reward_id,
-        mission_progress_id: progress.id,
-        client_id: clientId,
-        status: 'claimable', // Winner will claim after draw
-        tier_at_claim: currentTierId,
-        redemption_type: 'instant', // Raffle prizes are typically instant after winning
+    // 6-8. Create participation using SECURITY DEFINER RPC function
+    // This handles mission_progress, redemption, and raffle_participation atomically
+    // NOTE: RPC has defense-in-depth checks, but repository should also validate upstream.
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('raffle_create_participation', {
+        p_mission_id: missionId,
+        p_user_id: userId,
+        p_client_id: clientId,
+        p_reward_id: mission.reward_id,  // snake_case - matches DB column name
+        p_tier_at_claim: currentTierId,  // Required for redemptions.tier_at_claim (NOT NULL)
       })
-      .select('id')
       .single();
 
-    if (redemptionError || !redemption) {
-      console.error('[RaffleRepository] Error creating redemption:', redemptionError);
+    if (rpcError || !rpcResult?.success) {
+      console.error('[RaffleRepository] RPC error:', rpcError || rpcResult?.error_message);
       return {
         success: false,
-        error: 'Failed to create redemption record',
-      };
-    }
-
-    // 8. Create raffle_participation record
-    const { data: participation, error: participationError } = await supabase
-      .from('raffle_participations')
-      .insert({
-        mission_id: missionId,
-        user_id: userId,
-        mission_progress_id: progress.id,
-        redemption_id: redemption.id,
-        client_id: clientId,
-        participated_at: now,
-        is_winner: null, // Will be set when winner is selected
-      })
-      .select('id')
-      .single();
-
-    if (participationError || !participation) {
-      console.error('[RaffleRepository] Error creating participation:', participationError);
-      // Rollback redemption
-      await supabase.from('redemptions').delete().eq('id', redemption.id);
-      return {
-        success: false,
-        error: 'Failed to record raffle entry',
+        error: rpcResult?.error_message || 'Failed to record participation',
       };
     }
 
     return {
       success: true,
-      participationId: participation.id,
-      redemptionId: redemption.id,
+      participationId: rpcResult.participation_id ?? undefined,
+      redemptionId: rpcResult.redemption_id ?? undefined,
     };
   },
 

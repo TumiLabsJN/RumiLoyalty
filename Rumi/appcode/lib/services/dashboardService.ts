@@ -102,6 +102,7 @@ export interface FeaturedMissionResponse {
     rewardType: string;
     rewardAmount: number | null;
     rewardCustomText: string | null;
+    rewardDisplayText: string;
     unitText: string;
   } | null;
   tier: {
@@ -185,7 +186,7 @@ function generateRewardDisplayText(reward: DashboardReward): string {
       return `+${valueData?.percent ?? 0}% Pay boost for ${valueData?.duration_days ?? 30} Days`;
 
     case 'spark_ads':
-      return `+$${valueData?.amount ?? 0} Ads Boost`;
+      return `$${valueData?.amount ?? 0} Spark Ads Boost`;
 
     case 'discount':
       return `+${valueData?.percent ?? 0}% Deal Boost for ${valueData?.duration_days ?? 30} Days`;
@@ -319,8 +320,9 @@ export async function getDashboardOverview(
       currentValue,
       targetValue,
       progressPercentage,
-      currentFormatted: formatVipMetricValue(currentValue, vipMetric),
-      targetFormatted: formatVipMetricValue(targetValue, vipMetric),
+      // Match mission formatting: no "units" suffix (label shown separately in UI)
+      currentFormatted: vipMetric === 'sales' ? formatCurrency(currentValue) : currentValue.toLocaleString(),
+      targetFormatted: vipMetric === 'sales' ? formatCurrency(targetValue) : targetValue.toLocaleString(),
       checkpointExpiresAt: dashboardData.checkpointData.nextCheckpointAt,
       checkpointExpiresFormatted: formatDate(dashboardData.checkpointData.nextCheckpointAt),
       checkpointMonths: dashboardData.client.checkpointMonths,
@@ -391,7 +393,7 @@ export async function getFeaturedMission(
   const currentProgress = progress?.currentValue ?? 0;
   const targetValue = mission.targetValue;
   const progressPercentage = isRaffle
-    ? 0
+    ? 100  // Raffle requires no progress - user is already eligible to enter
     : Math.min(Math.round((currentProgress / targetValue) * 100), 100);
 
   // Determine status
@@ -416,16 +418,14 @@ export async function getFeaturedMission(
   const unitText = UNIT_TEXT_MAP[mission.type] ?? '';
 
   if (isRaffle) {
-    // Raffle missions have no progress tracking
-    currentFormatted = null;
-    targetFormatted = null;
-    targetText = 'Chance to win';
-
-    // Format prize display
+    // For raffle, show prize name in center with "Enter to Win" prompt
     const prizeDisplay = reward.valueData?.amount
       ? `$${reward.valueData.amount}`
       : reward.name ?? 'a prize';
-    progressText = `Chance to win ${prizeDisplay}`;
+    currentFormatted = prizeDisplay;  // Prize name in large text
+    targetFormatted = null;
+    targetText = 'Enter to Win!';     // Clear call-to-action
+    progressText = `Enter to win ${prizeDisplay}`;
   } else if (mission.type === 'sales_dollars') {
     currentFormatted = formatCurrency(currentProgress);
     targetFormatted = formatCurrency(targetValue);
@@ -434,7 +434,7 @@ export async function getFeaturedMission(
   } else if (mission.type === 'sales_units') {
     currentFormatted = currentProgress.toLocaleString();
     targetFormatted = targetValue.toLocaleString();
-    targetText = `of ${targetFormatted} units`;
+    targetText = `of ${targetFormatted} units sold`;
     progressText = `${currentFormatted} ${targetText}`;
   } else {
     // videos, likes, views
@@ -449,6 +449,10 @@ export async function getFeaturedMission(
   const rewardCustomText = reward.type === 'physical_gift' || reward.type === 'experience'
     ? reward.name
     : null;
+
+  // Generate formatted display text using existing function (single source of truth)
+  // Cast to DashboardReward - function only uses type, name, valueData which are present
+  const rewardDisplayText = generateRewardDisplayText(reward as DashboardReward);
 
   return {
     status,
@@ -468,6 +472,7 @@ export async function getFeaturedMission(
       rewardType: reward.type,
       rewardAmount,
       rewardCustomText,
+      rewardDisplayText,
       unitText,
     },
     tier: tierInfo,

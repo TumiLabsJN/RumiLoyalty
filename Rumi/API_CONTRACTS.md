@@ -1797,14 +1797,15 @@ interface FeaturedMissionResponse {
     displayName: string               // Static per mission_type: "Sales Sprint" (sales), "Fan Favorite" (likes), "Road to Viral" (views), "Lights, Camera, Go!" (videos), "VIP Raffle" (raffle)
 
     // Progress
-    currentProgress: number           // mission_progress.current_value
-    targetValue: number               // missions.target_value
-    progressPercentage: number        // Computed: (current / target) * 100
+    currentProgress: number           // mission_progress.current_value (0 for raffle)
+    targetValue: number               // missions.target_value (1 for raffle)
+    progressPercentage: number        // Computed: (current / target) * 100, or 100 for raffle (user eligible)
 
     // Reward
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardAmount: number | null       // For gift_card, spark_ads, commission_boost, discount
     rewardCustomText: string | null   // For physical_gift, experience
+    rewardDisplayText: string         // Formatted display text (e.g., "$25 Gift Card", "$30 Spark Ads Boost")
 
     // Display
     unitText: 'sales' | 'videos' | 'likes' | 'views'  // For "300 of 500 {unitText}"
@@ -2141,13 +2142,13 @@ interface DashboardResponse {
       // Progress fields (for non-raffle missions)
       currentProgress: number             // Raw value (0 for raffle)
       targetValue: number                 // Raw value (1 for raffle)
-      progressPercentage: number          // 0-100 for regular missions, 0 for raffle
+      progressPercentage: number          // 0-100 for regular missions, 100 for raffle (user eligible to enter)
 
       // Pre-formatted display strings (backend handles formatting)
-      currentFormatted: string            // "$350" (sales) OR "350" (units/videos) OR null (raffle)
+      currentFormatted: string            // "$350" (sales) OR "350" (units/videos) OR prize name (raffle: "iPhone 15 Pro")
       targetFormatted: string             // "$500" (sales) OR "500" (units/videos) OR null (raffle)
-      targetText: string                  // "of $500 sales" OR "of 20 videos" OR "Chance to win" (raffle)
-      progressText: string                // "$350 of $500 sales" OR "Chance to win $500" (raffle)
+      targetText: string                  // "of $500 sales" OR "of 20 videos" OR "Enter to Win!" (raffle)
+      progressText: string                // "$350 of $500 sales" OR "Enter to win iPhone 15 Pro" (raffle)
 
       // Raffle-specific fields (null for non-raffle missions)
       isRaffle: boolean                   // true if mission_type='raffle', false otherwise
@@ -2158,6 +2159,7 @@ interface DashboardResponse {
       rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
       rewardAmount: number | null         // For gift_card, spark_ads (e.g., 50 for "$50")
       rewardCustomText: string | null     // For physical_gift, experience (e.g., "iPhone 16 Pro")
+      rewardDisplayText: string           // Formatted display text (e.g., "$25 Gift Card", "$30 Spark Ads Boost")
     } | null
     tier: {
       name: string
@@ -3705,6 +3707,12 @@ interface FeaturedMissionResponse {
 - ✅ `mission.enabled = true`
 - ✅ `mission_progress.status IN ('active', 'completed')`
 - ✅ For raffles: `activated=true` AND no existing `raffle_participation`
+
+**Raffle Display Behavior:**
+- `progressPercentage`: 100 (user is eligible to enter, no progress needed)
+- `currentFormatted`: Prize name (e.g., "iPhone 15 Pro")
+- `targetText`: "Enter to Win!"
+- `status`: "raffle_available"
 
 ---
 

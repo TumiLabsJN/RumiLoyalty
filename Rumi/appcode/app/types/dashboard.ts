@@ -81,10 +81,10 @@ export interface FeaturedMission {
     progressPercentage: number
 
     // Pre-formatted by backend
-    currentFormatted: string | null    // "$350" or null (raffle)
-    targetFormatted: string | null     // "$500" or null (raffle)
-    targetText: string                 // "of $500 sales" or "Chance to win"
-    progressText: string               // "$350 of $500 sales"
+    currentFormatted: string | null    // "$350" (sales) or "350" (units) or prize name (raffle: "iPhone 15 Pro")
+    targetFormatted: string | null     // "$500" (sales) or "500" (units) or null (raffle)
+    targetText: string                 // "of $500 sales" or "Enter to Win!" (raffle)
+    progressText: string               // "$350 of $500 sales" or "Enter to win iPhone 15 Pro" (raffle)
 
     // Raffle-specific
     isRaffle: boolean
@@ -94,6 +94,7 @@ export interface FeaturedMission {
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardAmount: number | null        // For gift_card, spark_ads
     rewardCustomText: string | null    // For physical_gift, experience
+    rewardDisplayText: string          // Formatted display text from backend
   } | null
 
   tier: {
@@ -148,6 +149,7 @@ export interface FeaturedMissionResponse {
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
     rewardAmount: number | null
     rewardCustomText: string | null
+    rewardDisplayText: string
 
     unitText: 'sales' | 'videos' | 'likes' | 'views'
   } | null

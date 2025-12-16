@@ -499,6 +499,65 @@ async function seedTestData() {
     }
   }
 
+  // Step 5: Create mission progress records for test users
+  console.log('\n5. Creating mission progress records...');
+
+  // Get missions for this client
+  const { data: missions, error: missionsError } = await supabase
+    .from('missions')
+    .select('id, mission_type, tier_eligibility, target_value, display_name')
+    .eq('client_id', CLIENT_ID)
+    .eq('enabled', true);
+
+  if (missionsError) {
+    console.log(`   Warning: Could not fetch missions: ${missionsError.message}`);
+  } else if (missions && missions.length > 0) {
+    console.log(`   Found ${missions.length} missions for client`);
+
+    for (const user of TEST_USERS) {
+      const userId = userIdMap[user.tiktok_handle];
+
+      // Find missions eligible for this user's tier
+      const eligibleMissions = missions.filter(
+        (m) => m.tier_eligibility === 'all' || m.tier_eligibility === user.current_tier
+      );
+
+      for (const mission of eligibleMissions) {
+        // Calculate progress based on user tier (higher tier = more progress)
+        const tierIndex = ['tier_1', 'tier_2', 'tier_3', 'tier_4'].indexOf(user.current_tier);
+        const progressPercent = Math.min(0.3 + tierIndex * 0.2, 0.9); // 30% to 90%
+        const currentValue = Math.floor((mission.target_value || 100) * progressPercent);
+
+        // First try to delete any existing progress for this mission/user
+        await supabase
+          .from('mission_progress')
+          .delete()
+          .eq('mission_id', mission.id)
+          .eq('user_id', userId);
+
+        // Then insert fresh
+        const { error: progressError } = await supabase.from('mission_progress').insert({
+          id: randomUUID(),
+          mission_id: mission.id,
+          user_id: userId,
+          client_id: CLIENT_ID,
+          current_value: currentValue,
+          status: 'active',
+          checkpoint_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          checkpoint_end: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+        if (progressError) {
+          console.log(`   Warning: Could not create progress for ${mission.display_name}: ${progressError.message}`);
+        }
+      }
+
+      console.log(`   Created progress for @${user.tiktok_handle} (${eligibleMissions.length} missions)`);
+    }
+  } else {
+    console.log('   No missions found for client - skipping progress creation');
+  }
+
   console.log('\n' + '='.repeat(50));
   console.log('✅ Seed complete!');
   console.log('='.repeat(50));

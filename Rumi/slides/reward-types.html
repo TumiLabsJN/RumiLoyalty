@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6 Reward Types</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .container {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 50px 60px;
+            max-width: 1000px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #ffffff;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 50px;
+            letter-spacing: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+
+        .reward-card {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .reward-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .reward-name {
+            color: #ffffff;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .divider {
+            width: 50px;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            margin: 0 auto 15px;
+            border-radius: 2px;
+        }
+
+        .description {
+            color: #a0a0a0;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>6 REWARD TYPES</h1>
+        <div class="grid">
+            <div class="reward-card">
+                <div class="icon">💳</div>
+                <div class="reward-name">Gift Card</div>
+                <div class="divider"></div>
+                <div class="description">Instant cash</div>
+            </div>
+
+            <div class="reward-card">
+                <div class="icon">📈</div>
+                <div class="reward-name">Commission Boost</div>
+                <div class="divider"></div>
+                <div class="description">Earn more on YOUR sales</div>
+            </div>
+
+            <div class="reward-card">
+                <div class="icon">⚡</div>
+                <div class="reward-name">Spark Ads</div>
+                <div class="divider"></div>
+                <div class="description">Fuel their content growth</div>
+            </div>
+
+            <div class="reward-card">
+                <div class="icon">🏷️</div>
+                <div class="reward-name">Discount</div>
+                <div class="divider"></div>
+                <div class="description">Exclusive code for followers</div>
+            </div>
+
+            <div class="reward-card">
+                <div class="icon">📦</div>
+                <div class="reward-name">Physical Gift</div>
+                <div class="divider"></div>
+                <div class="description">Tangible items they can touch</div>
+            </div>
+
+            <div class="reward-card">
+                <div class="icon">✨</div>
+                <div class="reward-name">Experience</div>
+                <div class="divider"></div>
+                <div class="description">VIP events & memories</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

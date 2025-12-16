@@ -268,11 +268,6 @@ export const missionRepository = {
           description,
           value_data
         ),
-        tiers!inner (
-          id,
-          tier_name,
-          tier_color
-        ),
         mission_progress (
           id,
           current_value,
@@ -369,7 +364,27 @@ export const missionRepository = {
 
     // Type assertions for joined data
     const reward = topMission.rewards as unknown as RewardRow;
-    const tier = topMission.tiers as unknown as { id: string; tier_name: string; tier_color: string };
+
+    // IMPORTANT: Tier lookup runs AFTER priority selection (topMission is already
+    // the highest-priority mission from eligibleMissions after filtering/sorting).
+    // This prevents fetching tier info for missions that won't be displayed.
+    // No FK exists between missions.tier_eligibility and tiers, so embedded join fails.
+    let tier: { id: string; tier_name: string; tier_color: string } = {
+      id: '',
+      tier_name: 'All Tiers',
+      tier_color: '#888888',
+    };
+    if (topMission.tier_eligibility !== 'all') {
+      const { data: tierData } = await supabase
+        .from('tiers')
+        .select('id, tier_name, tier_color')
+        .eq('client_id', clientId)
+        .eq('tier_id', topMission.tier_eligibility)
+        .single();
+      if (tierData) {
+        tier = tierData;
+      }
+    }
 
     return {
       mission: {
@@ -700,13 +715,6 @@ export const missionRepository = {
           redemption_type,
           reward_source
         ),
-        tiers!inner (
-          id,
-          tier_id,
-          tier_name,
-          tier_color,
-          tier_order
-        ),
         mission_progress (
           id,
           user_id,
@@ -802,7 +810,27 @@ export const missionRepository = {
       .single();
 
     const reward = mission.rewards as unknown as RewardRow;
-    const tier = mission.tiers as unknown as TierRow;
+
+    // IMPORTANT: Tier lookup runs AFTER mission query completes.
+    // No FK exists between missions.tier_eligibility and tiers, so embedded join fails.
+    let tier: TierRow | { id: string; tier_id: string; tier_name: string; tier_color: string; tier_order: number } = {
+      id: '',
+      tier_id: 'all',
+      tier_name: 'All Tiers',
+      tier_color: '#888888',
+      tier_order: 0,
+    } as TierRow;
+    if (mission.tier_eligibility !== 'all') {
+      const { data: tierData } = await supabase
+        .from('tiers')
+        .select('id, tier_id, tier_name, tier_color, tier_order')
+        .eq('client_id', clientId)
+        .eq('tier_id', mission.tier_eligibility)
+        .single();
+      if (tierData) {
+        tier = tierData as TierRow;
+      }
+    }
 
     return {
       mission: {

@@ -197,6 +197,7 @@ export interface FeaturedMission {
   rewardType: RewardType;
   rewardAmount: number | null;
   rewardCustomText: string | null;
+  rewardDisplayText: string;
 }
 
 /**

@@ -44,6 +44,7 @@ interface DashboardData {
       rewardType: string;
       rewardAmount: number | null;
       rewardCustomText: string | null;
+      rewardDisplayText: string;
     } | null;
     tier: { name: string; color: string } | null;
     showCongratsModal: boolean;
@@ -74,6 +75,7 @@ export default function Home() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isEnteringRaffle, setIsEnteringRaffle] = useState(false)
 
   // Fetch dashboard data - extracted for retry capability
   const fetchDashboard = useCallback(async () => {
@@ -267,6 +269,34 @@ export default function Home() {
     // TODO: POST /api/missions/:id/claim (instant claim)
   }
 
+  const handleEnterRaffle = async () => {
+    if (!mockData?.featuredMission.mission?.id) return;
+
+    setIsEnteringRaffle(true);
+    try {
+      const response = await fetch(
+        `/api/missions/${mockData.featuredMission.mission.id}/participate`,
+        { method: 'POST' }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          toast.success("You're in! Check Missions tab for updates");
+          await fetchDashboard();
+        }
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Entry failed. Please try again");
+      }
+    } catch (error) {
+      console.error('Raffle entry error:', error);
+      toast.error("Something went wrong. Please try again");
+    } finally {
+      setIsEnteringRaffle(false);
+    }
+  };
+
   const handleScheduleDiscount = async (scheduledDate: Date) => {
     console.log("[v0] Schedule discount for:", scheduledDate.toISOString())
 
@@ -357,7 +387,10 @@ export default function Home() {
 
           {/* Center text - Mission progress (100% from backend - pre-formatted) */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-bold text-slate-900">
+            <span className={cn(
+              "font-bold text-slate-900",
+              mockData.featuredMission.mission?.isRaffle ? "text-xl" : "text-3xl"
+            )}>
               {mockData.featuredMission.mission?.currentFormatted || ""}
             </span>
             <span className="text-sm text-slate-500 font-medium">
@@ -366,27 +399,33 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Subtitle - Reward display (button if claimable, reward name if in progress) */}
+        {/* Subtitle - Reward display (button if claimable, raffle entry, or reward name if in progress) */}
         {mockData.featuredMission.status === "completed" ? (
           <Button
             onClick={handleClaimReward}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-md flex items-center gap-2"
           >
             {getIconForBenefitType(mockData.featuredMission.mission?.rewardType || "gift_card")}
-            {mockData.featuredMission.mission?.rewardType === "physical_gift" || mockData.featuredMission.mission?.rewardType === "experience"
-              ? `Win ${mockData.featuredMission.mission.rewardCustomText}`
-              : mockData.featuredMission.mission?.rewardType === "discount"
-              ? `+${mockData.featuredMission.mission.rewardAmount}% Deal Boost`
-              : mockData.featuredMission.mission?.rewardType === "commission_boost"
-              ? `+${mockData.featuredMission.mission.rewardAmount}% Pay Boost`
-              : `$${mockData.featuredMission.mission?.rewardAmount}`
-            }
+            {mockData.featuredMission.mission?.rewardDisplayText}
+          </Button>
+        ) : mockData.featuredMission.status === "raffle_available" ? (
+          <Button
+            onClick={handleEnterRaffle}
+            disabled={isEnteringRaffle}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-full shadow-md flex items-center gap-2"
+          >
+            {isEnteringRaffle ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Gift className="h-5 w-5" />
+            )}
+            {isEnteringRaffle ? 'Entering...' : 'Enter Raffle'}
           </Button>
         ) : (
           <p className="text-base text-slate-900 font-semibold">
             Next:{" "}
             <span className="text-slate-600 font-semibold">
-              {mockData.featuredMission.mission?.rewardCustomText || `$${mockData.featuredMission.mission?.rewardAmount}`}
+              {mockData.featuredMission.mission?.rewardDisplayText}
             </span>
           </p>
         )}

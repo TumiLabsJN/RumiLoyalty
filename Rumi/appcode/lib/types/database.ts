@@ -1669,6 +1669,22 @@ export type Database = {
         Args: { p_client_id: string; p_user_ids?: string[] }
         Returns: number
       }
+      raffle_create_participation: {
+        Args: {
+          p_mission_id: string
+          p_user_id: string
+          p_client_id: string
+          p_reward_id: string
+          p_tier_at_claim: string
+        }
+        Returns: {
+          success: boolean
+          participation_id: string | null
+          redemption_id: string | null
+          progress_id: string | null
+          error_message: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
