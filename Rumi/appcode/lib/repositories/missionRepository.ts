@@ -277,7 +277,7 @@ export const missionRepository = {
         )
       `)
       .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
-      .eq('tier_eligibility', currentTierId)
+      .or(`tier_eligibility.eq.${currentTierId},tier_eligibility.eq.all`)
       .eq('enabled', true)
       .in('mission_type', ['raffle', 'sales_dollars', 'sales_units', 'videos', 'likes', 'views']);
 

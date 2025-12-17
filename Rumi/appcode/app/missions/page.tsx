@@ -24,7 +24,7 @@ import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import * as React from "react"
 import {
   FlippableCardMissions,
@@ -38,6 +38,12 @@ export default function MissionsPage() {
   // ============================================
   // STATE MANAGEMENT
   // ============================================
+  // Data fetching state
+  const [missionsData, setMissionsData] = useState<MissionsPageResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Modal state
   const [showDiscountModal, setShowDiscountModal] = useState(false)
   const [showPayboostModal, setShowPayboostModal] = useState(false)
   const [showPaymentInfoModal, setShowPaymentInfoModal] = useState(false)
@@ -45,6 +51,43 @@ export default function MissionsPage() {
   const [selectedMission, setSelectedMission] = useState<{ id: string; percent: number; durationDays: number } | null>(null)
   const [selectedPaymentMission, setSelectedPaymentMission] = useState<{ id: string; name: string } | null>(null)
   const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null)
+
+  // ============================================
+  // DATA FETCHING
+  // ============================================
+  useEffect(() => {
+    const fetchMissions = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const response = await fetch('/api/missions', {
+          credentials: 'include', // Include auth cookie
+        })
+
+        if (response.status === 401) {
+          // Redirect to login if unauthorized
+          window.location.href = '/login/start'
+          return
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || 'Failed to load missions')
+        }
+
+        const data: MissionsPageResponse = await response.json()
+        setMissionsData(data)
+      } catch (err) {
+        console.error('[Missions] Fetch error:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load missions')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchMissions()
+  }, [])
 
   // Tier colors (matches VIP level)
   const tierColors = {
@@ -55,592 +98,15 @@ export default function MissionsPage() {
   }
 
   // ============================================
-  // MOCK DATA - TODO: FETCH FROM API
+  // EVENT HANDLERS
   // ============================================
-  // TODO: Replace with: const data = await fetch('/api/missions').then(r => r.json())
 
-  const mockData: MissionsPageResponse = {
-    user: {
-      id: "user-abc-123",
-      handle: "creatorpro",
-      currentTier: "tier_3",
-      currentTierName: "Gold",
-      currentTierColor: "#F59E0B"
-    },
-    featuredMissionId: "1",
-    missions: [
-    {
-      id: "1",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "gift_card",
-      rewardDescription: "Win a $50 Gift Card!",
-      rewardSource: "mission",
-      status: "in_progress",
-      progress: {
-        currentValue: 1500,
-        currentFormatted: "$1,500",
-        targetValue: 2000,
-        targetFormatted: "$2,000",
-        percentage: 75,
-        remainingText: "$500 more to go!",
-        progressText: "$1,500 of $2,000"
-      },
-      deadline: {
-        checkpointEnd: "2025-03-15T23:59:59Z",
-        checkpointEndFormatted: "March 15, 2025",
-        daysRemaining: 23
-      },
-      valueData: { amount: 50 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "1b",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "gift_card",
-      rewardDescription: "Win a $100 Gift Card!",
-      rewardSource: "mission",
-      status: "redeeming",
-      progress: null,
-      deadline: null,
-      valueData: { amount: 100 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "message",
-        message: "We will deliver your reward in up to 72 hours",
-        dates: null
-      }
-    },
-    {
-      id: "2",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +5% commission for 30 days!",
-      rewardSource: "mission",
-      status: "in_progress",
-      progress: {
-        currentValue: 8,
-        currentFormatted: "8 videos",
-        targetValue: 15,
-        targetFormatted: "15 videos",
-        percentage: 53,
-        remainingText: "7 more videos to post!",
-        progressText: "8 of 15 videos"
-      },
-      deadline: {
-        checkpointEnd: "2025-03-10T23:59:59Z",
-        checkpointEndFormatted: "March 10, 2025",
-        daysRemaining: 18
-      },
-      valueData: { percent: 5, durationDays: 30 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "2b",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +5% commission for 30 days!",
-      rewardSource: "mission",
-      status: "default_schedule",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 5, durationDays: 30 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "3",
-      missionType: "likes",
-      displayName: "Fan Favorite",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "gift_card",
-      rewardDescription: "Win a $25 Gift Card!",
-      rewardSource: "mission",
-      status: "default_claim",
-      progress: null,
-      deadline: null,
-      valueData: { amount: 25 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "3b",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "discount",
-      rewardDescription: "Win a Follower Discount of 15% for 1 days!",
-      rewardSource: "mission",
-      status: "default_schedule",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 15, durationDays: 1 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "3c",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +5% commission for 30 days!",
-      rewardSource: "mission",
-      status: "scheduled",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 5, durationDays: 30 },
-      scheduling: {
-        scheduledActivationDate: "2025-01-25",
-        scheduledActivationTime: "19:00:00",
-        scheduledActivationFormatted: "Jan 25, 2025 at 2:00 PM EST",
-        activationDate: null,
-        activationDateFormatted: null,
-        expirationDate: null,
-        expirationDateFormatted: null,
-        durationText: "Active for 30 days"
-      },
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "dates",
-        message: null,
-        dates: [
-          { label: "Scheduled", value: "Jan 25, 2025 at 2:00 PM EST" },
-          { label: "Duration", value: "Active for 30 days" }
-        ]
-      }
-    },
-    {
-      id: "3d",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "discount",
-      rewardDescription: "Win a Follower Discount of 15% for 1 days!",
-      rewardSource: "mission",
-      status: "scheduled",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 15, durationDays: 1 },
-      scheduling: {
-        scheduledActivationDate: "2025-01-22",
-        scheduledActivationTime: "15:30:00",
-        scheduledActivationFormatted: "Jan 22, 2025 at 3:30 PM EST",
-        activationDate: null,
-        activationDateFormatted: null,
-        expirationDate: null,
-        expirationDateFormatted: null,
-        durationText: "Active for 1 days"
-      },
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "dates",
-        message: null,
-        dates: [
-          { label: "Scheduled", value: "Jan 22, 2025 at 3:30 PM EST" },
-          { label: "Duration", value: "Active for 1 days" }
-        ]
-      }
-    },
-    {
-      id: "3e",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +10% commission for 30 days!",
-      rewardSource: "mission",
-      status: "active",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 10, durationDays: 30 },
-      scheduling: {
-        scheduledActivationDate: "2025-01-15",
-        scheduledActivationTime: "00:00:00",
-        scheduledActivationFormatted: "Jan 15, 2025",
-        activationDate: "2025-01-15T00:00:00Z",
-        activationDateFormatted: "Jan 15, 2025",
-        expirationDate: "2025-02-14T23:59:59Z",
-        expirationDateFormatted: "Feb 14, 2025",
-        durationText: "Active for 30 days"
-      },
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "dates",
-        message: null,
-        dates: [
-          { label: "Started", value: "Jan 15, 2025" },
-          { label: "Expires", value: "Feb 14, 2025" }
-        ]
-      }
-    },
-    {
-      id: "3f",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "discount",
-      rewardDescription: "Win a Follower Discount of 20% for 30 days!",
-      rewardSource: "mission",
-      status: "active",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 20, durationDays: 30 },
-      scheduling: {
-        scheduledActivationDate: "2025-01-12",
-        scheduledActivationTime: "00:00:00",
-        scheduledActivationFormatted: "Jan 12, 2025",
-        activationDate: "2025-01-12T00:00:00Z",
-        activationDateFormatted: "Jan 12, 2025",
-        expirationDate: "2025-02-11T23:59:59Z",
-        expirationDateFormatted: "Feb 11, 2025",
-        durationText: "Active for 30 days"
-      },
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "dates",
-        message: null,
-        dates: [
-          { label: "Started", value: "Jan 12, 2025" },
-          { label: "Expires", value: "Feb 11, 2025" }
-        ]
-      }
-    },
-    {
-      id: "3g",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +10% commission for 30 days!",
-      rewardSource: "mission",
-      status: "pending_info",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 10, durationDays: 30 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "message",
-        message: "Setup your payout info",
-        dates: null
-      }
-    },
-    {
-      id: "3h",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "commission_boost",
-      rewardDescription: "Win +8% commission for 30 days!",
-      rewardSource: "mission",
-      status: "clearing",
-      progress: null,
-      deadline: null,
-      valueData: { percent: 8, durationDays: 30 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "message",
-        message: "Sales clear after 20 days to allow for returns. We'll notify you as soon as your reward is ready.",
-        dates: null
-      }
-    },
-    {
-      id: "3i",
-      missionType: "likes",
-      displayName: "Fan Favorite",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win a Branded Hoodie!",
-      rewardSource: "mission",
-      status: "default_claim",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "Branded Hoodie",
-        requiresSize: true,
-        sizeCategory: "clothing",
-        sizeOptions: ["S", "M", "L", "XL"]
-      },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "3j",
-      missionType: "videos",
-      displayName: "Lights, Camera, Go!",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win Wireless Earbuds!",
-      rewardSource: "mission",
-      status: "redeeming_physical",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "Wireless Earbuds",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "3k",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win a Premium Water Bottle!",
-      rewardSource: "mission",
-      status: "sending",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "Premium Water Bottle",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: null,
-      lockedData: null,
-      flippableCard: {
-        backContentType: "message",
-        message: "Your gift is on its way!",
-        dates: null
-      }
-    },
-    {
-      id: "3l",
-      missionType: "sales_dollars",
-      displayName: "Sales Sprint",
-      targetUnit: "dollars",
-      tierEligibility: "tier_4",
-      rewardType: "gift_card",
-      rewardDescription: "Win a $500 Gift Card!",
-      rewardSource: "mission",
-      status: "locked",
-      progress: null,
-      deadline: null,
-      valueData: { amount: 500 },
-      scheduling: null,
-      raffleData: null,
-      lockedData: {
-        requiredTier: "tier_4",
-        requiredTierName: "Platinum",
-        requiredTierColor: "#818CF8",
-        unlockMessage: "Unlock at Platinum",
-        previewFromTier: "tier_3"
-      },
-      flippableCard: null
-    },
-    {
-      id: "4a",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win an iPhone 16 Pro!",
-      rewardSource: "mission",
-      status: "raffle_available",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "iPhone 16 Pro",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-02-15T23:59:59Z",
-        raffleEndFormatted: "Feb 15, 2025",
-        daysUntilDraw: 26,
-        isWinner: null,
-        prizeName: "an iPhone 16 Pro"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "4b",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win a MacBook Pro!",
-      rewardSource: "mission",
-      status: "raffle_processing",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "MacBook Pro",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-01-25T23:59:59Z",
-        raffleEndFormatted: "Jan 25, 2025",
-        daysUntilDraw: 5,
-        isWinner: null,
-        prizeName: "a MacBook Pro"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "4c",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "You won AirPods Pro!",
-      rewardSource: "mission",
-      status: "raffle_claim",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "AirPods Pro",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-01-18T23:59:59Z",
-        raffleEndFormatted: "Jan 18, 2025",
-        daysUntilDraw: 0,
-        isWinner: true,
-        prizeName: "AirPods Pro"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "4c2",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "gift_card",
-      rewardDescription: "You won a $100 Gift Card!",
-      rewardSource: "mission",
-      status: "raffle_claim",
-      progress: null,
-      deadline: null,
-      valueData: { amount: 100 },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-01-17T23:59:59Z",
-        raffleEndFormatted: "Jan 17, 2025",
-        daysUntilDraw: 0,
-        isWinner: true,
-        prizeName: "a $100 Gift Card"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "4c3",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "You won an Apple Watch!",
-      rewardSource: "mission",
-      status: "raffle_won",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "Apple Watch",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-01-16T23:59:59Z",
-        raffleEndFormatted: "Jan 16, 2025",
-        daysUntilDraw: 0,
-        isWinner: true,
-        prizeName: "an Apple Watch"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-    {
-      id: "4d",
-      missionType: "raffle",
-      displayName: "VIP Raffle",
-      targetUnit: "count",
-      tierEligibility: "tier_3",
-      rewardType: "physical_gift",
-      rewardDescription: "Win an Apple Watch!",
-      rewardSource: "mission",
-      status: "dormant",
-      progress: null,
-      deadline: null,
-      valueData: {
-        displayText: "Apple Watch",
-        requiresSize: false
-      },
-      scheduling: null,
-      raffleData: {
-        raffleEndDate: "2025-03-01T23:59:59Z",
-        raffleEndFormatted: "Mar 1, 2025",
-        daysUntilDraw: 40,
-        isWinner: null,
-        prizeName: "an Apple Watch"
-      },
-      lockedData: null,
-      flippableCard: null
-    },
-  ]
-  }
+  // NOTE: Mock data removed - now fetching from /api/missions
 
-  const completedMissions = 8 // TODO: Get from API
+  // Derive completedMissions count from API data
+  const completedMissions = missionsData?.missions?.filter(m =>
+    ['redeeming', 'sending', 'scheduled', 'active', 'raffle_won'].includes(m.status)
+  ).length || 0
 
   const handleClaimMission = (mission: any) => {
     console.log("[v0] Claim mission clicked:", mission.id)
@@ -815,7 +281,68 @@ export default function MissionsPage() {
   //    7. Informational raffles (raffle_won, raffle_processing, dormant)
   //    8. Locked (tier-gated previews)
   // ✅ First mission in array is ALWAYS the featuredMissionId
-  const displayMissions = mockData.missions
+  const displayMissions = missionsData?.missions || []
+
+  // ============================================
+  // LOADING STATE
+  // ============================================
+  if (isLoading) {
+    return (
+      <PageLayout title="Missions">
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-5 rounded-xl border bg-slate-50 border-slate-200 animate-pulse">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-slate-200 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 bg-slate-200 rounded w-1/3" />
+                  <div className="h-4 bg-slate-200 rounded w-2/3" />
+                  <div className="h-3 bg-slate-200 rounded w-1/2 mt-4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </PageLayout>
+    )
+  }
+
+  // ============================================
+  // ERROR STATE
+  // ============================================
+  if (error) {
+    return (
+      <PageLayout title="Missions">
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <Trophy className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Unable to load missions</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button
+            onClick={() => window.location.reload()}
+            variant="outline"
+          >
+            Try Again
+          </Button>
+        </div>
+      </PageLayout>
+    )
+  }
+
+  // ============================================
+  // NO DATA STATE
+  // ============================================
+  if (!missionsData) {
+    return (
+      <PageLayout title="Missions">
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Trophy className="w-12 h-12 text-slate-300 mb-4" />
+          <p className="text-slate-600">No missions available</p>
+        </div>
+      </PageLayout>
+    )
+  }
 
   return (
     <>
@@ -824,8 +351,8 @@ export default function MissionsPage() {
         headerContent={
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3
   py-2 rounded-lg border border-white/30">
-            <Trophy className="w-5 h-5" style={{ color: mockData.user.currentTierColor }} />
-            <span className="text-base font-semibold text-white">{mockData.user.currentTierName}</span>
+            <Trophy className="w-5 h-5" style={{ color: missionsData.user.currentTierColor }} />
+            <span className="text-base font-semibold text-white">{missionsData.user.currentTierName}</span>
           </div>
         }
       >

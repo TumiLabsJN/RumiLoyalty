@@ -188,8 +188,11 @@ function generateRewardDisplayText(reward: DashboardReward): string {
     case 'spark_ads':
       return `$${valueData?.amount ?? 0} Spark Ads Boost`;
 
-    case 'discount':
-      return `+${valueData?.percent ?? 0}% Deal Boost for ${valueData?.duration_days ?? 30} Days`;
+    case 'discount': {
+      const durationMinutes = (valueData?.duration_minutes as number) ?? 1440;
+      const durationDays = Math.floor(durationMinutes / 1440);
+      return `+${valueData?.percent ?? 0}% Deal Boost for ${durationDays} Days`;
+    }
 
     case 'physical_gift':
       return `Win a ${reward.name ?? 'Prize'}`;
@@ -419,9 +422,9 @@ export async function getFeaturedMission(
 
   if (isRaffle) {
     // For raffle, show prize name in center with "Enter to Win" prompt
-    const prizeDisplay = reward.valueData?.amount
-      ? `$${reward.valueData.amount}`
-      : reward.name ?? 'a prize';
+    // Prioritize reward.name (e.g., "$500 Gift Card") over raw amount
+    const prizeDisplay = reward.name
+      ?? (reward.valueData?.amount ? `$${reward.valueData.amount}` : 'a prize');
     currentFormatted = prizeDisplay;  // Prize name in large text
     targetFormatted = null;
     targetText = 'Enter to Win!';     // Clear call-to-action

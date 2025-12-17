@@ -39,6 +39,8 @@ C) Trust future integration with Paypal to automate this
 
 **Not having commission_boost for now, is an advantage**
 
+Remember CRMBonus... they brought a lot of success with a VERY simple mechanic. Cashback.
+- 
 
 
 

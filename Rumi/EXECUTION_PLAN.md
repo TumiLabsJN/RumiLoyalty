@@ -1643,39 +1643,42 @@
     - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state with retry button
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message with retry option
 
-- [ ] **Task 9.2.5:** Remove debug panel from Home page
+- [x] **Task 9.2.5:** Remove debug panel from Home page ✅
     - **Action:** Delete debug scenario switcher (🧪 button) and all mock data
     - **References:** `app/home/page.tsx` lines 16-17 (activeScenario state), lines 54-560 (scenarios object), lines 722-771 (debug panel JSX)
     - **Acceptance Criteria:** No debug panel visible, no `scenarios` object in code, no `activeScenario` state
 
-- [ ] **Task 9.2.6:** Manual test Home page
+- [x] **Task 9.2.6:** Manual test Home page ✅
     - **Action:** Login as each test user (@testbronze, @testsilver, @testgold, @testplatinum) and verify dashboard displays correctly
     - **Acceptance Criteria:** Each user sees correct: tier badge color, sales amount, progress bar %, featured mission, tier rewards list
+    - **Bugs Fixed:** BUG-DISCOUNT-DURATION-001 (discount showed "30 Days" instead of actual duration), Raffle prize display (showed "$500" instead of "$500 Gift Card")
 
 ## Step 9.3: Missions Integration
-- [ ] **Task 9.3.1:** Verify Missions backend API
+- [x] **Task 9.3.1:** Verify Missions backend API ✅
     - **Action:** Read MISSIONS_IMPL.md and confirm `GET /api/missions` exists and response shape matches mock data
     - **References:** MISSIONS_IMPL.md, `app/missions/page.tsx` lines 62-641 (mock data structure)
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+    - **Verified:** Backend fully implemented - API route, service, repository, RPC all exist. Updated DATA_FLOWS.md with /missions documentation.
 
-- [ ] **Task 9.3.2:** Add data fetching to Missions page
+- [x] **Task 9.3.2:** Add data fetching to Missions page ✅
     - **Action:** Replace mock `mockData` object with `fetch('/api/missions')` call in `app/missions/page.tsx`
     - **References:** MISSIONS_IMPL.md (GET /api/missions endpoint)
     - **Implementation Guide:** Add useState for `missionsData`, `isLoading`, `error`. Add useEffect with fetch call. Include `credentials: 'include'` for auth cookie
     - **Acceptance Criteria:** Page fetches from `/api/missions` on mount, stores response in state
 
-- [ ] **Task 9.3.3:** Add loading state to Missions page
+- [x] **Task 9.3.3:** Add loading state to Missions page ✅
     - **Action:** Add skeleton UI while `isLoading` is true
     - **Acceptance Criteria:** Loading skeleton displays during fetch
 
-- [ ] **Task 9.3.4:** Add error handling to Missions page
+- [x] **Task 9.3.4:** Add error handling to Missions page ✅
     - **Action:** Handle fetch errors and 401 responses
     - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
 
-- [ ] **Task 9.3.5:** Remove debug panel from Missions page
+- [x] **Task 9.3.5:** Remove debug panel from Missions page ✅
     - **Action:** Delete debug scenario switcher and all mock data from `app/missions/page.tsx`
     - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+    - **Result:** Removed 430 lines of mock data, page reduced from ~1100 to ~660 lines
 
 - [ ] **Task 9.3.6:** Manual test Missions page
     - **Action:** Login as test users and verify missions display correctly with real data

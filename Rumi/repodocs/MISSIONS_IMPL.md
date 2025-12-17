@@ -22,6 +22,7 @@
 | `appcode/lib/repositories/raffleRepository.ts` | 316 | Raffle participation queries |
 | `appcode/lib/services/missionService.ts` | 1,295 | Business logic: 16 statuses, sorting, flippable cards |
 | `appcode/lib/types/rpc.ts` | 124 | TypeScript types for RPC function return values |
+| `appcode/app/types/missions.ts` | 154 | TypeScript types for Missions Page API response (MissionsPageResponse, Mission) |
 | `appcode/app/api/missions/route.ts` | 130 | GET /api/missions endpoint |
 | `appcode/app/api/missions/[missionId]/claim/route.ts` | 167 | POST /api/missions/:id/claim endpoint |
 | `appcode/app/api/missions/[missionId]/participate/route.ts` | 140 | POST /api/missions/:id/participate endpoint |
