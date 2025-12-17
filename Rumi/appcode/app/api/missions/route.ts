@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server-client';
 import { listAvailableMissions } from '@/lib/services/missionService';
-import { userRepository } from '@/lib/repositories/userRepository';
 import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
 
 /**
@@ -19,6 +18,14 @@ import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
  * Response: MissionsPageResponse with user, featuredMissionId, missions[]
  *
  * Performance target: <200ms
+ *
+ * MAINTAINER NOTES:
+ * 1. This route MUST remain in middleware.ts matcher for token refresh to work.
+ *    If removed from matcher, requests will 401 because setSession() was removed.
+ * 2. If dashboardData is null, we return 500 (not 401) because:
+ *    - users.id = authUser.id (created atomically in auth_create_user)
+ *    - A missing users row indicates data corruption, not a user action error
+ *    - Do NOT reintroduce 401/USER_NOT_FOUND here; investigate the corruption instead
  */
 
 export async function GET(request: NextRequest) {
@@ -29,72 +36,37 @@ export async function GET(request: NextRequest) {
 
     if (authError || !authUser) {
       return NextResponse.json(
-        {
-          error: 'UNAUTHORIZED',
-          code: 'UNAUTHORIZED',
-          message: 'Please log in to continue.',
-        },
+        { error: 'UNAUTHORIZED', code: 'UNAUTHORIZED', message: 'Please log in to continue.' },
         { status: 401 }
       );
     }
 
-    // Step 2: Get client ID from environment (MVP: single tenant)
+    // Step 2: Get client ID from environment
     const clientId = process.env.CLIENT_ID;
     if (!clientId) {
-      console.error('[Missions] CLIENT_ID not configured');
       return NextResponse.json(
-        {
-          error: 'INTERNAL_ERROR',
-          code: 'INTERNAL_ERROR',
-          message: 'Server configuration error',
-        },
+        { error: 'INTERNAL_ERROR', code: 'INTERNAL_ERROR', message: 'Server configuration error' },
         { status: 500 }
       );
     }
 
-    // Step 3: Get user from our users table
-    const user = await userRepository.findByAuthId(authUser.id);
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: 'UNAUTHORIZED',
-          code: 'USER_NOT_FOUND',
-          message: 'User profile not found. Please sign up.',
-        },
-        { status: 401 }
-      );
-    }
-
-    // Verify user belongs to this client (multitenancy)
-    if (user.clientId !== clientId) {
-      return NextResponse.json(
-        {
-          error: 'FORBIDDEN',
-          code: 'TENANT_MISMATCH',
-          message: 'Access denied.',
-        },
-        { status: 403 }
-      );
-    }
-
-    // Step 4: Get dashboard data for tier info and VIP metric
+    // Step 3: Get dashboard data - pass authUser.id directly
+    // REMOVED: findByAuthId() call - users.id === authUser.id (same UUID)
+    // REMOVED: Tenant mismatch check - RPC enforces via WHERE client_id = p_client_id
     const dashboardData = await dashboardRepository.getUserDashboard(
-      user.id,
+      authUser.id,
       clientId,
       { includeAllTiers: true }
     );
+
     if (!dashboardData) {
       return NextResponse.json(
-        {
-          error: 'INTERNAL_ERROR',
-          code: 'USER_DATA_ERROR',
-          message: 'Failed to load user data.',
-        },
+        { error: 'INTERNAL_ERROR', code: 'USER_DATA_ERROR', message: 'Failed to load user data.' },
         { status: 500 }
       );
     }
 
-    // Step 5: Build tier lookup map
+    // Step 4: Build tier lookup map
     const tierLookup = new Map<string, { name: string; color: string }>();
     if (dashboardData.allTiers) {
       for (const tier of dashboardData.allTiers) {
@@ -102,36 +74,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Monitor for empty tierLookup (indicates data quality issues)
-    if (dashboardData.allTiers && tierLookup.size === 0) {
-      console.warn(
-        '[Missions] tierLookup is empty despite allTiers being present',
-        {
-          clientId,
-          allTiersCount: dashboardData.allTiers.length,
-          userId: user.id,
-        }
-      );
-    }
-
-    // Monitor for missing allTiers (shouldn't happen with opt-in, but defensive)
-    if (!dashboardData.allTiers || dashboardData.allTiers.length === 0) {
-      console.warn(
-        '[Missions] allTiers missing or empty - tier names will show as IDs',
-        {
-          clientId,
-          userId: user.id,
-          hasAllTiers: !!dashboardData.allTiers,
-        }
-      );
-    }
-
-    // Step 6: Get missions from service
+    // Step 5: Get missions from service
     const missionsResponse = await listAvailableMissions(
-      user.id,
+      authUser.id,
       clientId,
       {
-        handle: user.tiktokHandle ?? '',
+        handle: dashboardData.user.handle ?? '',
         currentTier: dashboardData.currentTier.id,
         currentTierName: dashboardData.currentTier.name,
         currentTierColor: dashboardData.currentTier.color,
@@ -140,18 +88,12 @@ export async function GET(request: NextRequest) {
       tierLookup
     );
 
-    // Step 7: Return missions response
-    // Per API_CONTRACTS.md lines 2968-3072
     return NextResponse.json(missionsResponse, { status: 200 });
 
   } catch (error) {
     console.error('[Missions] Unexpected error:', error);
     return NextResponse.json(
-      {
-        error: 'INTERNAL_ERROR',
-        code: 'INTERNAL_ERROR',
-        message: 'An unexpected error occurred.',
-      },
+      { error: 'INTERNAL_ERROR', code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' },
       { status: 500 }
     );
   }

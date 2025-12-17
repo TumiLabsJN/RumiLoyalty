@@ -221,5 +221,6 @@ export const config = {
     '/api/dashboard',
     '/api/dashboard/featured-mission',
     '/api/tiers',
+    '/api/missions',
   ],
 };

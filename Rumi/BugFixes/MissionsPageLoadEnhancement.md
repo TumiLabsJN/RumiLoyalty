@@ -211,6 +211,16 @@ import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
  * Returns all missions for the Missions page with pre-computed status,
  * progress tracking, and formatted display text.
  *
+ * References:
+ * - API_CONTRACTS.md lines 2955-3238 (GET /api/missions)
+ * - ARCHITECTURE.md Section 5 (Presentation Layer, lines 408-461)
+ * - ARCHITECTURE.md Section 10.2 (Missions Authorization, lines 1299-1309)
+ *
+ * Request: Requires auth-token cookie
+ * Response: MissionsPageResponse with user, featuredMissionId, missions[]
+ *
+ * Performance target: <200ms
+ *
  * MAINTAINER NOTES:
  * 1. This route MUST remain in middleware.ts matcher for token refresh to work.
  *    If removed from matcher, requests will 401 because setSession() was removed.
@@ -539,12 +549,13 @@ Time saved: ~200-500ms per request (one fewer network round-trip)
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** 2025-12-17
 **Author:** Claude Code
 **Status:** Analysis Complete
 
 **Changelog:**
+- v1.2: Updated docstring spec to preserve original References section (faithful to existing code)
 - v1.1: Added API_CONTRACTS.md and SchemaFinalv2.md to source documents; added explicit 401/403→500 contract change documentation
 - v1.0: Initial specification
 
