@@ -642,7 +642,7 @@ Track progress as pages are refactored:
 
 | Page | Status | Date | Notes |
 |------|--------|------|-------|
-| `/home` | Pending | - | - |
+| `/home` | ✅ Done | 2025-12-17 | Render ~100ms, API bottleneck ~4s |
 | `/missions` | Pending | - | - |
 | `/missions/missionhistory` | Blocked (mock data) | - | Needs API wiring first |
 | `/rewards` | Pending | - | - |
