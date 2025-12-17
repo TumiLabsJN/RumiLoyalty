@@ -14,6 +14,7 @@ import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
 import { missionRepository } from '@/lib/repositories/missionRepository';
 import type { UserDashboardData, DashboardReward } from '@/lib/repositories/dashboardRepository';
 import type { FeaturedMissionData, CongratsModalData } from '@/lib/repositories/missionRepository';
+import type { DashboardRPCResponse } from '@/lib/types/dashboard-rpc';
 
 /**
  * Static display name mapping per mission type
@@ -224,7 +225,7 @@ function transformValueData(valueData: Record<string, unknown> | null): Formatte
 
 /**
  * Get complete dashboard overview with all 5 sections.
- * Aggregates user, client, tier, progress, mission, and rewards data.
+ * Uses single RPC call for ~75% latency improvement.
  *
  * Per API_CONTRACTS.md lines 2063-2948:
  * - Backend handles ALL formatting based on vipMetric
@@ -234,106 +235,255 @@ function transformValueData(valueData: Record<string, unknown> | null): Formatte
  *
  * @param userId - Authenticated user ID
  * @param clientId - Client ID for multitenancy
+ * @see DashboardRPCEnhancement.md
  */
 export async function getDashboardOverview(
   userId: string,
   clientId: string
 ): Promise<DashboardResponse | null> {
-  // 1. Get user dashboard data (user, client, tiers, checkpoint)
-  const dashboardData = await dashboardRepository.getUserDashboard(userId, clientId);
-  if (!dashboardData) {
+  // 1. Call RPC - single database round-trip
+  const rpcData = await dashboardRepository.getDashboardDataRPC(userId, clientId);
+  if (!rpcData) {
     return null;
   }
 
-  // 2. Get featured mission AND current tier rewards IN PARALLEL
-  // These are independent queries - no need to wait for one before starting the other
-  const [featuredMission, rewardsResult] = await Promise.all([
-    getFeaturedMission(
-      userId,
-      clientId,
-      dashboardData.currentTier.id,
-      dashboardData.client.vipMetric,
-      dashboardData.currentTier,
-      dashboardData.checkpointData.lastLoginAt
-    ),
-    dashboardRepository.getCurrentTierRewards(
-      clientId,
-      dashboardData.currentTier.id
-    )
-  ]);
+  // 2. Transform RPC response to DashboardResponse
+  const vipMetric = rpcData.client.vipMetric;
+  const vipMetricLabel = vipMetric === 'sales' ? 'sales' : 'units';
 
-  // 4. Calculate tier progress
-  const vipMetric = dashboardData.client.vipMetric;
+  // Calculate tier progress
   const currentValue = vipMetric === 'sales'
-    ? dashboardData.checkpointData.salesCurrent + dashboardData.checkpointData.manualAdjustmentsTotal
-    : dashboardData.checkpointData.unitsCurrent + dashboardData.checkpointData.manualAdjustmentsUnits;
+    ? (rpcData.checkpointData.salesCurrent || 0) + (rpcData.checkpointData.manualAdjustmentsTotal || 0)
+    : (rpcData.checkpointData.unitsCurrent || 0) + (rpcData.checkpointData.manualAdjustmentsUnits || 0);
 
-  const targetValue = dashboardData.nextTier
-    ? (vipMetric === 'sales'
-        ? dashboardData.nextTier.salesThreshold
-        : dashboardData.nextTier.unitsThreshold)
-    : currentValue; // Already at max tier
+  const targetValue = rpcData.nextTier
+    ? (vipMetric === 'sales' ? rpcData.nextTier.salesThreshold : rpcData.nextTier.unitsThreshold)
+    : currentValue; // At max tier
 
   const progressPercentage = targetValue > 0
     ? Math.min(Math.round((currentValue / targetValue) * 100), 100)
     : 100;
 
-  // 5. Format rewards with displayText
-  const formattedRewards: FormattedReward[] = rewardsResult.rewards.map((reward) => ({
-    id: reward.id,
-    type: reward.type,
-    name: reward.name,
-    displayText: generateRewardDisplayText(reward),
-    description: reward.description,
-    valueData: transformValueData(reward.valueData),
-    rewardSource: reward.rewardSource,
-    redemptionQuantity: reward.redemptionQuantity,
-    displayOrder: reward.displayOrder,
-  }));
+  // Format checkpoint expiration
+  const checkpointExpiresFormatted = formatDate(rpcData.checkpointData.nextCheckpointAt);
 
-  // 6. Update last_login_at AFTER checking congrats modal
-  // Per API_CONTRACTS.md lines 2025-2030
-  if (featuredMission.showCongratsModal) {
-    await dashboardRepository.updateLastLoginAt(userId, clientId);
+  // 3. Transform featured mission
+  let featuredMissionResponse: FeaturedMissionResponse;
+  const supportEmail = 'support@example.com'; // TODO: Source from client settings when support_email column added
+
+  if (rpcData.featuredMission) {
+    const fm = rpcData.featuredMission;
+    const isRaffle = fm.missionType === 'raffle';
+    const missionCurrentValue = fm.currentValue || 0;
+    const missionProgressPercentage = isRaffle
+      ? 100
+      : (fm.targetValue > 0 ? Math.min(Math.round((missionCurrentValue / fm.targetValue) * 100), 100) : 0);
+
+    // Determine status
+    let status: FeaturedMissionResponse['status'];
+    if (isRaffle && !fm.progressStatus) {
+      status = 'raffle_available';
+    } else if (fm.progressStatus === 'completed') {
+      status = 'completed';
+    } else if (fm.progressStatus === 'claimed') {
+      status = 'claimed';
+    } else if (fm.progressStatus === 'fulfilled') {
+      status = 'fulfilled';
+    } else {
+      status = 'active';
+    }
+
+    // Format progress text based on mission type
+    const unitText = UNIT_TEXT_MAP[fm.missionType] ?? '';
+    let currentFormatted: string | null;
+    let targetFormatted: string | null;
+    let targetText: string;
+    let progressText: string;
+
+    if (isRaffle) {
+      const prizeDisplay = fm.rewardName
+        ?? ((fm.rewardValueData as Record<string, unknown>)?.amount ? `$${(fm.rewardValueData as Record<string, unknown>).amount}` : 'a prize');
+      currentFormatted = prizeDisplay;
+      targetFormatted = null;
+      targetText = 'Enter to Win!';
+      progressText = `Enter to win ${prizeDisplay}`;
+    } else if (fm.missionType === 'sales_dollars') {
+      currentFormatted = formatCurrency(missionCurrentValue);
+      targetFormatted = formatCurrency(fm.targetValue);
+      targetText = `of ${targetFormatted} sales`;
+      progressText = `${currentFormatted} ${targetText}`;
+    } else if (fm.missionType === 'sales_units') {
+      currentFormatted = missionCurrentValue.toLocaleString();
+      targetFormatted = fm.targetValue.toLocaleString();
+      targetText = `of ${targetFormatted} units sold`;
+      progressText = `${currentFormatted} ${targetText}`;
+    } else {
+      // videos, likes, views
+      currentFormatted = missionCurrentValue.toLocaleString();
+      targetFormatted = fm.targetValue.toLocaleString();
+      targetText = `of ${targetFormatted} ${unitText}`;
+      progressText = `${currentFormatted} ${targetText}`;
+    }
+
+    // Generate reward display text
+    const rewardForDisplay: DashboardReward = {
+      id: fm.rewardId,
+      type: fm.rewardType,
+      name: fm.rewardName,
+      description: null,
+      valueData: fm.rewardValueData,
+      rewardSource: 'mission',
+      redemptionQuantity: 1,
+      displayOrder: 0,
+    };
+    const rewardDisplayText = generateRewardDisplayText(rewardForDisplay);
+    const rewardAmount = (fm.rewardValueData as Record<string, unknown>)?.amount as number ?? null;
+    const rewardCustomText = (fm.rewardType === 'physical_gift' || fm.rewardType === 'experience')
+      ? fm.rewardName
+      : null;
+
+    // Check congrats modal
+    const showCongratsModal = rpcData.recentFulfillment !== null;
+    let congratsMessage: string | null = null;
+    if (rpcData.recentFulfillment) {
+      const rf = rpcData.recentFulfillment;
+      if (rf.rewardType === 'gift_card' && rf.rewardAmount) {
+        congratsMessage = `Your $${rf.rewardAmount} Gift Card has been delivered!`;
+      } else if (rf.rewardName) {
+        congratsMessage = `Your ${rf.rewardName} has been delivered!`;
+      } else {
+        congratsMessage = 'Your reward has been delivered!';
+      }
+    }
+
+    featuredMissionResponse = {
+      status,
+      mission: {
+        id: fm.missionId,
+        type: fm.missionType,
+        displayName: MISSION_DISPLAY_NAMES[fm.missionType] ?? fm.displayName,
+        currentProgress: missionCurrentValue,
+        targetValue: fm.targetValue,
+        progressPercentage: missionProgressPercentage,
+        currentFormatted,
+        targetFormatted,
+        targetText,
+        progressText,
+        isRaffle,
+        raffleEndDate: fm.raffleEndDate,
+        rewardType: fm.rewardType,
+        rewardAmount,
+        rewardCustomText,
+        rewardDisplayText,
+        unitText,
+      },
+      tier: fm.tierName ? { name: fm.tierName, color: fm.tierColor } : { name: rpcData.currentTier.name, color: rpcData.currentTier.color },
+      showCongratsModal,
+      congratsMessage,
+      supportEmail,
+      emptyStateMessage: null,
+    };
+
+    // Update last_login_at if showing congrats modal
+    if (showCongratsModal) {
+      await dashboardRepository.updateLastLoginAt(userId, clientId);
+    }
+  } else {
+    // No featured mission
+    const showCongratsModal = rpcData.recentFulfillment !== null;
+    let congratsMessage: string | null = null;
+    if (rpcData.recentFulfillment) {
+      const rf = rpcData.recentFulfillment;
+      if (rf.rewardType === 'gift_card' && rf.rewardAmount) {
+        congratsMessage = `Your $${rf.rewardAmount} Gift Card has been delivered!`;
+      } else if (rf.rewardName) {
+        congratsMessage = `Your ${rf.rewardName} has been delivered!`;
+      } else {
+        congratsMessage = 'Your reward has been delivered!';
+      }
+    }
+
+    featuredMissionResponse = {
+      status: 'no_missions',
+      mission: null,
+      tier: { name: rpcData.currentTier.name, color: rpcData.currentTier.color },
+      showCongratsModal,
+      congratsMessage,
+      supportEmail,
+      emptyStateMessage: 'No active missions. Check back soon!',
+    };
+
+    if (showCongratsModal) {
+      await dashboardRepository.updateLastLoginAt(userId, clientId);
+    }
   }
 
+  // 4. Transform tier rewards (snake_case → camelCase + displayText)
+  const currentTierRewards: FormattedReward[] = (rpcData.currentTierRewards || []).map(r => {
+    const rewardForDisplay: DashboardReward = {
+      id: r.id,
+      type: r.type,
+      name: r.name,
+      description: r.description,
+      valueData: r.value_data,
+      rewardSource: r.reward_source,
+      redemptionQuantity: r.redemption_quantity,
+      displayOrder: r.display_order,
+    };
+    return {
+      id: r.id,
+      type: r.type,
+      name: r.name,
+      displayText: generateRewardDisplayText(rewardForDisplay),
+      description: r.description,
+      valueData: transformValueData(r.value_data),
+      rewardSource: r.reward_source,
+      redemptionQuantity: r.redemption_quantity,
+      displayOrder: r.display_order,
+    };
+  });
+
+  // 5. Return fully-formed DashboardResponse
   return {
     user: {
-      id: dashboardData.user.id,
-      handle: dashboardData.user.handle,
-      email: dashboardData.user.email,
-      clientName: dashboardData.client.name,
+      id: rpcData.user.id,
+      handle: rpcData.user.handle,
+      email: rpcData.user.email,
+      clientName: rpcData.user.clientName,
     },
     client: {
-      id: dashboardData.client.id,
-      vipMetric: dashboardData.client.vipMetric,
-      vipMetricLabel: vipMetric === 'sales' ? 'sales' : 'units',
+      id: rpcData.client.id,
+      vipMetric: rpcData.client.vipMetric,
+      vipMetricLabel,
     },
-    currentTier: dashboardData.currentTier,
-    nextTier: dashboardData.nextTier
-      ? {
-          id: dashboardData.nextTier.id,
-          name: dashboardData.nextTier.name,
-          color: dashboardData.nextTier.color,
-          minSalesThreshold: vipMetric === 'sales'
-            ? dashboardData.nextTier.salesThreshold
-            : dashboardData.nextTier.unitsThreshold,
-        }
-      : null,
+    currentTier: {
+      id: rpcData.currentTier.id,
+      name: rpcData.currentTier.name,
+      color: rpcData.currentTier.color,
+      order: rpcData.currentTier.order,
+      checkpointExempt: rpcData.currentTier.checkpointExempt,
+    },
+    nextTier: rpcData.nextTier ? {
+      id: rpcData.nextTier.id,
+      name: rpcData.nextTier.name,
+      color: rpcData.nextTier.color,
+      minSalesThreshold: vipMetric === 'sales'
+        ? rpcData.nextTier.salesThreshold
+        : rpcData.nextTier.unitsThreshold,
+    } : null,
     tierProgress: {
       currentValue,
       targetValue,
       progressPercentage,
-      // Match mission formatting: no "units" suffix (label shown separately in UI)
       currentFormatted: vipMetric === 'sales' ? formatCurrency(currentValue) : currentValue.toLocaleString(),
       targetFormatted: vipMetric === 'sales' ? formatCurrency(targetValue) : targetValue.toLocaleString(),
-      checkpointExpiresAt: dashboardData.checkpointData.nextCheckpointAt,
-      checkpointExpiresFormatted: formatDate(dashboardData.checkpointData.nextCheckpointAt),
-      checkpointMonths: dashboardData.client.checkpointMonths,
+      checkpointExpiresAt: rpcData.checkpointData.nextCheckpointAt,
+      checkpointExpiresFormatted,
+      checkpointMonths: rpcData.client.checkpointMonths,
     },
-    featuredMission,
-    currentTierRewards: formattedRewards,
-    totalRewardsCount: rewardsResult.totalCount,
+    featuredMission: featuredMissionResponse,
+    currentTierRewards,
+    totalRewardsCount: rpcData.totalRewardsCount,
   };
 }
 

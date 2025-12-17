@@ -28,37 +28,22 @@ export async function createClient() {
           try {
             cookieStore.set({ name, value, ...options });
           } catch {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing sessions.
+            // Ignored in Server Components
           }
         },
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
           } catch {
-            // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing sessions.
+            // Ignored in Server Components
           }
         },
       },
     }
   );
 
-  // BUG-AUTH-COOKIE-SESSION Fix: Restore session from custom cookies
-  // Middleware handles token refresh; this ensures route handlers have valid session.
-  //
-  // IMPORTANT: Token refresh is MIDDLEWARE-ONLY. This setSession() call restores the
-  // session but does NOT have response access to persist refreshed tokens. If tokens
-  // expire mid-request (rare - tokens last ~1 hour), the refresh won't persist to browser.
-  // For MVP, this is acceptable; middleware handles 99.9% of refresh cases.
-  const authToken = cookieStore.get('auth-token')?.value;
-  const refreshToken = cookieStore.get('auth-refresh-token')?.value;
-  if (authToken) {
-    await supabase.auth.setSession({
-      access_token: authToken,
-      refresh_token: refreshToken || '',
-    });
-  }
+  // REMOVED: setSession() call - middleware handles token refresh
+  // The session is automatically available from cookies via the cookie handlers above
 
   return supabase;
 }

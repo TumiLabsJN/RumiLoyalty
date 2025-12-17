@@ -12,6 +12,7 @@
 
 import { createClient } from '@/lib/supabase/server-client';
 import type { Database } from '@/lib/types/database';
+import type { DashboardRPCResponse } from '@/lib/types/dashboard-rpc';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
@@ -324,5 +325,37 @@ export const dashboardRepository = {
     if (error) {
       console.error('[DashboardRepository] Error updating last_login_at:', error);
     }
+  },
+
+  /**
+   * Get all dashboard data in a single RPC call.
+   *
+   * Reduces 6+ sequential queries to 1 database round-trip.
+   * Returns raw data for service layer transformation.
+   *
+   * @param userId - User UUID
+   * @param clientId - Client UUID for multi-tenant isolation
+   * @returns Dashboard data from RPC or null if not found
+   * @see DashboardRPCEnhancement.md
+   */
+  async getDashboardDataRPC(
+    userId: string,
+    clientId: string
+  ): Promise<DashboardRPCResponse | null> {
+    const supabase = await createClient();
+
+    // Cast to Function to bypass Supabase type checking until RPC is deployed
+    // The function will be properly typed once migration is applied and types regenerated
+    const { data, error } = await (supabase.rpc as Function)('get_dashboard_data', {
+      p_user_id: userId,
+      p_client_id: clientId,
+    });
+
+    if (error) {
+      console.error('[DashboardRepository] RPC error:', error);
+      return null;
+    }
+
+    return data as DashboardRPCResponse | null;
   },
 };

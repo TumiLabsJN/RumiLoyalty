@@ -217,5 +217,6 @@ export const config = {
     '/api/missions/:path*',
     '/api/rewards/:path*',
     '/api/auth/user-status',
+    '/api/dashboard',
   ],
 };
