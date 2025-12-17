@@ -26,7 +26,7 @@
  * Full auth flow testing with cookies/sessions is covered by E2E tests (Task 3.4.7).
  */
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import {
   createTestClient,
   createTestUser,

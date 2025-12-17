@@ -21,7 +21,7 @@
  * not 1 hour as in EXECUTION_PLAN.md
  */
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import {
   createTestClient,
   createTestUser,

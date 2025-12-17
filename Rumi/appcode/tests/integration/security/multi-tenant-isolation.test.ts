@@ -23,7 +23,7 @@
  * all access goes through RPC functions only.
  */
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import {
   createTestClient,
   createTestUser,
