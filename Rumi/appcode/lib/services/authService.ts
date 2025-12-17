@@ -16,7 +16,7 @@
  */
 
 import { randomBytes, randomInt } from 'crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs'; // Use bcryptjs (pure JS) instead of bcrypt (native) for Vercel compatibility
 import { Resend } from 'resend';
 import { createClient } from '@/lib/supabase/server-client';
 import { userRepository } from '@/lib/repositories/userRepository';
