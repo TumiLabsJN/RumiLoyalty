@@ -245,21 +245,22 @@ export async function getDashboardOverview(
     return null;
   }
 
-  // 2. Get featured mission
-  const featuredMission = await getFeaturedMission(
-    userId,
-    clientId,
-    dashboardData.currentTier.id,
-    dashboardData.client.vipMetric,
-    dashboardData.currentTier,
-    dashboardData.checkpointData.lastLoginAt
-  );
-
-  // 3. Get current tier rewards
-  const rewardsResult = await dashboardRepository.getCurrentTierRewards(
-    clientId,
-    dashboardData.currentTier.id
-  );
+  // 2. Get featured mission AND current tier rewards IN PARALLEL
+  // These are independent queries - no need to wait for one before starting the other
+  const [featuredMission, rewardsResult] = await Promise.all([
+    getFeaturedMission(
+      userId,
+      clientId,
+      dashboardData.currentTier.id,
+      dashboardData.client.vipMetric,
+      dashboardData.currentTier,
+      dashboardData.checkpointData.lastLoginAt
+    ),
+    dashboardRepository.getCurrentTierRewards(
+      clientId,
+      dashboardData.currentTier.id
+    )
+  ]);
 
   // 4. Calculate tier progress
   const vipMetric = dashboardData.client.vipMetric;
@@ -360,18 +361,14 @@ export async function getFeaturedMission(
   tierInfo: { name: string; color: string },
   lastLoginAt: string | null
 ): Promise<FeaturedMissionResponse> {
-  // 1. Check for recently fulfilled mission (congrats modal)
-  const congratsData = await checkCongratsModal(userId, clientId, lastLoginAt);
+  // 1. Check congrats modal AND get featured mission IN PARALLEL
+  // These are independent queries
+  const [congratsData, missionData] = await Promise.all([
+    checkCongratsModal(userId, clientId, lastLoginAt),
+    missionRepository.findFeaturedMission(userId, clientId, currentTierId, vipMetric)
+  ]);
 
-  // 2. Get featured mission
-  const missionData = await missionRepository.findFeaturedMission(
-    userId,
-    clientId,
-    currentTierId,
-    vipMetric
-  );
-
-  // 3. Default support email (TODO: get from client settings)
+  // 2. Default support email (TODO: get from client settings)
   const supportEmail = 'support@example.com';
 
   // 4. No mission found

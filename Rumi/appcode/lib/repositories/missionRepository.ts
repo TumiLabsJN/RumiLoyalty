@@ -245,41 +245,52 @@ export const missionRepository = {
   ): Promise<FeaturedMissionData | null> {
     const supabase = await createClient();
 
-    // Get all eligible missions with their progress and rewards
-    // Uses single query with LEFT JOINs for performance (~80ms)
-    const { data: missions, error: missionsError } = await supabase
-      .from('missions')
-      .select(`
-        id,
-        mission_type,
-        display_name,
-        title,
-        description,
-        target_value,
-        target_unit,
-        raffle_end_date,
-        activated,
-        tier_eligibility,
-        reward_id,
-        rewards!inner (
+    // Get missions AND raffle participations IN PARALLEL (they're independent)
+    const [missionsResult, raffleResult] = await Promise.all([
+      // Get all eligible missions with their progress and rewards
+      supabase
+        .from('missions')
+        .select(`
           id,
-          type,
-          name,
+          mission_type,
+          display_name,
+          title,
           description,
-          value_data
-        ),
-        mission_progress (
-          id,
-          current_value,
-          status,
-          completed_at,
-          user_id
-        )
-      `)
-      .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
-      .or(`tier_eligibility.eq.${currentTierId},tier_eligibility.eq.all`)
-      .eq('enabled', true)
-      .in('mission_type', ['raffle', 'sales_dollars', 'sales_units', 'videos', 'likes', 'views']);
+          target_value,
+          target_unit,
+          raffle_end_date,
+          activated,
+          tier_eligibility,
+          reward_id,
+          rewards!inner (
+            id,
+            type,
+            name,
+            description,
+            value_data
+          ),
+          mission_progress (
+            id,
+            current_value,
+            status,
+            completed_at,
+            user_id
+          )
+        `)
+        .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
+        .or(`tier_eligibility.eq.${currentTierId},tier_eligibility.eq.all`)
+        .eq('enabled', true)
+        .in('mission_type', ['raffle', 'sales_dollars', 'sales_units', 'videos', 'likes', 'views']),
+      // Get user's raffle participations to exclude
+      supabase
+        .from('raffle_participations')
+        .select('mission_id')
+        .eq('user_id', userId)
+        .eq('client_id', clientId)
+    ]);
+
+    const { data: missions, error: missionsError } = missionsResult;
+    const { data: raffleParticipations } = raffleResult;
 
     if (missionsError) {
       console.error('[MissionRepository] Error fetching missions:', missionsError);
@@ -289,13 +300,6 @@ export const missionRepository = {
     if (!missions || missions.length === 0) {
       return null;
     }
-
-    // Get user's raffle participations to exclude
-    const { data: raffleParticipations } = await supabase
-      .from('raffle_participations')
-      .select('mission_id')
-      .eq('user_id', userId)
-      .eq('client_id', clientId);
 
     const participatedRaffleIds = new Set(
       (raffleParticipations ?? []).map((p) => p.mission_id)

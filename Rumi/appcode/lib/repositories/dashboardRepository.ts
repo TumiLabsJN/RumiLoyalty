@@ -107,34 +107,51 @@ export const dashboardRepository = {
   ): Promise<UserDashboardData | null> {
     const supabase = await createClient();
 
-    // Get user with client data
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select(`
-        id,
-        tiktok_handle,
-        email,
-        current_tier,
-        checkpoint_sales_current,
-        checkpoint_units_current,
-        manual_adjustments_total,
-        manual_adjustments_units,
-        next_checkpoint_at,
-        last_login_at,
-        client_id,
-        clients!inner (
+    // Get user AND all tiers IN PARALLEL (they're independent)
+    const [userResult, tiersResult] = await Promise.all([
+      // Get user with client data
+      supabase
+        .from('users')
+        .select(`
           id,
-          name,
-          vip_metric,
-          checkpoint_months,
-          primary_color
-        )
-      `)
-      .eq('id', userId)
-      .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
-      .single();
+          tiktok_handle,
+          email,
+          current_tier,
+          checkpoint_sales_current,
+          checkpoint_units_current,
+          manual_adjustments_total,
+          manual_adjustments_units,
+          next_checkpoint_at,
+          last_login_at,
+          client_id,
+          clients!inner (
+            id,
+            name,
+            vip_metric,
+            checkpoint_months,
+            primary_color
+          )
+        `)
+        .eq('id', userId)
+        .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
+        .single(),
+      // Get ALL tiers for client
+      supabase
+        .from('tiers')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('tier_order', { ascending: true })
+    ]);
+
+    const { data: user, error: userError } = userResult;
+    const { data: allTiers, error: tiersError } = tiersResult;
 
     if (userError || !user) {
+      return null;
+    }
+
+    if (tiersError || !allTiers || allTiers.length === 0) {
+      console.error('[DashboardRepository] Error fetching tiers:', tiersError);
       return null;
     }
 
@@ -147,37 +164,25 @@ export const dashboardRepository = {
       return null;
     }
 
-    // Get current tier
-    const { data: currentTier, error: tierError } = await supabase
-      .from('tiers')
-      .select('*')
-      .eq('tier_id', user.current_tier)  // current_tier stores 'tier_1', 'tier_2', etc.
-      .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
-      .single();
-
-    if (tierError || !currentTier) {
+    // Find current tier by tier_id
+    const currentTier = allTiers.find(t => t.tier_id === user.current_tier);
+    if (!currentTier) {
+      console.error('[DashboardRepository] Current tier not found:', user.current_tier);
       return null;
     }
 
-    // Get next tier (tier_order + 1)
-    const { data: nextTier } = await supabase
-      .from('tiers')
-      .select('*')
-      .eq('client_id', clientId)
-      .eq('tier_order', currentTier.tier_order + 1)
-      .single();
+    // Find next tier by tier_order + 1
+    const nextTier = allTiers.find(t => t.tier_order === currentTier.tier_order + 1) ?? null;
 
-    // Get all tiers for client (only if requested)
-    let allTiersData: Array<{ id: string; tier_name: string; tier_color: string; tier_order: number }> = [];
-    if (options?.includeAllTiers) {
-      const { data: allTiers } = await supabase
-        .from('tiers')
-        .select('id, tier_name, tier_color, tier_order')
-        .eq('client_id', clientId)
-        .order('tier_order', { ascending: true });
-
-      allTiersData = allTiers ?? [];
-    }
+    // All tiers data (already fetched, just format if needed)
+    const allTiersData = options?.includeAllTiers
+      ? allTiers.map(tier => ({
+          id: tier.id,
+          tier_name: tier.tier_name,
+          tier_color: tier.tier_color,
+          tier_order: tier.tier_order,
+        }))
+      : [];
 
     return {
       user: {
@@ -243,39 +248,44 @@ export const dashboardRepository = {
   ): Promise<CurrentTierRewardsResult> {
     const supabase = await createClient();
 
-    // Get top 4 rewards
-    const { data: rewards, error: rewardsError } = await supabase
-      .from('rewards')
-      .select(`
-        id,
-        type,
-        name,
-        description,
-        value_data,
-        reward_source,
-        redemption_quantity,
-        display_order
-      `)
-      .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
-      .eq('tier_eligibility', currentTierId)
-      .eq('enabled', true)
-      .eq('reward_source', 'vip_tier') // Only VIP tier rewards, not mission rewards
-      .order('display_order', { ascending: true })
-      .limit(4);
+    // Run rewards query and count query IN PARALLEL
+    const [rewardsResult, countResult] = await Promise.all([
+      // Get top 4 rewards
+      supabase
+        .from('rewards')
+        .select(`
+          id,
+          type,
+          name,
+          description,
+          value_data,
+          reward_source,
+          redemption_quantity,
+          display_order
+        `)
+        .eq('client_id', clientId) // CRITICAL: Multitenancy enforcement
+        .eq('tier_eligibility', currentTierId)
+        .eq('enabled', true)
+        .eq('reward_source', 'vip_tier') // Only VIP tier rewards, not mission rewards
+        .order('display_order', { ascending: true })
+        .limit(4),
+      // Get total count for "And more!" logic
+      supabase
+        .from('rewards')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+        .eq('tier_eligibility', currentTierId)
+        .eq('enabled', true)
+        .eq('reward_source', 'vip_tier')
+    ]);
+
+    const { data: rewards, error: rewardsError } = rewardsResult;
+    const { count, error: countError } = countResult;
 
     if (rewardsError) {
       console.error('[DashboardRepository] Error fetching rewards:', rewardsError);
       return { rewards: [], totalCount: 0 };
     }
-
-    // Get total count for "And more!" logic
-    const { count, error: countError } = await supabase
-      .from('rewards')
-      .select('id', { count: 'exact', head: true })
-      .eq('client_id', clientId)
-      .eq('tier_eligibility', currentTierId)
-      .eq('enabled', true)
-      .eq('reward_source', 'vip_tier');
 
     if (countError) {
       console.error('[DashboardRepository] Error counting rewards:', countError);
