@@ -1,5 +1,9 @@
 import { ClientConfigProvider } from './ClientConfigProvider'
 
+// Force dynamic rendering for all login pages
+// This prevents static generation which fails because it tries to fetch from localhost during build
+export const dynamic = 'force-dynamic'
+
 interface ClientConfig {
   logoUrl: string
   privacyPolicyUrl: string
@@ -13,14 +17,13 @@ interface ClientConfig {
  */
 async function getClientConfig(): Promise<ClientConfig> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const apiUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     const response = await fetch(`${apiUrl}/api/internal/client-config`, {
       headers: {
         'x-internal-request': 'true',  // Internal-only security header
       },
-      cache: 'force-cache',  // Use Next.js cache
-      next: { revalidate: 3600 } // Revalidate every 1 hour
+      cache: 'no-store',  // Dynamic pages should not cache
     })
 
     if (!response.ok) {

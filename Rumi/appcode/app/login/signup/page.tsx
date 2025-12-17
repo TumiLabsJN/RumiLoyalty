@@ -31,14 +31,13 @@ export default async function SignupPage() {
   // If no handle, redirect happens in client component
 
   // Server-side: Pre-fetch terms and privacy (no loading states!)
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const [termsRes, privacyRes] = await Promise.all([
-    fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/clients/fizee/terms`, {
-      cache: 'force-cache',
-      next: { revalidate: 3600 }  // Revalidate every hour
+    fetch(`${baseUrl}/api/clients/fizee/terms`, {
+      cache: 'no-store',  // Dynamic page, no caching
     }),
-    fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/clients/fizee/privacy`, {
-      cache: 'force-cache',
-      next: { revalidate: 3600 }
+    fetch(`${baseUrl}/api/clients/fizee/privacy`, {
+      cache: 'no-store',
     })
   ])
 
