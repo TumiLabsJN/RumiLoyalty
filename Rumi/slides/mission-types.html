@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Types</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .container {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 50px 60px;
+            max-width: 1200px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #ffffff;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 50px;
+            letter-spacing: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+        }
+
+        .mission-card {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 30px 20px;
+            text-align: center;
+            transition: transform 0.3s ease;
+            border: 1px solid #2a2a4a;
+        }
+
+        .mission-card:hover {
+            transform: translateY(-5px);
+            border-color: #667eea;
+        }
+
+        .icon {
+            font-size: 2.8rem;
+            margin-bottom: 18px;
+        }
+
+        .mission-name {
+            color: #ffffff;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .divider {
+            width: 40px;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            margin: 0 auto 12px;
+            border-radius: 2px;
+        }
+
+        .description {
+            color: #a0a0a0;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        /* Highlight the sales card */
+        .mission-card.primary {
+            border-color: #4ecca3;
+            background: linear-gradient(180deg, #1a1a2e 0%, rgba(78, 204, 163, 0.1) 100%);
+        }
+
+        .mission-card.primary .divider {
+            background: linear-gradient(90deg, #4ecca3, #45b393);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MISSION TYPES</h1>
+        <div class="grid">
+            <div class="mission-card primary">
+                <div class="icon">💰</div>
+                <div class="mission-name">Make Sales</div>
+                <div class="divider"></div>
+                <div class="description">Sell more, earn more</div>
+            </div>
+
+            <div class="mission-card">
+                <div class="icon">🎥</div>
+                <div class="mission-name">Post Videos</div>
+                <div class="divider"></div>
+                <div class="description">Content that earns</div>
+            </div>
+
+            <div class="mission-card">
+                <div class="icon">👁️</div>
+                <div class="mission-name">Earn Views</div>
+                <div class="divider"></div>
+                <div class="description">Reach goals, earn rewards</div>
+            </div>
+
+            <div class="mission-card">
+                <div class="icon">❤️</div>
+                <div class="mission-name">Earn Likes</div>
+                <div class="divider"></div>
+                <div class="description">Engagement that pays</div>
+            </div>
+
+            <div class="mission-card">
+                <div class="icon">🎟️</div>
+                <div class="mission-name">Raffle Entry</div>
+                <div class="divider"></div>
+                <div class="description">Your chance to win big</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

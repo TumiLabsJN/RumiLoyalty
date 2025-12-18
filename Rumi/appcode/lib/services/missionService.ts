@@ -1006,7 +1006,7 @@ export async function claimMissionReward(
   claimData: ClaimRequestData
 ): Promise<ClaimResponse> {
   // 1. Get mission by progress ID
-  const mission = await missionRepository.findById(missionProgressId, userId, clientId);
+  const mission = await missionRepository.findByProgressId(missionProgressId, userId, clientId);
 
   if (!mission) {
     return {

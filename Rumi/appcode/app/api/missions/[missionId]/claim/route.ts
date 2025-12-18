@@ -43,7 +43,9 @@ export async function POST(
   { params }: { params: Promise<{ missionId: string }> }
 ) {
   try {
-    const { missionId } = await params;
+    // NOTE: Despite folder name [missionId], this param is actually mission_progress.id
+    // Per API_CONTRACTS.md line 2987: "UUID from mission_progress.id (NOT missions.id)"
+    const { missionId: progressId } = await params;
 
     // Step 1: Validate session token
     const supabase = await createClient();
@@ -113,7 +115,7 @@ export async function POST(
     // Step 5: Call service to claim reward
     // Per API_CONTRACTS.md lines 3772-3778 (7-step validation)
     const result = await claimMissionReward(
-      missionId,
+      progressId,
       user.id,
       clientId,
       user.currentTier ?? '',

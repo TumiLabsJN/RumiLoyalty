@@ -686,7 +686,7 @@ export const missionRepository = {
    *
    * SECURITY: Filters by client_id (multitenancy)
    */
-  async findById(
+  async findByMissionId(
     missionId: string,
     userId: string,
     clientId: string
@@ -914,6 +914,241 @@ export const missionRepository = {
           }
         : null,
       isLocked: false, // When fetching by ID, it's for the user's own tier
+    };
+  },
+
+  /**
+   * Find mission data by mission_progress.id (NOT missions.id)
+   * Used by claim flow where the URL param is the progress record ID.
+   *
+   * Per API_CONTRACTS.md line 2987:
+   * "id: string // UUID from mission_progress.id (NOT missions.id - for claim/participate calls)"
+   *
+   * SECURITY: Filters by client_id and user_id (multitenancy + ownership)
+   */
+  async findByProgressId(
+    progressId: string,
+    userId: string,
+    clientId: string
+  ): Promise<AvailableMissionData | null> {
+    const supabase = await createClient();
+
+    // Query mission_progress first, join to missions via FK
+    const { data: progress, error: progressError } = await supabase
+      .from('mission_progress')
+      .select(`
+        id,
+        user_id,
+        mission_id,
+        current_value,
+        status,
+        completed_at,
+        checkpoint_start,
+        checkpoint_end,
+        missions!inner (
+          id,
+          mission_type,
+          display_name,
+          title,
+          description,
+          target_value,
+          target_unit,
+          raffle_end_date,
+          activated,
+          tier_eligibility,
+          preview_from_tier,
+          enabled,
+          display_order,
+          reward_id,
+          rewards!inner (
+            id,
+            type,
+            name,
+            description,
+            value_data,
+            redemption_type,
+            reward_source
+          )
+        )
+      `)
+      .eq('id', progressId)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .single();
+
+    if (progressError || !progress) {
+      return null;
+    }
+
+    const mission = progress.missions as any;
+    const reward = mission.rewards as any;
+
+    // Get redemption if exists (same pattern as findByMissionId)
+    let redemption = null;
+    const { data: redemptionData } = await supabase
+      .from('redemptions')
+      .select(`
+        id,
+        status,
+        claimed_at,
+        fulfilled_at,
+        concluded_at,
+        rejected_at,
+        scheduled_activation_date,
+        scheduled_activation_time,
+        activation_date,
+        expiration_date
+      `)
+      .eq('mission_progress_id', progressId)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .single();
+    redemption = redemptionData;
+
+    // Get sub-state data (same pattern as findByMissionId)
+    let commissionBoost = null;
+    let physicalGift = null;
+    if (redemption) {
+      const { data: boostData } = await supabase
+        .from('commission_boost_redemptions')
+        .select(`
+          redemption_id,
+          boost_status,
+          scheduled_activation_date,
+          activated_at,
+          expires_at,
+          duration_days
+        `)
+        .eq('redemption_id', redemption.id)
+        .eq('client_id', clientId)
+        .single();
+      commissionBoost = boostData;
+
+      const { data: giftData } = await supabase
+        .from('physical_gift_redemptions')
+        .select(`
+          redemption_id,
+          shipped_at,
+          shipping_city,
+          requires_size
+        `)
+        .eq('redemption_id', redemption.id)
+        .eq('client_id', clientId)
+        .single();
+      physicalGift = giftData;
+    }
+
+    // Get raffle participation (use mission.id, not progressId)
+    const { data: raffleData } = await supabase
+      .from('raffle_participations')
+      .select(`
+        mission_id,
+        is_winner,
+        participated_at,
+        winner_selected_at
+      `)
+      .eq('mission_id', mission.id)
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .single();
+
+    // Tier lookup (same pattern as findByMissionId)
+    let tier: { id: string; tier_id: string; tier_name: string; tier_color: string; tier_order: number } = {
+      id: '',
+      tier_id: 'all',
+      tier_name: 'All Tiers',
+      tier_color: '#888888',
+      tier_order: 0,
+    };
+    if (mission.tier_eligibility !== 'all') {
+      const { data: tierData } = await supabase
+        .from('tiers')
+        .select('id, tier_id, tier_name, tier_color, tier_order')
+        .eq('client_id', clientId)
+        .eq('tier_id', mission.tier_eligibility)
+        .single();
+      if (tierData) {
+        tier = tierData;
+      }
+    }
+
+    return {
+      mission: {
+        id: mission.id,
+        type: mission.mission_type,
+        displayName: mission.display_name,
+        title: mission.title,
+        description: mission.description,
+        targetValue: mission.target_value,
+        targetUnit: mission.target_unit,
+        raffleEndDate: mission.raffle_end_date,
+        activated: mission.activated ?? false,
+        tierEligibility: mission.tier_eligibility,
+        previewFromTier: mission.preview_from_tier,
+        enabled: mission.enabled ?? true,
+      },
+      reward: {
+        id: reward.id,
+        type: reward.type,
+        name: reward.name,
+        description: reward.description,
+        valueData: reward.value_data as Record<string, unknown> | null,
+        redemptionType: reward.redemption_type ?? 'instant',
+        rewardSource: reward.reward_source ?? 'mission',
+      },
+      tier: {
+        id: tier.id,
+        name: tier.tier_name,
+        color: tier.tier_color,
+        order: tier.tier_order,
+      },
+      progress: {
+        id: progress.id,
+        currentValue: progress.current_value ?? 0,
+        status: progress.status ?? 'active',
+        completedAt: progress.completed_at,
+        checkpointStart: progress.checkpoint_start,
+        checkpointEnd: progress.checkpoint_end,
+      },
+      redemption: redemption
+        ? {
+            id: redemption.id,
+            status: redemption.status ?? 'claimable',
+            claimedAt: redemption.claimed_at,
+            fulfilledAt: redemption.fulfilled_at,
+            concludedAt: redemption.concluded_at,
+            rejectedAt: redemption.rejected_at,
+            scheduledActivationDate: redemption.scheduled_activation_date,
+            scheduledActivationTime: redemption.scheduled_activation_time,
+            activationDate: redemption.activation_date,
+            expirationDate: redemption.expiration_date,
+          }
+        : null,
+      commissionBoost: commissionBoost
+        ? {
+            boostStatus: commissionBoost.boost_status,
+            scheduledActivationDate: commissionBoost.scheduled_activation_date,
+            activatedAt: commissionBoost.activated_at,
+            expiresAt: commissionBoost.expires_at,
+            durationDays: commissionBoost.duration_days,
+          }
+        : null,
+      physicalGift: physicalGift
+        ? {
+            shippedAt: physicalGift.shipped_at,
+            shippingCity: physicalGift.shipping_city,
+            requiresSize: physicalGift.requires_size,
+          }
+        : null,
+      raffleParticipation: raffleData
+        ? {
+            isWinner: raffleData.is_winner,
+            participatedAt: raffleData.participated_at,
+            winnerSelectedAt: raffleData.winner_selected_at,
+          }
+        : null,
+      isLocked: false,
     };
   },
 

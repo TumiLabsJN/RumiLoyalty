@@ -70,33 +70,41 @@ export function ClaimPhysicalGiftModal({
     setIsSubmitting(true)
 
     try {
-      // Prepare payload
-      const payload = {
-        rewardId: reward.id,
-        ...(requiresSize && { sizeValue: selectedSize }),
-        ...address,
-      }
-
-      console.log("Submitting physical gift claim:", payload)
-
-      // TODO: Replace with actual API call
-      // await fetch("/api/rewards/claim-physical-gift", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify(payload),
-      // })
-
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      // Success!
-      toast.success("Reward claimed successfully!", {
-        description: "We'll ship your gift soon. Check your email for tracking info.",
-        duration: 5000,
+      const response = await fetch(`/api/missions/${reward.id}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          size: requiresSize ? selectedSize : undefined,
+          shippingAddress: {
+            firstName: address.shipping_recipient_first_name,
+            lastName: address.shipping_recipient_last_name,
+            line1: address.shipping_address_line1,
+            line2: address.shipping_address_line2 || undefined,
+            city: address.shipping_city,
+            state: address.shipping_state,
+            postalCode: address.shipping_postal_code,
+            country: address.shipping_country,
+            phone: address.shipping_phone,
+          },
+        }),
       })
 
-      handleOpenChange(false)
-      onSuccess()
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          toast.success("Reward claimed successfully!", {
+            description: "We'll ship your gift soon. Check your email for tracking info.",
+            duration: 5000,
+          })
+          handleOpenChange(false)
+          onSuccess()
+        } else {
+          toast.error(data.message || "Failed to claim reward")
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.message || "Failed to claim reward")
+      }
     } catch (error) {
       console.error("Failed to claim physical gift:", error)
       toast.error("Failed to claim reward", {

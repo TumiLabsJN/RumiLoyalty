@@ -69,6 +69,7 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
   })
 
   const [errors, setErrors] = useState<ValidationErrors>({})
+  const [hasSubmitted, setHasSubmitted] = useState(false)
 
   // Autofocus first field when form mounts
   useEffect(() => {
@@ -147,6 +148,10 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
   }
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Only validate on blur AFTER user has attempted to submit once
+    // This prevents annoying errors while user is still filling the form
+    if (!hasSubmitted) return
+
     const { name, value } = e.target
     const error = validateField(name as keyof ShippingAddress, value)
 
@@ -183,12 +188,15 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setHasSubmitted(true)
 
     if (validateForm()) {
       onSubmit(formData)
     }
   }
 
+  // Button enabled when all required fields have values
+  // Validation errors only shown after first submit attempt
   const isFormValid =
     formData.shipping_recipient_first_name.trim() !== "" &&
     formData.shipping_recipient_last_name.trim() !== "" &&
@@ -197,8 +205,7 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
     formData.shipping_state.trim() !== "" &&
     formData.shipping_postal_code.trim() !== "" &&
     formData.shipping_country.trim() !== "" &&
-    formData.shipping_phone.trim() !== "" &&
-    Object.keys(errors).length === 0
+    formData.shipping_phone.trim() !== ""
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 py-4">

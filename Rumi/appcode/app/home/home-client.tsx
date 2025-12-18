@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Trophy, HandCoins, Megaphone, Gift, BadgePercent, Palmtree, Info, ArrowLeft, X, Loader2 } from "lucide-react"
 import { HomePageLayout } from "@/components/homepagelayout"
 import { ScheduleDiscountModal } from "@/components/schedule-discount-modal"
+import { SchedulePayboostModal } from "@/components/schedule-payboost-modal"
+import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -21,6 +23,9 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
   const [isEnteringRaffle, setIsEnteringRaffle] = useState(false)
   const [isTierCardFlipped, setIsTierCardFlipped] = useState(false)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [isClaimingReward, setIsClaimingReward] = useState(false)
+  const [showPayboostModal, setShowPayboostModal] = useState(false)
+  const [showPhysicalGiftModal, setShowPhysicalGiftModal] = useState(false)
 
   // Auto-flip back after 6 seconds
   useEffect(() => {
@@ -125,17 +130,55 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
   // CLAIM HANDLERS
   // ============================================
 
-  const handleClaimReward = () => {
+  const handleClaimReward = async () => {
     const mission = dashboardData.featuredMission.mission
-    if (!mission) return
+    if (!mission || !mission.progressId) return
 
+    // Physical gift - show shipping modal
+    if (mission.rewardType === "physical_gift") {
+      setShowPhysicalGiftModal(true)
+      return
+    }
+
+    // Commission boost - show scheduling modal
+    if (mission.rewardType === "commission_boost") {
+      setShowPayboostModal(true)
+      return
+    }
+
+    // Discount - show existing scheduling modal
     if (mission.rewardType === "discount") {
       setShowScheduleModal(true)
       return
     }
 
-    console.log("[v0] Claim reward clicked:", mission.rewardType, mission.rewardAmount || mission.rewardCustomText)
-    // TODO: POST /api/missions/:id/claim (instant claim)
+    // Instant rewards (gift_card, spark_ads, experience) - direct API call
+    setIsClaimingReward(true)
+    try {
+      const response = await fetch(
+        `/api/missions/${mission.progressId}/claim`,
+        { method: 'POST' }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          toast.success("Reward claimed! Check Missions tab for details", {
+            duration: 5000,
+          })
+          // Delay reload so user can see success message
+          setTimeout(() => window.location.reload(), 1500)
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.message || "Claim failed. Please try again")
+      }
+    } catch (error) {
+      console.error('Claim error:', error)
+      toast.error("Something went wrong. Please try again")
+    } finally {
+      setIsClaimingReward(false)
+    }
   }
 
   const handleEnterRaffle = async () => {
@@ -152,7 +195,8 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
         const data = await response.json()
         if (data.success) {
           toast.success("You're in! Check Missions tab for updates")
-          window.location.reload() // Refresh to get updated data
+          // Delay reload so user can see success message
+          setTimeout(() => window.location.reload(), 1500)
         }
       } else {
         const error = await response.json()
@@ -167,32 +211,68 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
   }
 
   const handleScheduleDiscount = async (scheduledDate: Date) => {
-    console.log("[v0] Schedule discount for:", scheduledDate.toISOString())
+    const mission = dashboardData.featuredMission.mission
+    if (!mission || !mission.progressId) return
 
     try {
-      // TODO: POST /api/missions/:id/claim
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      const dateStr = scheduledDate.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      })
-      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "America/New_York",
+      const response = await fetch(`/api/missions/${mission.progressId}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduledActivationDate: scheduledDate.toISOString().split('T')[0],
+          scheduledActivationTime: scheduledDate.toTimeString().split(' ')[0].slice(0, 5),
+        }),
       })
 
-      toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, {
-        description: "We'll activate your boost at this time",
-        duration: 5000,
-      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          const dateStr = scheduledDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          const timeStr = scheduledDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+          toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, { description: "Check Missions tab for details", duration: 5000 })
+          // Delay reload so user can see success message
+          setTimeout(() => window.location.reload(), 1500)
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.message || "Failed to schedule discount")
+      }
     } catch (error) {
       console.error("Failed to schedule discount:", error)
-      toast.error("Failed to schedule discount", {
-        description: "Please try again or contact support",
-        duration: 5000,
+      toast.error("Failed to schedule discount")
+    }
+  }
+
+  const handleSchedulePayboost = async (scheduledDate: Date) => {
+    const mission = dashboardData.featuredMission.mission
+    if (!mission || !mission.progressId) return
+
+    try {
+      const response = await fetch(`/api/missions/${mission.progressId}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduledActivationDate: scheduledDate.toISOString().split('T')[0],
+          scheduledActivationTime: scheduledDate.toTimeString().split(' ')[0].slice(0, 5),
+        }),
       })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          const dateStr = scheduledDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          const timeStr = scheduledDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+          toast.success(`Commission boost scheduled for ${dateStr} at ${timeStr} ET`, { description: "Check Missions tab for details", duration: 5000 })
+          // Delay reload so user can see success message
+          setTimeout(() => window.location.reload(), 1500)
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.message || "Failed to schedule boost")
+      }
+    } catch (error) {
+      console.error("Failed to schedule commission boost:", error)
+      toast.error("Failed to schedule commission boost")
     }
   }
 
@@ -256,10 +336,15 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
         {dashboardData.featuredMission.status === "completed" ? (
           <Button
             onClick={handleClaimReward}
-            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-md flex items-center gap-2"
+            disabled={isClaimingReward || !dashboardData.featuredMission.mission?.progressId}
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-md flex items-center gap-2 disabled:opacity-50"
           >
-            {getIconForBenefitType(dashboardData.featuredMission.mission?.rewardType || "gift_card")}
-            {dashboardData.featuredMission.mission?.rewardDisplayText}
+            {isClaimingReward ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              getIconForBenefitType(dashboardData.featuredMission.mission?.rewardType || "gift_card")
+            )}
+            {isClaimingReward ? "Claiming..." : dashboardData.featuredMission.mission?.rewardDisplayText}
           </Button>
         ) : dashboardData.featuredMission.status === "raffle_available" ? (
           <Button
@@ -426,9 +511,44 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
         onConfirm={handleScheduleDiscount}
-        discountPercent={dashboardData.featuredMission.mission?.rewardAmount || 0}
-        durationDays={30}
+        discountPercent={(dashboardData.featuredMission.mission?.rewardValueData?.percent as number) || dashboardData.featuredMission.mission?.rewardAmount || 0}
+        durationDays={(dashboardData.featuredMission.mission?.rewardValueData?.duration_days as number) || 30}
       />
+
+      {/* Schedule Payboost Modal */}
+      {dashboardData.featuredMission.mission && (
+        <SchedulePayboostModal
+          open={showPayboostModal}
+          onClose={() => setShowPayboostModal(false)}
+          onConfirm={handleSchedulePayboost}
+          boostPercent={(dashboardData.featuredMission.mission.rewardValueData?.percent as number) || dashboardData.featuredMission.mission.rewardAmount || 0}
+          durationDays={(dashboardData.featuredMission.mission.rewardValueData?.duration_days as number) || 30}
+        />
+      )}
+
+      {/* Physical Gift Claim Modal - NOTE: snake_case → camelCase transformation */}
+      {dashboardData.featuredMission.mission && (
+        <ClaimPhysicalGiftModal
+          open={showPhysicalGiftModal}
+          onOpenChange={(open) => setShowPhysicalGiftModal(open)}
+          reward={{
+            id: dashboardData.featuredMission.mission.progressId || '',
+            displayName: dashboardData.featuredMission.mission.rewardCustomText || 'Physical Gift',
+            rewardType: 'physical_gift',
+            valueData: {
+              // Transform snake_case (from DB) to camelCase (for modal interface)
+              requiresSize: (dashboardData.featuredMission.mission.rewardValueData?.requires_size as boolean) || false,
+              sizeCategory: (dashboardData.featuredMission.mission.rewardValueData?.size_category as string) || undefined,
+              sizeOptions: (dashboardData.featuredMission.mission.rewardValueData?.size_options as string[]) || [],
+            },
+          }}
+          onSuccess={() => {
+            toast.success("Reward claimed! Check Missions tab for shipping updates", { duration: 5000 })
+            // Delay reload so user can see success message
+            setTimeout(() => window.location.reload(), 1500)
+          }}
+        />
+      )}
     </>
   )
 }

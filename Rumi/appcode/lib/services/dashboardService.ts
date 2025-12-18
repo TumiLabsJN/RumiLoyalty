@@ -89,6 +89,7 @@ export interface FeaturedMissionResponse {
   status: 'active' | 'completed' | 'claimed' | 'fulfilled' | 'no_missions' | 'raffle_available';
   mission: {
     id: string;
+    progressId: string | null;
     type: string;
     displayName: string;
     currentProgress: number;
@@ -104,6 +105,7 @@ export interface FeaturedMissionResponse {
     rewardAmount: number | null;
     rewardCustomText: string | null;
     rewardDisplayText: string;
+    rewardValueData: Record<string, unknown> | null;
     unitText: string;
   } | null;
   tier: {
@@ -196,10 +198,10 @@ function generateRewardDisplayText(reward: DashboardReward): string {
     }
 
     case 'physical_gift':
-      return `Win a ${reward.name ?? 'Prize'}`;
+      return `Win a ${(valueData?.display_text as string) ?? reward.name ?? 'Prize'}`;
 
     case 'experience':
-      return `Win a ${reward.name ?? 'Experience'}`;
+      return `Win a ${(valueData?.display_text as string) ?? reward.name ?? 'Experience'}`;
 
     default:
       return reward.name ?? 'Reward';
@@ -360,6 +362,7 @@ export async function getDashboardOverview(
       status,
       mission: {
         id: fm.missionId,
+        progressId: fm.progressId ?? null,
         type: fm.missionType,
         displayName: MISSION_DISPLAY_NAMES[fm.missionType] ?? fm.displayName,
         currentProgress: missionCurrentValue,
@@ -375,6 +378,7 @@ export async function getDashboardOverview(
         rewardAmount,
         rewardCustomText,
         rewardDisplayText,
+        rewardValueData: fm.rewardValueData as Record<string, unknown> | null,
         unitText,
       },
       tier: fm.tierName ? { name: fm.tierName, color: fm.tierColor } : { name: rpcData.currentTier.name, color: rpcData.currentTier.color },
@@ -608,6 +612,7 @@ export async function getFeaturedMission(
     status,
     mission: {
       id: mission.id,
+      progressId: progress?.id ?? null,
       type: mission.type,
       displayName: MISSION_DISPLAY_NAMES[mission.type] ?? mission.displayName,
       currentProgress,
@@ -623,6 +628,7 @@ export async function getFeaturedMission(
       rewardAmount,
       rewardCustomText,
       rewardDisplayText,
+      rewardValueData: reward.valueData as Record<string, unknown> | null,
       unitText,
     },
     tier: tierInfo,

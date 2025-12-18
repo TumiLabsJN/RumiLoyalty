@@ -72,6 +72,7 @@ export interface FeaturedMission {
 
   mission: {
     id: string
+    progressId: string | null          // Required for claim API (mission_progress.id)
     type: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
     displayName: string          // Static: "Unlock Payday", "Fan Favorite", etc.
 
@@ -95,6 +96,7 @@ export interface FeaturedMission {
     rewardAmount: number | null        // For gift_card, spark_ads
     rewardCustomText: string | null    // For physical_gift, experience
     rewardDisplayText: string          // Formatted display text from backend
+    rewardValueData: Record<string, unknown> | null  // For modal props (snake_case from DB)
   } | null
 
   tier: {
