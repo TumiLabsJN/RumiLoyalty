@@ -178,7 +178,7 @@ export const dashboardRepository = {
     // All tiers data (already fetched, just format if needed)
     const allTiersData = options?.includeAllTiers
       ? allTiers.map(tier => ({
-          id: tier.id,
+          id: tier.tier_id,  // Use tier_id ('tier_1', 'tier_3') not UUID - matches currentTier.id pattern
           tier_name: tier.tier_name,
           tier_color: tier.tier_color,
           tier_order: tier.tier_order,

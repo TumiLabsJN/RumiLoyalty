@@ -1520,13 +1520,13 @@ export type Database = {
           p_first_name: string
           p_last_name: string
           p_line1: string
-          p_line2: string
-          p_phone: string
+          p_line2?: string
+          p_phone?: string
           p_postal_code: string
           p_redemption_id: string
           p_requires_size: boolean
-          p_size_category: string
-          p_size_value: string
+          p_size_category?: string
+          p_size_value?: string
           p_state: string
         }
         Returns: Json

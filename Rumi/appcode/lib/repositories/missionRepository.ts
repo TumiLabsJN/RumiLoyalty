@@ -1236,20 +1236,22 @@ export const missionRepository = {
       const requiresSize = (valueData?.requires_size as boolean) ?? false;
 
       const { data: result, error: rpcError } = await supabase.rpc('claim_physical_gift', {
+        // Required parameters
         p_redemption_id: redemptionId,
         p_client_id: clientId,
         p_requires_size: requiresSize,
-        p_size_category: (valueData?.size_category as string) ?? null,
-        p_size_value: claimData.size ?? null,
         p_first_name: addr.firstName,
         p_last_name: addr.lastName,
         p_line1: addr.line1,
-        p_line2: addr.line2 ?? null,
         p_city: addr.city,
         p_state: addr.state,
         p_postal_code: addr.postalCode,
         p_country: addr.country ?? 'USA',
-        p_phone: addr.phone ?? null,
+        // Optional parameters - use conditional spread (Supabase types expect undefined, not null)
+        ...(valueData?.size_category ? { p_size_category: valueData.size_category as string } : {}),
+        ...(claimData.size ? { p_size_value: claimData.size } : {}),
+        ...(addr.line2 ? { p_line2: addr.line2 } : {}),
+        ...(addr.phone ? { p_phone: addr.phone } : {}),
       });
 
       if (rpcError || !result?.success) {

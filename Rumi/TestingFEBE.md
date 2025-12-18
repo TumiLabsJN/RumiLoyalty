@@ -127,34 +127,40 @@ Likes
 ## Reward Redemption Flow
 
 ### Raffle
-#### STAGE 0: CARD STATE: In progress
+#### FLOW
+##### STAGE 0: CARD STATE: In progress
 ✅
 
-#### STAGE 1: CARD STATE: Default Claim
+##### STAGE 1: CARD STATE: Default Claim
 ✅
 
-#### STAGE 2: CARD STATE: Redeeming Physical
+##### STAGE 2: CARD STATE: Redeeming Physical
 ✅
 
-#### STAGE 3: CARD STATE: Sending
+##### STAGE 3: CARD STATE: Sending
 ✅
 
-#### STAGE 4: Sent, passed to mission history
-UNDONE 
+##### STAGE 4: Sent, passed to mission history
+❌
+
+#### Mission Decision
+Winner:
+Loser:
 
 ### Sales Mission
 
-### 
 
-## Raffle Mission Decision
-Winner:
-Loser:
 
 ## Completed Mission history
 
 ## Reward UI elements
+### Locked Missions
+Silver sign ❌
+Gold sign visible ⚠️✅
+Platinum sign ❌
 
 ## Hidden Missions
+
 
 
 ## Sequential Missions

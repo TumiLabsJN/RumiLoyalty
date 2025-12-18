@@ -20,11 +20,12 @@ Where is this used?
 
 
 # TAB: Reward Triggers
-Cell B5: Explain how it works
-- New Affiliate Level-Ups (to Bronze) _(Affiliate projection! B18)_
-    * Welcome reward (Bronze) _(VIP Levels! B14)_
-        + Promotion Events (Bronze to higher) _('Affiliate Projection'!B19)_
-            *(SUMPRODUCT('VIP Levels'!$B$15:$B$18,Inputs!$B$35:$B$38)/SUM(Inputs!$B$35:$B$38)),0)
+
+## Welcome Rewards
+Total Commission boosts triggered =
+- New Bronze Arrivals (**x**) Bronze Boost Qty 
+- New Silver Arrivals (**x**) Silver Boost Qty
+...
 
 
 
@@ -40,18 +41,23 @@ If Commission Boost,
     Then
 
 
-# TAB: AFfiliate Projection
+# TAB: Affiliate Projection
 
-## Q1
-Rows 12 - 16 assume a static Level distribution from Tab:Inputs
+## Level Distribution (Affiliates at Tier) B12:M16
+Affiliate.Projection.{B}19 = Total Active Affiliates (**X**) Inputs.{B}35 = Monthly Level Distribution
+- Active Affiliates (From Samples and Flywheel) multiplied by Level Distribution
 
-Is there something we could do to make the level distribution dynamic? Or would this complicate the projection too much
+## Level Events B18:M21 
+Bronze (Row12) = Active Affiliates (From Samples and Flywheel) (**X**) Inputs.{B}35 = Monthly Level Distribution
+Row Silver
+Row Gold
+Row Platinum
+Affiliate.Projection.{SumC}13:16 = Monthly New VIP level affiliates (**-**) Affiliate.Projection.{SumB}13:16
 
-## Q2
-Promotion Events (Bronze to higher) - Did not understand
 
-## Q3 
-Total Level-Up Events did not understand
+## New Tier Arrivals B23:M27
+Bronze (Row12) = Active Affiliates (From Samples and Flywheel)
+
 
 # TAB: Reward Triggers
 ## WELCOME REWARDS EXPLANATION 
@@ -131,3 +137,11 @@ Example
   |----------|----------------------|---------------------------------------|
   | Month 1  | 40% Bronze weighting | 90% Bronze weighting (more realistic) |
   | Month 12 | 40% Bronze weighting | 36% Bronze weighting (mature program) |
+
+
+
+
+# PRESENT
+
+## CONSERVATIVE
+Don't track demotions 
