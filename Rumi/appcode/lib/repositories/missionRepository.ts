@@ -223,6 +223,25 @@ export interface MissionHistoryData {
   } | null;
 }
 
+/**
+ * Type guard for claim RPC results.
+ * Validates that the result is an object with a boolean 'success' property.
+ * Provides runtime safety if RPC shape changes unexpectedly.
+ */
+function isClaimRPCResult(result: unknown): result is {
+  success: boolean;
+  error?: string;
+  redemption_id?: string;
+  new_status?: string;
+} {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'success' in result &&
+    typeof (result as Record<string, unknown>).success === 'boolean'
+  );
+}
+
 export const missionRepository = {
   /**
    * Find the highest-priority featured mission for a user.
@@ -1254,13 +1273,14 @@ export const missionRepository = {
         ...(addr.phone ? { p_phone: addr.phone } : {}),
       });
 
-      if (rpcError || !result?.success) {
-        console.error('[MissionRepository] Physical gift claim failed:', rpcError || result?.error);
+      if (rpcError || !isClaimRPCResult(result) || !result.success) {
+        const errorMsg = isClaimRPCResult(result) ? result.error : 'Invalid RPC response';
+        console.error('[MissionRepository] Physical gift claim failed:', rpcError || errorMsg);
         return {
           success: false,
           redemptionId,
           newStatus: 'claimable',
-          error: result?.error ?? 'Failed to claim physical gift',
+          error: errorMsg ?? 'Failed to claim physical gift',
         };
       }
 
@@ -1272,21 +1292,34 @@ export const missionRepository = {
       const durationDays = (valueData?.duration_days as number) ?? 30;
       const boostPercent = (valueData?.percent as number) ?? 0;
 
-      const { data: result, error: rpcError } = await supabase.rpc('claim_commission_boost', {
-        p_redemption_id: redemptionId,
-        p_client_id: clientId,
-        p_scheduled_date: claimData.scheduledActivationDate,
-        p_duration_days: durationDays,
-        p_boost_rate: boostPercent,
-      });
-
-      if (rpcError || !result?.success) {
-        console.error('[MissionRepository] Commission boost claim failed:', rpcError || result?.error);
+      // Guard: scheduledActivationDate required for commission_boost
+      // Service layer validates this, but TypeScript needs narrowing
+      const scheduledDate = claimData.scheduledActivationDate;
+      if (!scheduledDate) {
         return {
           success: false,
           redemptionId,
           newStatus: 'claimable',
-          error: result?.error ?? 'Failed to schedule commission boost',
+          error: 'Scheduled activation date is required',
+        };
+      }
+
+      const { data: result, error: rpcError } = await supabase.rpc('claim_commission_boost', {
+        p_redemption_id: redemptionId,
+        p_client_id: clientId,
+        p_scheduled_date: scheduledDate,
+        p_duration_days: durationDays,
+        p_boost_rate: boostPercent,
+      });
+
+      if (rpcError || !isClaimRPCResult(result) || !result.success) {
+        const errorMsg = isClaimRPCResult(result) ? result.error : 'Invalid RPC response';
+        console.error('[MissionRepository] Commission boost claim failed:', rpcError || errorMsg);
+        return {
+          success: false,
+          redemptionId,
+          newStatus: 'claimable',
+          error: errorMsg ?? 'Failed to schedule commission boost',
         };
       }
 
