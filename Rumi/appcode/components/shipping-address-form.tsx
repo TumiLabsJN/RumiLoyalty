@@ -109,8 +109,9 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
         return undefined
 
       case "shipping_postal_code":
-        if (!value.trim()) return "Postal code is required"
-        if (value.length > 20) return "Postal code must be 20 characters or less"
+        if (!value.trim()) return "ZIP code is required"
+        // US ZIP: 5 digits or 5+4 format (12345 or 12345-6789)
+        if (!/^\d{5}(-\d{4})?$/.test(value.trim())) return "Enter a valid ZIP code (e.g., 12345 or 12345-6789)"
         return undefined
 
       case "shipping_country":
@@ -120,7 +121,9 @@ export function ShippingAddressForm({ onSubmit, isSubmitting, initialData }: Shi
 
       case "shipping_phone":
         if (!value.trim()) return "Phone number is required"
-        if (value.length > 50) return "Phone number must be 50 characters or less"
+        // Remove non-digits and check for 10 digits (US phone)
+        const digitsOnly = value.replace(/\D/g, '')
+        if (digitsOnly.length !== 10) return "Enter a valid 10-digit phone number"
         return undefined
 
       default:

@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -1349,10 +1354,6 @@ export type Database = {
           user_id: string
         }[]
       }
-      apply_pending_sales_adjustments: {
-        Args: { p_client_id: string }
-        Returns: number
-      }
       auth_create_otp: {
         Args: {
           p_access_token_encrypted?: string
@@ -1501,6 +1502,35 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      claim_commission_boost: {
+        Args: {
+          p_boost_rate: number
+          p_client_id: string
+          p_duration_days: number
+          p_redemption_id: string
+          p_scheduled_date: string
+        }
+        Returns: Json
+      }
+      claim_physical_gift: {
+        Args: {
+          p_city: string
+          p_client_id: string
+          p_country: string
+          p_first_name: string
+          p_last_name: string
+          p_line1: string
+          p_line2: string
+          p_phone: string
+          p_postal_code: string
+          p_redemption_id: string
+          p_requires_size: boolean
+          p_size_category: string
+          p_size_value: string
+          p_state: string
+        }
+        Returns: Json
+      }
       create_mission_progress_for_eligible_users: {
         Args: { p_client_id: string }
         Returns: number
@@ -1623,6 +1653,10 @@ export type Database = {
         }[]
       }
       get_current_user_client_id: { Args: never; Returns: string }
+      get_dashboard_data: {
+        Args: { p_client_id: string; p_user_id: string }
+        Returns: Json
+      }
       get_mission_history: {
         Args: { p_client_id: string; p_user_id: string }
         Returns: {
@@ -1648,6 +1682,22 @@ export type Database = {
         }[]
       }
       is_admin_of_client: { Args: { p_client_id: string }; Returns: boolean }
+      raffle_create_participation: {
+        Args: {
+          p_client_id: string
+          p_mission_id: string
+          p_reward_id: string
+          p_tier_at_claim: string
+          p_user_id: string
+        }
+        Returns: {
+          error_message: string
+          participation_id: string
+          progress_id: string
+          redemption_id: string
+          success: boolean
+        }[]
+      }
       transition_expired_to_pending_info: {
         Args: { p_client_id: string }
         Returns: {
@@ -1657,33 +1707,9 @@ export type Database = {
           user_id: string
         }[]
       }
-      update_leaderboard_ranks: {
-        Args: { p_client_id: string }
-        Returns: undefined
-      }
       update_mission_progress: {
         Args: { p_client_id: string; p_user_ids?: string[] }
         Returns: number
-      }
-      update_precomputed_fields: {
-        Args: { p_client_id: string; p_user_ids?: string[] }
-        Returns: number
-      }
-      raffle_create_participation: {
-        Args: {
-          p_mission_id: string
-          p_user_id: string
-          p_client_id: string
-          p_reward_id: string
-          p_tier_at_claim: string
-        }
-        Returns: {
-          success: boolean
-          participation_id: string | null
-          redemption_id: string | null
-          progress_id: string | null
-          error_message: string | null
-        }[]
       }
     }
     Enums: {
@@ -1820,4 +1846,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

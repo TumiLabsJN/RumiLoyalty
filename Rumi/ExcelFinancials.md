@@ -114,3 +114,20 @@ Example
   115 × 2 × 0.225 = 51.75 → rounds to 52 mission completions
 
 # TAB: Costs
+
+
+  6. VIP Levels B22:B26 - Weighted Averages for Welcome Rewards
+  These are reference values showing weighted avg reward values. Updated to use Month 12 distribution:
+  OLD: =SUMPRODUCT(C14:C18, Inputs!$B$34:$B$38)
+  NEW: =SUMPRODUCT(C14:C18, Inputs!$M$45:$M$49)  ← Month 12
+
+  7. Summary B26 - Weighted Avg Commission Rate
+  OLD: =SUMPRODUCT('VIP Levels'!$D$5:$D$9, Inputs!$B$34:$B$38)
+  NEW: =SUMPRODUCT('VIP Levels'!$D$5:$D$9, Inputs!$M$45:$M$49)  ← Month 12
+
+  The Impact
+
+  | Month    | Old Model            | New Model                             |
+  |----------|----------------------|---------------------------------------|
+  | Month 1  | 40% Bronze weighting | 90% Bronze weighting (more realistic) |
+  | Month 12 | 40% Bronze weighting | 36% Bronze weighting (mature program) |

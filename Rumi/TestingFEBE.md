@@ -11,10 +11,11 @@
 
 
 # HOME PAGE
+## Reward Claiming
+Need to test this. Ask LLM if reward claiming process will be same from Missions. If it calls same process 
 ## Rewards
-
-### See each Reward in center for UI
-#### Mission Types
+### Center UI
+#### Home Center Mission Types
 1. Sales ✅
 2. Video ✅
 3. Likes ✅
@@ -30,6 +31,7 @@
 5. Raffle with gift_card ⚠️✅
 6. Raffle with physical_gift ✅
 
+
 #### Rewards
 1. commission_boost ✅
     - Variable time ✅
@@ -38,19 +40,128 @@
 3. discount ✅
 4. gift_card ✅
 
-#### General
+### General
 1. Units display ⚠️✅
 2. Flip card Checkpoint months ✅
 
 
-### Understand Logic of what appears in home dashboard
-1. What is it like in code: the priority of which mission appears
-    - raffle > sales > videos > likes > views
-2. A) See if it works (If the priority works - have multiple missions active)
-2. B) The cycling process, when next mission appears
+### Home Dashboard
+#### Filtering accross all missions 
+Raffle ✅ | Sales ⚠️✅ | Views ⚠️✅ | Likes ⚠️✅
 
-### Logic of how home dashboard feature mission works
-1. 
+#### Reward Claims
+
+#### Physical Gift
+With Physical Gift ⚠️✅
+With Physical Gift, requires size ⚠️✅
+
+##### Mission Types
+Raffle ✅
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Commission Boost
+❌
+
+##### Mission Types
+Raffle ❌
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Discount
+
+##### Mission Types
+Raffle ❌
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Gift Card
+
+##### Mission Types
+Raffle ❌
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Physical Gift
+
+##### Mission Types
+Raffle ❌
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Experience
+
+##### Mission Types
+Raffle ❌
+Views ❌
+Video ❌
+Likes ❌
+Sales ❌
+
+#### Extra info
+1. What is it like in code: the priority of which mission appears
+    - raffle > sales > videos > likes > views ✅
+2. A) See if it works (If the priority works - have multiple missions active) ✅
+2. B) The cycling process, when next mission appears ✅
+
+
+# MISSIONS PAGE
+Validated with LLM that redemption flow is determined by reward type. So if one reward flow works, it should work with every mission.
+
+## Individual Mission Claim Button Click
+Sales
+Views
+Video
+Likes
+
+## Reward Redemption Flow
+
+### Raffle
+#### STAGE 0: CARD STATE: In progress
+✅
+
+#### STAGE 1: CARD STATE: Default Claim
+✅
+
+#### STAGE 2: CARD STATE: Redeeming Physical
+✅
+
+#### STAGE 3: CARD STATE: Sending
+✅
+
+#### STAGE 4: Sent, passed to mission history
+UNDONE 
+
+### Sales Mission
+
+### 
+
+## Raffle Mission Decision
+Winner:
+Loser:
+
+## Completed Mission history
+
+## Reward UI elements
+
+## Hidden Missions
+
+
+## Sequential Missions
+If available once a week, check UI when its used
+
+
+
 
 
 
@@ -71,3 +182,19 @@ UPDATE users SET tiktok_handle = 'testbronze' WHERE email = 'testbronze@test.com
   | cccc2222-0002-0000-0000-000000000002 | $50 Ads Boost  | 50     |
   | cccc3333-0002-0000-0000-000000000002 | $100 Ads Boost | 100    |
   | cccc4444-0002-0000-0000-000000000002 | $200 Ads Boost | 200    |
+
+
+## Physical Gift
+
+**Delete Claim**
+UPDATE redemptions
+SET status = 'claimable', claimed_at = NULL, updated_at = NOW()
+WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff';
+
+**Delete Address input**
+  -- Delete physical_gift_redemptions row
+  DELETE FROM physical_gift_redemptions
+  WHERE redemption_id = (
+    SELECT id FROM redemptions
+    WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff'
+  );

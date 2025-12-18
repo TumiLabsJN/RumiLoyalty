@@ -1225,14 +1225,83 @@ export const missionRepository = {
     const valueData = reward.value_data as Record<string, unknown> | null;
     const now = new Date().toISOString();
 
-    // 3. Update redemption to 'claimed'
+    // ============================================
+    // SUB-STATE REWARD TYPES: Use atomic RPC (skip standalone UPDATE)
+    // RPC handles BOTH redemption UPDATE + sub-state INSERT in one transaction
+    // ============================================
+
+    if (reward.type === 'physical_gift' && claimData.shippingAddress) {
+      // Physical gift: Atomic RPC handles UPDATE + INSERT
+      const addr = claimData.shippingAddress;
+      const requiresSize = (valueData?.requires_size as boolean) ?? false;
+
+      const { data: result, error: rpcError } = await supabase.rpc('claim_physical_gift', {
+        p_redemption_id: redemptionId,
+        p_client_id: clientId,
+        p_requires_size: requiresSize,
+        p_size_category: (valueData?.size_category as string) ?? null,
+        p_size_value: claimData.size ?? null,
+        p_first_name: addr.firstName,
+        p_last_name: addr.lastName,
+        p_line1: addr.line1,
+        p_line2: addr.line2 ?? null,
+        p_city: addr.city,
+        p_state: addr.state,
+        p_postal_code: addr.postalCode,
+        p_country: addr.country ?? 'USA',
+        p_phone: addr.phone ?? null,
+      });
+
+      if (rpcError || !result?.success) {
+        console.error('[MissionRepository] Physical gift claim failed:', rpcError || result?.error);
+        return {
+          success: false,
+          redemptionId,
+          newStatus: 'claimable',
+          error: result?.error ?? 'Failed to claim physical gift',
+        };
+      }
+
+      return { success: true, redemptionId, newStatus: 'claimed' };
+    }
+
+    if (reward.type === 'commission_boost') {
+      // Commission boost: Atomic RPC handles UPDATE + INSERT
+      const durationDays = (valueData?.duration_days as number) ?? 30;
+      const boostPercent = (valueData?.percent as number) ?? 0;
+
+      const { data: result, error: rpcError } = await supabase.rpc('claim_commission_boost', {
+        p_redemption_id: redemptionId,
+        p_client_id: clientId,
+        p_scheduled_date: claimData.scheduledActivationDate,
+        p_duration_days: durationDays,
+        p_boost_rate: boostPercent,
+      });
+
+      if (rpcError || !result?.success) {
+        console.error('[MissionRepository] Commission boost claim failed:', rpcError || result?.error);
+        return {
+          success: false,
+          redemptionId,
+          newStatus: 'claimable',
+          error: result?.error ?? 'Failed to schedule commission boost',
+        };
+      }
+
+      return { success: true, redemptionId, newStatus: 'claimed' };
+    }
+
+    // ============================================
+    // OTHER REWARD TYPES: Use existing standalone UPDATE
+    // (raffle, points, discount, etc. - no sub-state table)
+    // ============================================
+
     const updateData: Record<string, unknown> = {
       status: 'claimed',
       claimed_at: now,
       updated_at: now,
     };
 
-    // Add scheduling data for scheduled rewards
     if (reward.redemption_type === 'scheduled' && claimData.scheduledActivationDate) {
       updateData.scheduled_activation_date = claimData.scheduledActivationDate;
       updateData.scheduled_activation_time = claimData.scheduledActivationTime ?? '19:00:00';
@@ -1253,62 +1322,6 @@ export const missionRepository = {
       };
     }
 
-    // 4. Create sub-state records based on reward type
-    if (reward.type === 'commission_boost') {
-      const durationDays = (valueData?.duration_days as number) ?? 30;
-      const boostPercent = (valueData?.percent as number) ?? 0;
-
-      const { error: boostError } = await supabase
-        .from('commission_boost_redemptions')
-        .insert({
-          redemption_id: redemptionId,
-          client_id: clientId,
-          boost_status: 'scheduled',
-          scheduled_activation_date: claimData.scheduledActivationDate!,
-          duration_days: durationDays,
-          boost_rate: boostPercent,
-        });
-
-      if (boostError) {
-        console.error('[MissionRepository] Error creating boost record:', boostError);
-        // Note: Main redemption is already claimed, sub-state can be recovered
-      }
-    }
-
-    if (reward.type === 'physical_gift' && claimData.shippingAddress) {
-      const addr = claimData.shippingAddress;
-      const requiresSize = (valueData?.requires_size as boolean) ?? false;
-
-      const { error: giftError } = await supabase
-        .from('physical_gift_redemptions')
-        .insert({
-          redemption_id: redemptionId,
-          client_id: clientId,
-          requires_size: requiresSize,
-          size_category: (valueData?.size_category as string) ?? null,
-          size_value: claimData.size ?? null,
-          size_submitted_at: claimData.size ? now : null,
-          shipping_recipient_first_name: addr.firstName,
-          shipping_recipient_last_name: addr.lastName,
-          shipping_address_line1: addr.line1,
-          shipping_address_line2: addr.line2 ?? null,
-          shipping_city: addr.city,
-          shipping_state: addr.state,
-          shipping_postal_code: addr.postalCode,
-          shipping_country: addr.country ?? 'USA',
-          shipping_phone: addr.phone ?? null,
-          shipping_info_submitted_at: now,
-        });
-
-      if (giftError) {
-        console.error('[MissionRepository] Error creating gift record:', giftError);
-      }
-    }
-
-    return {
-      success: true,
-      redemptionId,
-      newStatus: 'claimed',
-    };
+    return { success: true, redemptionId, newStatus: 'claimed' };
   },
 };
