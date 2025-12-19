@@ -24,6 +24,7 @@ import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import * as React from "react"
 import {
@@ -45,6 +46,9 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   // ============================================
   // STATE MANAGEMENT
   // ============================================
+  // Router for page refresh after claim
+  const router = useRouter()
+
   // Initialize from server-provided data (no loading state needed)
   const [missionsData, setMissionsData] = useState<MissionsPageResponse | null>(initialData)
   const [error, setError] = useState<string | null>(initialError)
@@ -126,34 +130,53 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     console.log("[v0] Schedule mission discount for:", selectedMission.id, scheduledDate.toISOString())
 
     try {
-      // TODO: POST /api/missions/:id/claim
-      // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
+      // Extract date/time from UTC Date object (modal already converted ET → UTC)
+      // API expects: scheduledActivationDate (YYYY-MM-DD) and scheduledActivationTime (HH:MM:SS in UTC)
+      // ⚠️ DO NOT apply additional timezone conversion - scheduledDate is already UTC
+      const isoString = scheduledDate.toISOString()
+      const dateStr = isoString.split('T')[0]
+      const timeStr = isoString.split('T')[1].split('.')[0]
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const response = await fetch(`/api/missions/${selectedMission.id}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduledActivationDate: dateStr,
+          scheduledActivationTime: timeStr,
+        }),
+      })
 
-      // Show success message
-      const dateStr = scheduledDate.toLocaleDateString("en-US", {
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to schedule discount')
+      }
+
+      // Show success message with user-friendly display
+      const displayDateStr = scheduledDate.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
       })
-      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+      const displayTimeStr = scheduledDate.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
         timeZone: "America/New_York",
       })
 
-      toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, {
-        description: "We'll activate your boost at this time",
+      toast.success(`Discount scheduled for ${displayDateStr} at ${displayTimeStr} ET`, {
+        description: "We'll activate your discount at this time",
         duration: 5000,
       })
+
+      // Refresh page to update mission status
+      router.refresh()
 
       // Reset selected mission
       setSelectedMission(null)
     } catch (error) {
       console.error("Failed to schedule discount:", error)
       toast.error("Failed to schedule discount", {
-        description: "Please try again or contact support",
+        description: error instanceof Error ? error.message : "Please try again or contact support",
         duration: 5000,
       })
     }
@@ -165,34 +188,53 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     console.log("[v0] Schedule mission commission boost for:", selectedMission.id, scheduledDate.toISOString())
 
     try {
-      // TODO: POST /api/missions/:id/claim
-      // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
+      // Extract date/time from UTC Date object (modal already converted 2 PM ET → UTC)
+      // API expects: scheduledActivationDate (YYYY-MM-DD) and scheduledActivationTime (HH:MM:SS in UTC)
+      // ⚠️ DO NOT apply additional timezone conversion - scheduledDate is already UTC
+      const isoString = scheduledDate.toISOString()
+      const dateStr = isoString.split('T')[0]
+      const timeStr = isoString.split('T')[1].split('.')[0]
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const response = await fetch(`/api/missions/${selectedMission.id}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduledActivationDate: dateStr,
+          scheduledActivationTime: timeStr,
+        }),
+      })
 
-      // Show success message
-      const dateStr = scheduledDate.toLocaleDateString("en-US", {
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to schedule commission boost')
+      }
+
+      // Show success message with user-friendly display
+      const displayDateStr = scheduledDate.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
       })
-      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+      const displayTimeStr = scheduledDate.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
         timeZone: "America/New_York",
       })
 
-      toast.success(`Commission boost scheduled for ${dateStr} at ${timeStr} ET`, {
+      toast.success(`Commission boost scheduled for ${displayDateStr} at ${displayTimeStr} ET`, {
         description: "We'll activate your boost at this time",
         duration: 5000,
       })
+
+      // Refresh page to update mission status
+      router.refresh()
 
       // Reset selected mission
       setSelectedMission(null)
     } catch (error) {
       console.error("Failed to schedule commission boost:", error)
       toast.error("Failed to schedule commission boost", {
-        description: "Please try again or contact support",
+        description: error instanceof Error ? error.message : "Please try again or contact support",
         duration: 5000,
       })
     }

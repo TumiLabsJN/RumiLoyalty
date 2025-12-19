@@ -63,7 +63,7 @@ Likes ❌
 Sales ❌
 
 #### Commission Boost
-❌
+✅
 
 ##### Mission Types
 Raffle ❌
@@ -144,11 +144,28 @@ Likes
 ❌
 
 #### Mission Decision
-Winner:
+##### Winner
+###### Commission Boost
+UI failed. After claiming ❌
+- Claim failing silently
+    **fixing**
+
+###### Physical Gift
+
+###### 
 Loser:
 
-### Sales Mission
+### Pay Boost Mission
+#### Flow
+#### STAGE 1: Default Schedule
+✅
 
+#### STAGE 2: Stage 2 Scheduled
+From Home ✅
+
+#### "Stage 3 Active"
+From home ❌
+- Flipped side of card has bad info
 
 
 ## Completed Mission history
@@ -189,6 +206,12 @@ UPDATE users SET tiktok_handle = 'testbronze' WHERE email = 'testbronze@test.com
   | cccc3333-0002-0000-0000-000000000002 | $100 Ads Boost | 100    |
   | cccc4444-0002-0000-0000-000000000002 | $200 Ads Boost | 200    |
 
+## testbronze 
+"id": "a05f5d26-2d93-4156-af86-70a88604c7d8",
+"tiktok_handle": "testbronze",
+"email": "testbronze@test.com",
+"client_id": "11111111-1111-1111-1111-111111111111",
+"current_tier": "tier_1"
 
 ## Physical Gift
 
@@ -204,3 +227,5 @@ WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff';
     SELECT id FROM redemptions
     WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff'
   );
+
+  
