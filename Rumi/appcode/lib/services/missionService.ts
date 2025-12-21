@@ -518,6 +518,37 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
         return 'raffle_claim';
       }
       if (redemption?.status === 'claimed') {
+        // Check commission_boost sub-states (same logic as non-raffle missions)
+        // Data comes from Supabase commission_boost_redemptions table
+        if (data.reward.type === 'commission_boost' && commissionBoost) {
+          switch (commissionBoost.boostStatus) {
+            case 'scheduled':
+              return 'scheduled';
+            case 'active':
+              return 'active';
+            case 'pending_info':
+              return 'pending_info';
+            case 'pending_payout':
+              return 'clearing';
+            default:
+              return 'redeeming';
+          }
+        }
+        // Check discount sub-states
+        if (data.reward.type === 'discount') {
+          if (!redemption.activationDate) {
+            return 'scheduled';
+          }
+          if (redemption.expirationDate) {
+            const now = new Date();
+            const expiration = new Date(redemption.expirationDate);
+            if (now <= expiration) {
+              return 'active';
+            }
+          }
+          return 'redeeming';
+        }
+        // Default for other reward types (gift_card, physical_gift, etc.)
         return 'raffle_won';
       }
     }
@@ -1005,6 +1036,51 @@ export async function claimMissionReward(
   currentTierId: string,
   claimData: ClaimRequestData
 ): Promise<ClaimResponse> {
+  // FAST PATH: For instant rewards with no claimData, use atomic RPC
+  // This skips the expensive findByProgressId + validation flow
+  // SYNC: RPC validates same logic - keep in sync if validation changes
+  const hasClaimData = claimData.scheduledActivationDate ||
+                       claimData.shippingAddress ||
+                       claimData.size;
+
+  if (!hasClaimData) {
+    // Likely instant reward - try atomic RPC first
+    const instantResult = await missionRepository.claimInstantReward(
+      missionProgressId,
+      clientId
+    );
+
+    if (instantResult.success) {
+      return {
+        success: true,
+        message: 'Reward claimed successfully!',
+        redemptionId: instantResult.redemptionId,
+        nextAction: {
+          type: 'show_confirmation',
+          status: instantResult.newStatus,
+          message: 'We will deliver your reward in up to 72 hours.',
+        },
+      };
+    }
+
+    // If RPC failed with "requires additional information", fall through to normal flow
+    // This handles edge cases where reward type changed or needs scheduled data
+    if (!instantResult.error?.includes('requires additional information')) {
+      return {
+        success: false,
+        message: instantResult.error ?? 'Failed to claim reward',
+        redemptionId: instantResult.redemptionId,
+        nextAction: {
+          type: 'navigate_to_missions',
+          status: 'error',
+          message: 'Please try again.',
+        },
+      };
+    }
+    // Fall through to existing slow path for scheduled/physical_gift
+  }
+
+  // EXISTING FLOW: For scheduled rewards (commission_boost, discount) and physical_gift
   // 1. Get mission by progress ID
   const mission = await missionRepository.findByProgressId(missionProgressId, userId, clientId);
 

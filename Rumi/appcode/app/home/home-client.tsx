@@ -9,6 +9,7 @@ import { ScheduleDiscountModal } from "@/components/schedule-discount-modal"
 import { SchedulePayboostModal } from "@/components/schedule-payboost-modal"
 import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal"
 import { toast } from "sonner"
+import { claimMissionReward } from '@/lib/client/claimMissionReward'
 import { cn } from "@/lib/utils"
 
 interface HomeClientProps {
@@ -152,33 +153,17 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
       return
     }
 
-    // Instant rewards (gift_card, spark_ads, experience) - direct API call
+    // Instant rewards (gift_card, spark_ads, experience) - use centralized utility
     setIsClaimingReward(true)
-    try {
-      const response = await fetch(
-        `/api/missions/${mission.progressId}/claim`,
-        { method: 'POST' }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          toast.success("Reward claimed! Check Missions tab for details", {
-            duration: 5000,
-          })
-          // Delay reload so user can see success message
-          setTimeout(() => window.location.reload(), 1500)
-        }
-      } else {
-        const error = await response.json()
-        toast.error(error.message || "Claim failed. Please try again")
-      }
-    } catch (error) {
-      console.error('Claim error:', error)
-      toast.error("Something went wrong. Please try again")
-    } finally {
-      setIsClaimingReward(false)
-    }
+    await claimMissionReward(
+      {
+        missionProgressId: mission.progressId,
+        successMessage: 'Reward claimed!',
+        successDescription: 'Check Missions tab for details',
+      },
+      () => window.location.reload()
+    )
+    setIsClaimingReward(false)
   }
 
   const handleEnterRaffle = async () => {

@@ -1359,4 +1359,44 @@ export const missionRepository = {
 
     return { success: true, redemptionId, newStatus: 'claimed' };
   },
+
+  /**
+   * Claim an instant reward (gift_card, spark_ads, experience) or raffle winner prize via atomic RPC.
+   * Replaces findByProgressId + claimReward for instant reward types.
+   * SYNC: Must match missionService.claimMissionReward() validation logic.
+   *
+   * @param missionProgressId - The mission_progress.id (NOT missions.id)
+   * @param clientId - Client ID for multitenancy
+   * @returns ClaimResult with success/error status
+   */
+  async claimInstantReward(
+    missionProgressId: string,
+    clientId: string
+  ): Promise<ClaimResult> {
+    // Use createClient() - needs auth context for auth.uid() in RPC
+    const supabase = await createClient();
+
+    const { data: result, error: rpcError } = await supabase.rpc('claim_instant_reward', {
+      p_mission_progress_id: missionProgressId,
+      p_client_id: clientId,
+    });
+
+    // Use existing isClaimRPCResult type guard (line 231)
+    if (rpcError || !isClaimRPCResult(result) || !result.success) {
+      const errorMsg = isClaimRPCResult(result) ? result.error : 'Invalid RPC response';
+      console.error('[MissionRepository] Instant reward claim failed:', rpcError || errorMsg);
+      return {
+        success: false,
+        redemptionId: (isClaimRPCResult(result) ? result.redemption_id : '') ?? '',
+        newStatus: 'claimable',
+        error: errorMsg ?? 'Failed to claim reward',
+      };
+    }
+
+    return {
+      success: true,
+      redemptionId: result.redemption_id ?? '',
+      newStatus: result.new_status ?? 'claimed',
+    };
+  },
 };

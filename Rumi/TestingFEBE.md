@@ -55,20 +55,12 @@ Raffle ✅ | Sales ⚠️✅ | Views ⚠️✅ | Likes ⚠️✅
 With Physical Gift ⚠️✅
 With Physical Gift, requires size ⚠️✅
 
+#### Commission Boost
+
 ##### Mission Types
 Raffle ✅
 Views ❌
-Video ❌
-Likes ❌
-Sales ❌
-
-#### Commission Boost
-✅
-
-##### Mission Types
-Raffle ❌
-Views ❌
-Video ❌
+Video ✅
 Likes ❌
 Sales ❌
 
@@ -108,6 +100,7 @@ Video ❌
 Likes ❌
 Sales ❌
 
+
 #### Extra info
 1. What is it like in code: the priority of which mission appears
     - raffle > sales > videos > likes > views ✅
@@ -118,16 +111,11 @@ Sales ❌
 # MISSIONS PAGE
 Validated with LLM that redemption flow is determined by reward type. So if one reward flow works, it should work with every mission.
 
-## Individual Mission Claim Button Click
-Sales
-Views
-Video
-Likes
+After claiming, page not getting refreshed
 
-## Reward Redemption Flow
-
+## Mission Validation
 ### Raffle
-#### FLOW
+#### Mission Flow
 ##### STAGE 0: CARD STATE: In progress
 ✅
 
@@ -143,30 +131,395 @@ Likes
 ##### STAGE 4: Sent, passed to mission history
 ❌
 
-#### Mission Decision
-##### Winner
-###### Commission Boost
-UI failed. After claiming ❌
-- Claim failing silently
-    **fixing**
+#### Reward Flow
+##### Commission Boost
+UI failed. After claiming ⚠️✅
 
-###### Physical Gift
-
-###### 
-Loser:
-
-### Pay Boost Mission
-#### Flow
-#### STAGE 1: Default Schedule
-✅
-
-#### STAGE 2: Stage 2 Scheduled
+UI Failed. Card stuck in "Prize on the way" not scheduled. ⚠️✅
+###### STAGE 1: Default Schedule ✅
 From Home ✅
+From Mission page ✅
 
-#### "Stage 3 Active"
+###### STAGE 2: Stage 2 Scheduled ✅
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh ❌
+
+###### "Stage 3 Active" ⚠️
 From home ❌
 - Flipped side of card has bad info
 
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+###### "Stage 4 Pending Payment Info" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+boost_status='pending_info'
+- QUESTION: is boost_status='pending_info' or boost_status='expired'
+
+###### "Stage 5 Clearing" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Gift Card
+
+##### Discount
+
+##### Physical Gift - no requires_size
+
+##### Physical Gift - yes requires_size
+
+##### Spark Ads
+
+##### Experience
+
+#### Winner / Looser
+
+
+### Sales
+#### Mission Flows
+##### Step 1b UI = CARD STATE: In Progress
+missions	mission_progress
+activated=true	"status='active'
+current_value = 0" 
+
+current_value can also be a number of advanced 
+
+
+##### Step 2: UI = CARD STATE: Mission Completed
+missions	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set"
+
+#### Reward Flow
+
+##### Commission boost
+###### "Stage 1 Default Schedule" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+###### "Stage 2 Scheduled" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
+
+###### "Stage 3 Active" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+###### "Stage 4 Pending Payment Info" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+boost_status='pending_info'
+- QUESTION: is boost_status='pending_info' or boost_status='expired'
+
+###### "Stage 5 Clearing" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Discount
+
+##### Gift Card
+
+##### Physical Gift
+
+##### Spark Ads
+
+##### Experience
+
+### Videos
+
+#### Mission Flows
+##### Step 1b UI = CARD STATE: In Progress
+missions	mission_progress
+activated=true	"status='active'
+current_value = 0" 
+
+current_value can also be a number of advanced 
+
+
+##### Step 2: UI = CARD STATE: Mission Completed
+missions	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set"
+
+
+##### Step 3: Reward in Progress (Varies by Reward Type of mission)
+
+
+#### Reward Flows
+##### Commission Boost
+###### "Stage 1 Default Schedule" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+###### "Stage 2 Scheduled" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
+
+###### "Stage 3 Active" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+###### "Stage 4 Pending Payment Info" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+boost_status='pending_info'
+- QUESTION: is boost_status='pending_info' or boost_status='expired'
+
+###### "Stage 5 Clearing" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Discount
+
+##### Gift Card
+
+##### Physical Gift
+
+##### Spark Ads
+
+##### Experience
+
+
+### Views
+#### Mission Flows
+##### Step 1b UI = CARD STATE: In Progress
+missions	mission_progress
+activated=true	"status='active'
+current_value = 0" 
+
+current_value can also be a number of advanced 
+
+
+##### Step 2: UI = CARD STATE: Mission Completed
+missions	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set"
+
+#### Reward Flow
+
+##### Commission boost
+###### "Stage 1 Default Schedule" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+###### "Stage 2 Scheduled" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
+
+###### "Stage 3 Active" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+###### "Stage 4 Pending Payment Info" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+boost_status='pending_info'
+- QUESTION: is boost_status='pending_info' or boost_status='expired'
+
+###### "Stage 5 Clearing" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Discount
+
+##### Gift Card
+
+##### Physical Gift
+
+##### Spark Ads
+
+##### Experience
+
+
+### Likes
+#### Mission Flows
+##### Step 1b UI = CARD STATE: In Progress
+missions	mission_progress
+activated=true	"status='active'
+current_value = 0" 
+
+current_value can also be a number of advanced 
+
+
+##### Step 2: UI = CARD STATE: Mission Completed
+missions	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set"
+
+#### Reward Flow
+
+##### Commission boost
+###### "Stage 1 Default Schedule" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+###### "Stage 2 Scheduled" ⚠️
+rewards	redemptions	commission_boost_redemption
+    "status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
+
+###### "Stage 3 Active" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+###### "Stage 4 Pending Payment Info" ⚠️
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+boost_status='pending_info'
+- QUESTION: is boost_status='pending_info' or boost_status='expired'
+
+###### "Stage 5 Clearing" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Discount
+
+##### Gift Card
+
+##### Physical Gift
+
+##### Spark Ads
+
+##### Experience
 
 ## Completed Mission history
 

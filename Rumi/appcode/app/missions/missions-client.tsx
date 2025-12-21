@@ -22,6 +22,7 @@ import { SchedulePayboostModal } from "@/components/schedule-payboost-modal"
 import { PaymentInfoModal } from "@/components/payment-info-modal"
 import { ClaimPhysicalGiftModal } from "@/components/claim-physical-gift-modal"
 import { toast } from "sonner"
+import { claimMissionReward } from '@/lib/client/claimMissionReward'
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -88,7 +89,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     ['redeeming', 'sending', 'scheduled', 'active', 'raffle_won'].includes(m.status)
   ).length || 0
 
-  const handleClaimMission = (mission: any) => {
+  const handleClaimMission = async (mission: any) => {
     console.log("[v0] Claim mission clicked:", mission.id)
 
     // Route to correct modal based on reward type
@@ -119,9 +120,15 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
       return
     }
 
-    // For other reward types, claim immediately
-    // TODO: POST /api/missions/:id/claim
-    // Sets status from 'completed' → 'claimed'
+    // For other reward types (gift_card, spark_ads, experience), claim immediately
+    await claimMissionReward(
+      {
+        missionProgressId: mission.id,
+        successMessage: 'Reward claimed!',
+        successDescription: 'Check back soon for fulfillment updates',
+      },
+      () => window.location.reload()
+    )
   }
 
   const handleScheduleDiscount = async (scheduledDate: Date) => {
@@ -168,8 +175,8 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
         duration: 5000,
       })
 
-      // Refresh page to update mission status
-      router.refresh()
+      // Refresh page to update mission status (2 second delay for toast visibility)
+      setTimeout(() => router.refresh(), 2000)
 
       // Reset selected mission
       setSelectedMission(null)
@@ -226,8 +233,8 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
         duration: 5000,
       })
 
-      // Refresh page to update mission status
-      router.refresh()
+      // Refresh page to update mission status (2 second delay for toast visibility)
+      setTimeout(() => router.refresh(), 2000)
 
       // Reset selected mission
       setSelectedMission(null)

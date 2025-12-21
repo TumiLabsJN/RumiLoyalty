@@ -3298,6 +3298,7 @@ interface MissionsPageResponse {
 **Priority 11 - Informational Raffle States (No Action Required):**
 - `status='raffle_won'` - User claimed raffle prize (informational - shows in history)
   - Database condition: `raffle_participation.is_winner=true` AND `redemptions.status='claimed'`
+  - **Note:** If raffle prize is `commission_boost` or `discount`, status reflects sub-state (`scheduled`, `active`, `pending_info`, `clearing`, `redeeming`) instead of `raffle_won`
 - `status='raffle_processing'` - User entered raffle, waiting for draw (informational)
   - Database condition: `raffle_participation EXISTS` AND `raffle_participation.is_winner IS NULL`
 - `status='dormant'` - Raffle not yet activated (informational - coming soon)
