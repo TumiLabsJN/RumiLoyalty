@@ -181,7 +181,7 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
         if (data.success) {
           toast.success("You're in! Check Missions tab for updates")
           // Delay reload so user can see success message
-          setTimeout(() => window.location.reload(), 1500)
+          setTimeout(() => window.location.reload(), 2000)
         }
       } else {
         const error = await response.json()
@@ -216,7 +216,7 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
           const timeStr = scheduledDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
           toast.success(`Discount scheduled for ${dateStr} at ${timeStr} ET`, { description: "Check Missions tab for details", duration: 5000 })
           // Delay reload so user can see success message
-          setTimeout(() => window.location.reload(), 1500)
+          setTimeout(() => window.location.reload(), 2000)
         }
       } else {
         const error = await response.json()
@@ -249,7 +249,7 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
           const timeStr = scheduledDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
           toast.success(`Commission boost scheduled for ${dateStr} at ${timeStr} ET`, { description: "Check Missions tab for details", duration: 5000 })
           // Delay reload so user can see success message
-          setTimeout(() => window.location.reload(), 1500)
+          setTimeout(() => window.location.reload(), 2000)
         }
       } else {
         const error = await response.json()
@@ -528,9 +528,8 @@ export function HomeClient({ initialData, error }: HomeClientProps) {
             },
           }}
           onSuccess={() => {
-            toast.success("Reward claimed! Check Missions tab for shipping updates", { duration: 5000 })
-            // Delay reload so user can see success message
-            setTimeout(() => window.location.reload(), 1500)
+            // Delay reload so user can see modal's success message
+            setTimeout(() => window.location.reload(), 2000)
           }}
         />
       )}

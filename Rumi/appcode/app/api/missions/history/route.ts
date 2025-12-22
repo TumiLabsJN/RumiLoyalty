@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server-client';
 import { getMissionHistory } from '@/lib/services/missionService';
-import { userRepository } from '@/lib/repositories/userRepository';
 import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
 
 /**
@@ -49,9 +48,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step 3: Get user from our users table
-    const user = await userRepository.findByAuthId(authUser.id);
-    if (!user) {
+    // Step 3: Get dashboard data - pass authUser.id directly
+    // NOTE: users.id === authUser.id (created atomically in auth_create_user RPC)
+    // Multi-tenant isolation enforced by dashboardRepository via client_id parameter
+    // TRADE-OFF: 403 TENANT_MISMATCH consolidated into 401 (acceptable for multi-tenant
+    // deployment where tenant mismatch indicates data corruption/misconfiguration)
+    const dashboardData = await dashboardRepository.getUserDashboard(authUser.id, clientId);
+    if (!dashboardData) {
       return NextResponse.json(
         {
           error: 'UNAUTHORIZED',
@@ -62,34 +65,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify user belongs to this client (multitenancy)
-    if (user.clientId !== clientId) {
-      return NextResponse.json(
-        {
-          error: 'FORBIDDEN',
-          code: 'TENANT_MISMATCH',
-          message: 'Access denied.',
-        },
-        { status: 403 }
-      );
-    }
-
-    // Step 4: Get tier info for response
-    const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId);
-    if (!dashboardData) {
-      return NextResponse.json(
-        {
-          error: 'INTERNAL_ERROR',
-          code: 'USER_DATA_ERROR',
-          message: 'Failed to load user data.',
-        },
-        { status: 500 }
-      );
-    }
-
-    // Step 5: Get mission history from service
+    // Step 4: Get mission history from service
     const historyResponse = await getMissionHistory(
-      user.id,
+      authUser.id,
       clientId,
       {
         currentTier: dashboardData.currentTier.id,

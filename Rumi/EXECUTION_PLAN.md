@@ -1685,28 +1685,31 @@
     - **Acceptance Criteria:** Missions list shows correct status, progress, rewards for each tier
 
 ## Step 9.4: Mission History Integration
-- [ ] **Task 9.4.1:** Verify Mission History backend API
+- [x] **Task 9.4.1:** Verify Mission History backend API
     - **Action:** Confirm `GET /api/missions/history` exists and response shape matches mock data
     - **References:** MISSIONS_IMPL.md, `app/missions/missionhistory/page.tsx` lines 24-166 (mockApiResponse)
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
 
-- [ ] **Task 9.4.2:** Add data fetching to Mission History page
+- [x] **Task 9.4.2:** Add data fetching to Mission History page
     - **Action:** Replace mock `mockApiResponse` with `fetch('/api/missions/history')` call
-    - **Implementation Guide:** Add useState for data, loading, error. Add useEffect with fetch call
+    - **Implementation Guide:** Server-side fetch pattern (ENH-005) - Server Component + Client Component
     - **Acceptance Criteria:** Page fetches from `/api/missions/history` on mount
+    - **Implementation:** ENH-005 - Server Component fetches, passes to Client Component
 
-- [ ] **Task 9.4.3:** Add loading state to Mission History page
-    - **Action:** Add skeleton UI while loading
-    - **Acceptance Criteria:** Loading skeleton displays during fetch
+- [x] **Task 9.4.3:** Add loading state to Mission History page
+    - **Action:** N/A - Server-side fetch means no loading state needed (data ready on render)
+    - **Acceptance Criteria:** N/A - Server-side pattern eliminates need for loading skeleton
 
-- [ ] **Task 9.4.4:** Add error handling to Mission History page
+- [x] **Task 9.4.4:** Add error handling to Mission History page
     - **Action:** Handle fetch errors and 401 responses
-    - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
+    - **Implementation Guide:** Server-side redirect for 401, error prop for other errors
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+    - **Implementation:** `page.tsx:43-49` handles 401 redirect and error prop
 
-- [ ] **Task 9.4.5:** Remove debug panel from Mission History page
+- [x] **Task 9.4.5:** Remove debug panel from Mission History page
     - **Action:** Delete any debug/mock data from `app/missions/missionhistory/page.tsx`
     - **Acceptance Criteria:** No mock data objects in code
+    - **Implementation:** Mock data removed, replaced with `initialData` prop from server
 
 - [ ] **Task 9.4.6:** Manual test Mission History page
     - **Action:** Login as test users and verify history displays correctly

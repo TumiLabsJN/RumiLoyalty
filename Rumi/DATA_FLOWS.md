@@ -521,29 +521,214 @@ page.tsx
 
 | Function | Purpose |
 |----------|---------|
-| `getMissionHistory(userId, clientId, userInfo)` | Returns concluded missions with formatted dates |
+| `getMissionHistory(userId, clientId, userInfo)` | Main orchestrator - fetches history, determines status, formats dates |
+| `generateRewardName(rewardType, valueData, description)` | Formats reward display name based on type |
+| `formatDateShort(date)` | Formats ISO date to "Jan 10, 2025" format |
+| `addArticle(text)` | Adds "a" or "an" article for prize names |
 
 ### Repository Layer
+
+**File:** `lib/repositories/userRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `findByAuthId(authId)` | RPC: `auth_find_user_by_id` | Get user from Supabase Auth ID |
+
+**File:** `lib/repositories/dashboardRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `getUserDashboard(userId, clientId)` | SELECT with JOIN | Get user, client, tier data for response |
 
 **File:** `lib/repositories/missionRepository.ts`
 
 | Function | Query Type | Purpose |
 |----------|------------|---------|
-| `getHistory(userId, clientId)` | RPC: `get_mission_history` | Get concluded + rejected missions |
+| `getHistory(userId, clientId)` | RPC: `get_mission_history` | Get concluded + rejected redemptions with all related data |
+
+### Database Tables
+
+| Table | Fields Used | Purpose |
+|-------|-------------|---------|
+| `users` | id, client_id, current_tier | User identification and tier info |
+| `redemptions` | id, status, claimed_at, fulfilled_at, concluded_at, rejected_at, mission_progress_id, deleted_at | Track reward fulfillment lifecycle |
+| `mission_progress` | id, mission_id, completed_at | Link redemption to mission |
+| `missions` | id, mission_type, display_name | Mission identity and display |
+| `rewards` | id, type, name, description, value_data, reward_source | Reward details for display |
+| `raffle_participations` | is_winner, participated_at, winner_selected_at, mission_progress_id | Raffle outcome data |
+| `tiers` | tier_id, tier_name, tier_color | User's current tier for header display |
 
 ### RPC Functions
 
 | Function | Purpose |
 |----------|---------|
-| `get_mission_history(p_user_id, p_client_id)` | Query concluded/rejected redemptions with mission/reward data |
+| `auth_find_user_by_id(p_user_id)` | Bypass RLS to find user by Supabase Auth ID |
+| `get_mission_history(p_user_id, p_client_id)` | Single query for concluded/rejected redemptions with 4 JOINs |
+
+**RPC Query (PostgreSQL):**
+```sql
+SELECT
+  red.id, red.status, red.claimed_at, red.fulfilled_at, red.concluded_at, red.rejected_at,
+  m.id, m.mission_type, m.display_name,
+  r.id, r.type, r.name, r.description, r.value_data, r.reward_source,
+  mp.completed_at,
+  rp.is_winner, rp.participated_at, rp.winner_selected_at
+FROM redemptions red
+INNER JOIN mission_progress mp ON red.mission_progress_id = mp.id
+INNER JOIN missions m ON mp.mission_id = m.id
+INNER JOIN rewards r ON m.reward_id = r.id
+LEFT JOIN raffle_participations rp ON mp.id = rp.mission_progress_id AND rp.user_id = p_user_id
+WHERE red.user_id = p_user_id
+  AND red.client_id = p_client_id
+  AND red.status IN ('concluded', 'rejected')
+  AND red.deleted_at IS NULL
+  AND red.mission_progress_id IS NOT NULL
+ORDER BY COALESCE(red.concluded_at, red.rejected_at) DESC;
+```
+
+### Validation Queries
+
+Run these queries in Supabase SQL Editor to verify data exists for /missions/missionhistory to work.
+
+**Replace placeholders:**
+- `:client_id` → Your CLIENT_ID from .env.local
+- `:user_id` → User's UUID from users table
+
+```sql
+-- 1. Verify user exists and has valid current_tier (for header display)
+SELECT id, tiktok_handle, current_tier, client_id
+FROM users
+WHERE id = ':user_id'
+  AND client_id = ':client_id';
+
+-- 2. Verify user's tier exists (for tier badge in header)
+SELECT tier_id, tier_name, tier_color
+FROM tiers
+WHERE client_id = ':client_id'
+  AND tier_id = (SELECT current_tier FROM users WHERE id = ':user_id');
+
+-- 3. Check concluded redemptions (main history data)
+SELECT red.id, red.status, red.concluded_at, red.rejected_at,
+       m.mission_type, m.display_name,
+       r.type as reward_type, r.name as reward_name
+FROM redemptions red
+JOIN mission_progress mp ON red.mission_progress_id = mp.id
+JOIN missions m ON mp.mission_id = m.id
+JOIN rewards r ON m.reward_id = r.id
+WHERE red.user_id = ':user_id'
+  AND red.client_id = ':client_id'
+  AND red.status IN ('concluded', 'rejected')
+  AND red.deleted_at IS NULL
+ORDER BY COALESCE(red.concluded_at, red.rejected_at) DESC;
+
+-- 4. Check raffle participations for history entries
+SELECT rp.is_winner, rp.participated_at, rp.winner_selected_at,
+       m.display_name, r.name as prize_name
+FROM raffle_participations rp
+JOIN mission_progress mp ON rp.mission_progress_id = mp.id
+JOIN missions m ON mp.mission_id = m.id
+JOIN rewards r ON m.reward_id = r.id
+WHERE rp.user_id = ':user_id'
+  AND rp.client_id = ':client_id';
+
+-- 5. Verify mission_progress links exist (required for JOINs)
+SELECT mp.id, mp.mission_id, mp.status, mp.completed_at,
+       m.display_name
+FROM mission_progress mp
+JOIN missions m ON mp.mission_id = m.id
+WHERE mp.user_id = ':user_id'
+  AND mp.client_id = ':client_id'
+  AND mp.status IN ('completed', 'fulfilled');
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Validation Query |
+|---------|--------------|------------------|
+| 500 error on page load | User's `current_tier` doesn't exist in `tiers` table | Query #2 |
+| Empty history list | No `redemptions` with status 'concluded' or 'rejected' | Query #3 |
+| Missing raffle entries | `raffle_participations` not linked via `mission_progress_id` | Query #4 |
+| Wrong completion date | `mission_progress.completed_at` is NULL | Query #5 |
+| "a prize" instead of prize name | `rewards.value_data.display_text` is NULL and `rewards.description` is NULL | Query #3 (check reward_name) |
+| Raffle shows as concluded instead of rejected | `redemption.status` is 'concluded' not 'rejected' | Query #3 |
+
+### Frontend State
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `mockApiResponse` | Currently mock, will be API | All history data |
+| `currentTierName` | `mockApiResponse.user.currentTierName` | Header tier badge text |
+| `currentTierColor` | `mockApiResponse.user.currentTierColor` | Header tier badge color |
+
+**TODO:** Add after frontend integration:
+- `isLoading` - Show loading skeleton during fetch
+- `error` - Show error state with retry button
 
 ### Key Business Logic
 
-1. **History Statuses:** Only `concluded` and `rejected_raffle` missions appear
-2. **Sorting:** Most recent first (by `concluded_at` or `rejected_at`)
-3. **Raffle Display:** Shows winner status and draw date for raffle missions
+1. **History Statuses:** Only `concluded` and `rejected_raffle` missions appear (derived from `redemptions.status`)
+2. **Status Derivation:** If `redemption.status='rejected'` AND `raffle_participation.is_winner=false` → `rejected_raffle`, else → `concluded`
+3. **Sorting:** Most recent first by `COALESCE(concluded_at, rejected_at) DESC`
+4. **Raffle Display:** Shows `raffleData` object with `isWinner`, `drawDate`, `prizeName` for raffle missions
+5. **Date Formatting:** All dates formatted as "Jan 10, 2025" via `formatDateShort()`
+6. **Prize Name Generation:** Uses `generateRewardName()` with article grammar ("a Hoodie", "an iPhone")
+7. **Mission Display Names:** Uses `MISSION_DISPLAY_NAMES` map for consistent naming (e.g., `sales_dollars` → "Sales Sprint")
 
----
+### Seed Data Requirements
+
+For /missions/missionhistory to show data, users must have completed missions that reached `concluded` or `rejected` status.
+
+#### Dependency Order (Must seed in this order)
+
+```
+1. clients          (no dependencies)
+2. tiers            (depends on: clients)
+3. rewards          (depends on: clients)
+4. users            (depends on: clients, tiers, Supabase Auth)
+5. missions         (depends on: clients, tiers, rewards)
+6. mission_progress (depends on: users, missions) - status='completed' or 'fulfilled'
+7. redemptions      (depends on: mission_progress, rewards) - status='concluded' or 'rejected'
+8. raffle_participations (optional, for raffle history)
+```
+
+#### Minimum Viable Seed Data
+
+| Table | Required Rows | Critical Fields |
+|-------|---------------|-----------------|
+| `users` | 1 test user | `id` (MUST match Supabase Auth UUID), `client_id`, `current_tier` |
+| `tiers` | At least 1 | `tier_id`, `tier_name`, `tier_color` (for header badge) |
+| `missions` | At least 1 concluded | `mission_type`, `display_name`, `reward_id` |
+| `rewards` | At least 1 | `type`, `name`, `value_data` (for display text) |
+| `mission_progress` | 1 per concluded mission | `status='completed'` or `'fulfilled'`, `completed_at` NOT NULL |
+| `redemptions` | 1 per history entry | `status='concluded'` or `'rejected'`, `concluded_at` or `rejected_at` NOT NULL, `mission_progress_id` NOT NULL |
+
+#### Critical Constraints
+
+| Constraint | Requirement | What Breaks If Violated |
+|------------|-------------|-------------------------|
+| **mission_progress_id NOT NULL** | `redemptions.mission_progress_id` must reference valid `mission_progress.id` | RPC returns empty - INNER JOIN fails |
+| **Status IN ('concluded', 'rejected')** | Only these statuses appear in history | Nothing shows if all redemptions are 'claimed' or 'claimable' |
+| **deleted_at IS NULL** | Soft-deleted redemptions excluded | Deleted items would incorrectly appear |
+| **Tier exists** | `users.current_tier` must exist in `tiers.tier_id` | 500 error on dashboard lookup |
+
+#### Common Seed Script Pitfalls
+
+| Pitfall | Symptom | Prevention |
+|---------|---------|------------|
+| Missing `mission_progress_id` on redemption | Empty history despite redemptions existing | Always create mission_progress before redemptions |
+| Redemption status='claimed' not 'concluded' | Mission completed but not in history | Set status='concluded' and `concluded_at` timestamp |
+| Raffle without `mission_progress_id` link | Raffle history missing | Link via `raffle_participations.mission_progress_id` |
+| Missing `concluded_at` timestamp | Sorting fails, may show at bottom | Always set timestamp when setting status='concluded' |
+
+### Current Implementation Status
+
+**Backend:** ✅ Complete (API route, service, repository, RPC all implemented)
+
+**Frontend:** ✅ Complete (ENH-005 - Server Component + Client Component pattern)
+
+**Files:**
+- `page.tsx` - Server Component (fetches `/api/missions/history`, handles 401 redirect)
+- `missionhistory-client.tsx` - Client Component (receives `initialData` prop, renders UI)
 
 ---
 

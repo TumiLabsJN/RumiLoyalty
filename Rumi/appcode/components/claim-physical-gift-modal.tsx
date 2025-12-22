@@ -93,7 +93,7 @@ export function ClaimPhysicalGiftModal({
         const data = await response.json()
         if (data.success) {
           toast.success("Reward claimed successfully!", {
-            description: "We'll ship your gift soon. Check your email for tracking info.",
+            description: "We'll ship your gift soon. Check missions tab for updates.",
             duration: 5000,
           })
           handleOpenChange(false)

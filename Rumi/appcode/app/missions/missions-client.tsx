@@ -25,7 +25,6 @@ import { toast } from "sonner"
 import { claimMissionReward } from '@/lib/client/claimMissionReward'
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import * as React from "react"
 import {
@@ -47,9 +46,6 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   // ============================================
   // STATE MANAGEMENT
   // ============================================
-  // Router for page refresh after claim
-  const router = useRouter()
-
   // Initialize from server-provided data (no loading state needed)
   const [missionsData, setMissionsData] = useState<MissionsPageResponse | null>(initialData)
   const [error, setError] = useState<string | null>(initialError)
@@ -176,7 +172,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
       })
 
       // Refresh page to update mission status (2 second delay for toast visibility)
-      setTimeout(() => router.refresh(), 2000)
+      setTimeout(() => window.location.reload(), 2000)
 
       // Reset selected mission
       setSelectedMission(null)
@@ -234,7 +230,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
       })
 
       // Refresh page to update mission status (2 second delay for toast visibility)
-      setTimeout(() => router.refresh(), 2000)
+      setTimeout(() => window.location.reload(), 2000)
 
       // Reset selected mission
       setSelectedMission(null)
@@ -254,9 +250,8 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   }
 
   const handlePhysicalGiftSuccess = () => {
-    console.log("[v0] Physical gift claimed successfully")
-    // TODO: Refresh missions data from API
-    // For now, the modal handles success toast
+    // Refresh page to update mission status (2 second delay for toast visibility)
+    setTimeout(() => window.location.reload(), 2000)
   }
 
   // Map backend mission types to frontend icons

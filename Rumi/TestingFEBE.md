@@ -50,56 +50,63 @@ Need to test this. Ask LLM if reward claiming process will be same from Missions
 Raffle ✅ | Sales ⚠️✅ | Views ⚠️✅ | Likes ⚠️✅
 
 #### Reward Claims
+By Mission Type (easier recording)
 
-#### Physical Gift
-With Physical Gift ⚠️✅
-With Physical Gift, requires size ⚠️✅
+##### Raffle
+**Scheduled**
+Commission Boost ✅
+Discount ✅
 
-#### Commission Boost
+**Instant**
+Gift Card
+Physical Gift (Size)
+Physical Gift (No Size)
+Experience
 
-##### Mission Types
-Raffle ✅
-Views ❌
-Video ✅
-Likes ❌
-Sales ❌
+##### Views
+**Scheduled**
+Commission Boost 
+Discount
 
-#### Discount
+**Instant**
+Gift Card
+Physical Gift (Size)
+Physical Gift (No Size)
+Experience
 
-##### Mission Types
-Raffle ❌
-Views ❌
-Video ❌
-Likes ❌
-Sales ❌
+##### Videos
+**Scheduled**
+Commission Boost ✅
+Discount ✅
 
-#### Gift Card
+**Instant**
+Gift Card ✅
+Physical Gift (Size) ✅
+Physical Gift (No Size) ✅
+Experience ✅
 
-##### Mission Types
-Raffle ❌
-Views ❌
-Video ❌
-Likes ❌
-Sales ❌
 
-#### Physical Gift
+##### Likes
+**Scheduled**
+Commission Boost ✅
+Discount ✅
 
-##### Mission Types
-Raffle ❌
-Views ❌
-Video ❌
-Likes ❌
-Sales ❌
+**Instant**
+Gift Card ✅
+Physical Gift (Size)✅
+Physical Gift (No Size) ✅
+Experience ✅
 
-#### Experience
+##### Sales
+**Scheduled**
+Commission Boost ✅
+Discount ✅
 
-##### Mission Types
-Raffle ❌
-Views ❌
-Video ❌
-Likes ❌
-Sales ❌
-
+**Instant**
+Gift Card ✅
+Physical Gift (Size) ✅
+Physical Gift (No Size) ✅
+Experience ✅
 
 #### Extra info
 1. What is it like in code: the priority of which mission appears
@@ -113,41 +120,98 @@ Validated with LLM that redemption flow is determined by reward type. So if one 
 
 After claiming, page not getting refreshed
 
+## OPTION 1: Validate via Mission
+
+## OPTION 2: Validate via Reward
+To reset each reward there is a sequence of supabase queries you need to do. Some are complicated (Commission_boost, discount, raffle)
+
+Instead of doing the tests one mission at a time and spreading out the use of queries, its best for LLM context as well to concentrate them 
+Do one Reward with ALL mission types , then continue
+
 ## Mission Validation
-### Raffle
+### Raffle Mission
 #### Mission Flow
-##### STAGE 0: CARD STATE: In progress
-✅
 
-##### STAGE 1: CARD STATE: Default Claim
-✅
+##### Step 1a UI = CARD STATE: Dormant
+Description: Raffle dormant, not accepting entries. 
 
-##### STAGE 2: CARD STATE: Redeeming Physical
-✅
+missions	mission_progress
+activated=false	status='dormant'
 
-##### STAGE 3: CARD STATE: Sending
-✅
 
-##### STAGE 4: Sent, passed to mission history
-❌
+##### Step 1b UI = CARD STATE: Raffle Available
+**Description**: Admin Activates Raffle
+
+missions	mission_progress
+activated=true	status='active'
+
+
+##### STAGE 2: CARD STATE: Raffle Processing
+**Description**: User participates
+
+mission_progress	redemptions	"raffle_participations
+ss"
+"status='completed'
+completed_at"	"ROW CREATED
+'status = 'claimable'
+mission_progress_id set"	"ROW CREATED
+'is_winner=NULL
+participated_at set"
+
+
+##### STAGE 3: CARD STATE: Winner
+**Description**: Winner
+
+mission_progress	redemptions	"raffle_participations
+ss"
+status='completed'	"status='claimable'
+claimed_at set"	is_winner=TRUE
+
+
+##### STAGE 4: CARD STATE: Loser
+**Description**: Loser 
+
+mission_progress	redemptions	"raffle_participations
+ss"
+status='completed'	"status='rejected'
+rejection_reason"	"is_winner=FALSE
+winner_selected_at set
+selected_by set"
+
+**Passed to mission history**
+
 
 #### Reward Flow
 ##### Commission Boost
-UI failed. After claiming ⚠️✅
 
-UI Failed. Card stuck in "Prize on the way" not scheduled. ⚠️✅
-###### STAGE 1: Default Schedule ✅
-From Home ✅
-From Mission page ✅
+###### STAGE 1: Default Schedule 
+**Description**: Schedulable
 
-###### STAGE 2: Stage 2 Scheduled ✅
+redemptions	commission_boost_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+
+###### STAGE 2: Stage 2 Scheduled 
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
 From Home ✅
 From Mission ✅
 - After claiming, page does not auto refresh ❌
 
 ###### "Stage 3 Active" ⚠️
-From home ❌
-- Flipped side of card has bad info
+**Description**: CB Active
 
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days
@@ -155,7 +219,11 @@ Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reac
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+
+
 ###### "Stage 4 Pending Payment Info" ⚠️
+**Description**: Pending payment info
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days elapsed
 Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
@@ -163,10 +231,13 @@ sales_at_expiration set (GMV at DX)
 sales_delta calculated
 final_payout_amount calculated"
 
-boost_status='pending_info'
-- QUESTION: is boost_status='pending_info' or boost_status='expired'
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
 
 ###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
 rewards	redemptions	commission_boost_redemption
 -	status='fulfilled'	"boost_status='pending_payout'
 payment_account set
@@ -176,26 +247,197 @@ payment_info_collected_at set"
 
 
 ###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
 rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
 ##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
 
 ##### Discount
 
+###### "Stage 1 Default Schedule"
+**Description** User hits target
+
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
+
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
 ##### Physical Gift - no requires_size
 
-##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
 
-##### Spark Ads
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
 
 ##### Experience
+**Description**: User completes mission (hits target)
 
-#### Winner / Looser
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
 
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
 
-### Sales
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+### Sales Mission
 #### Mission Flows
 ##### Step 1b UI = CARD STATE: In Progress
 missions	mission_progress
@@ -213,34 +455,48 @@ completed_at set"	"ROW CREATED
 mission_progress_id set"
 
 #### Reward Flow
+##### Commission Boost
 
-##### Commission boost
-###### "Stage 1 Default Schedule" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "ROW CREATED
+###### STAGE 1: Default Schedule 
+**Description**: Schedulable
+
+redemptions	commission_boost_redemption
+"ROW CREATED
 'status='claimable'
 mission_progress_id set
 redemption_type='scheduled'"	-
 
 
-###### "Stage 2 Scheduled" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "status='claimed'
+
+###### STAGE 2: Stage 2 Scheduled 
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
 claimed_at set
 scheduled_activation_date set
 scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
 boost_status='scheduled'
 scheduled_activation_date set"
 
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh ❌
 
 ###### "Stage 3 Active" ⚠️
+**Description**: CB Active
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days
 Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+
+
 ###### "Stage 4 Pending Payment Info" ⚠️
+**Description**: Pending payment info
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days elapsed
 Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
@@ -248,10 +504,13 @@ sales_at_expiration set (GMV at DX)
 sales_delta calculated
 final_payout_amount calculated"
 
-boost_status='pending_info'
-- QUESTION: is boost_status='pending_info' or boost_status='expired'
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
 
 ###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
 rewards	redemptions	commission_boost_redemption
 -	status='fulfilled'	"boost_status='pending_payout'
 payment_account set
@@ -261,19 +520,196 @@ payment_info_collected_at set"
 
 
 ###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
 rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
+##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
 ##### Discount
 
-##### Gift Card
+###### "Stage 1 Default Schedule"
+**Description** User hits target
 
-##### Physical Gift
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
 
-##### Spark Ads
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+##### Physical Gift - no requires_size
+
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
 
 ##### Experience
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
 
 ### Videos
 
@@ -294,37 +730,49 @@ completed_at set"	"ROW CREATED
 mission_progress_id set"
 
 
-##### Step 3: Reward in Progress (Varies by Reward Type of mission)
-
-
 #### Reward Flows
 ##### Commission Boost
-###### "Stage 1 Default Schedule" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "ROW CREATED
+
+###### STAGE 1: Default Schedule 
+**Description**: Schedulable
+
+redemptions	commission_boost_redemption
+"ROW CREATED
 'status='claimable'
 mission_progress_id set
 redemption_type='scheduled'"	-
 
 
-###### "Stage 2 Scheduled" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "status='claimed'
+
+###### STAGE 2: Stage 2 Scheduled ❌ Not autoreloading
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
 claimed_at set
 scheduled_activation_date set
 scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
 boost_status='scheduled'
 scheduled_activation_date set"
 
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh ❌
 
 ###### "Stage 3 Active" ⚠️
+**Description**: CB Active
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days
 Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+
+
 ###### "Stage 4 Pending Payment Info" ⚠️
+**Description**: Pending payment info
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days elapsed
 Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
@@ -332,10 +780,13 @@ sales_at_expiration set (GMV at DX)
 sales_delta calculated
 final_payout_amount calculated"
 
-boost_status='pending_info'
-- QUESTION: is boost_status='pending_info' or boost_status='expired'
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
 
 ###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
 rewards	redemptions	commission_boost_redemption
 -	status='fulfilled'	"boost_status='pending_payout'
 payment_account set
@@ -345,19 +796,195 @@ payment_info_collected_at set"
 
 
 ###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
 rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
+##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
 ##### Discount
 
-##### Gift Card
+###### "Stage 1 Default Schedule"
+**Description** User hits target
 
-##### Physical Gift
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
 
-##### Spark Ads
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+##### Physical Gift - no requires_size
+
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
 
 ##### Experience
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
 
 
 ### Views
@@ -379,33 +1006,48 @@ mission_progress_id set"
 
 #### Reward Flow
 
-##### Commission boost
-###### "Stage 1 Default Schedule" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "ROW CREATED
+##### Commission Boost
+
+###### STAGE 1: Default Schedule 
+**Description**: Schedulable
+
+redemptions	commission_boost_redemption
+"ROW CREATED
 'status='claimable'
 mission_progress_id set
 redemption_type='scheduled'"	-
 
 
-###### "Stage 2 Scheduled" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "status='claimed'
+
+###### STAGE 2: Stage 2 Scheduled 
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
 claimed_at set
 scheduled_activation_date set
 scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
 boost_status='scheduled'
 scheduled_activation_date set"
 
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh ❌
 
 ###### "Stage 3 Active" ⚠️
+**Description**: CB Active
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days
 Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+
+
 ###### "Stage 4 Pending Payment Info" ⚠️
+**Description**: Pending payment info
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days elapsed
 Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
@@ -413,10 +1055,13 @@ sales_at_expiration set (GMV at DX)
 sales_delta calculated
 final_payout_amount calculated"
 
-boost_status='pending_info'
-- QUESTION: is boost_status='pending_info' or boost_status='expired'
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
 
 ###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
 rewards	redemptions	commission_boost_redemption
 -	status='fulfilled'	"boost_status='pending_payout'
 payment_account set
@@ -426,19 +1071,196 @@ payment_info_collected_at set"
 
 
 ###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
 rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
+##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
 ##### Discount
 
-##### Gift Card
+###### "Stage 1 Default Schedule"
+**Description** User hits target
 
-##### Physical Gift
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
 
-##### Spark Ads
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+##### Physical Gift - no requires_size
+
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
 
 ##### Experience
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
 
 
 ### Likes
@@ -460,33 +1282,48 @@ mission_progress_id set"
 
 #### Reward Flow
 
-##### Commission boost
-###### "Stage 1 Default Schedule" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "ROW CREATED
+##### Commission Boost
+
+###### STAGE 1: Default Schedule 
+**Description**: Schedulable
+
+redemptions	commission_boost_redemption
+"ROW CREATED
 'status='claimable'
 mission_progress_id set
 redemption_type='scheduled'"	-
 
 
-###### "Stage 2 Scheduled" ⚠️
-rewards	redemptions	commission_boost_redemption
-    "status='claimed'
+
+###### STAGE 2: Stage 2 Scheduled 
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
 claimed_at set
 scheduled_activation_date set
 scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
 boost_status='scheduled'
 scheduled_activation_date set"
 
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh ❌
 
 ###### "Stage 3 Active" ⚠️
+**Description**: CB Active
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days
 Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+
+
 ###### "Stage 4 Pending Payment Info" ⚠️
+**Description**: Pending payment info
+
 rewards	redemptions	commission_boost_redemption
 "value_data.duration_days elapsed
 Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
@@ -494,10 +1331,13 @@ sales_at_expiration set (GMV at DX)
 sales_delta calculated
 final_payout_amount calculated"
 
-boost_status='pending_info'
-- QUESTION: is boost_status='pending_info' or boost_status='expired'
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
 
 ###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
 rewards	redemptions	commission_boost_redemption
 -	status='fulfilled'	"boost_status='pending_payout'
 payment_account set
@@ -507,21 +1347,205 @@ payment_info_collected_at set"
 
 
 ###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
 rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
+##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
 ##### Discount
 
-##### Gift Card
+###### "Stage 1 Default Schedule"
+**Description** User hits target
 
-##### Physical Gift
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
 
-##### Spark Ads
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+##### Physical Gift - no requires_size
+
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
 
 ##### Experience
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+
+
+
+
 
 ## Completed Mission history
+
 
 ## Reward UI elements
 ### Locked Missions
@@ -530,13 +1554,12 @@ Gold sign visible ⚠️✅
 Platinum sign ❌
 
 ## Hidden Missions
-
-
+See if unavailable
 
 ## Sequential Missions
 If available once a week, check UI when its used
 
-
+## 
 
 
 
@@ -582,3 +1605,16 @@ WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff';
   );
 
   
+# FUTURE - ADMIN
+## 1 Physical Gift
+displayText = Physical gift text for MISSIONS (27 chars)
+description = Physical gift text for HOME (12 Chars)
+
+## 2 Raffle
+### Discount
+Home: Admin generates Raffle name and stores it = rewards.name
+- Generated at creationg using value_data.percent inputted into a hardcoded name
+**Template: "${percent}% Deal Boost"**
+
+Mission: Admin uses value_data.percent inputted into a hardcoded name
+**"Win a Follower Discount of ${percent}% for ${days} days!"**

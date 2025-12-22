@@ -69,7 +69,7 @@ Completion Rate = min(1.0, (Avg Sales × 12 / Target) × Variance Multiplier × 
 ```
 
 Where:
-- `One-Time Factor = 0.8` (not everyone attempts the mission)
+- `One-Time Factor = 0.25` (only ~1 in 4 affiliates actively pursue one-time missions for modest rewards)
 
 ### Why This Works
 
@@ -77,7 +77,7 @@ Where:
 
 2. **Variance adjustment**: In optimistic scenarios, affiliates have good months where they exceed their average, increasing completion rates
 
-3. **One-time adjustment**: One-time missions span 12 months, but not all affiliates actively pursue them (0.8 factor)
+3. **One-time adjustment**: One-time missions span 12 months, but only ~1 in 4 affiliates actively pursue them for modest rewards (0.25 factor)
 
 ---
 
@@ -85,11 +85,11 @@ Where:
 
 **Inputs:**
 - Variance Multiplier: 1.0
-- One-Time Factor: 0.8
+- One-Time Factor: 0.25
 
 | Tier     | Avg Sales | Target | Freq    | Calculation                        | Rate  |
 |----------|-----------|--------|---------|-----------------------------------|-------|
-| Bronze   | 0.5       | 10     | One-time| min(1, (0.5×12/10) × 1.0 × 0.8)   | 48%   |
+| Bronze   | 0.5       | 10     | One-time| min(1, (0.5×12/10) × 1.0 × 0.25)  | 15%   |
 | Silver   | 3.8       | 15     | Monthly | min(1, (3.8/15) × 1.0)            | 25%   |
 | Gold     | 9.8       | 40     | Monthly | min(1, (9.8/40) × 1.0)            | 25%   |
 | Platinum | 21.4      | 100    | Monthly | min(1, (21.4/100) × 1.0)          | 21%   |
@@ -99,7 +99,7 @@ Where:
 ## Python Code
 
 ```python
-def calculate_mission_completion(avg_sales_per_tier, missions, variance_multiplier, one_time_factor=0.8):
+def calculate_mission_completion(avg_sales_per_tier, missions, variance_multiplier, one_time_factor=0.25):
     """
     Calculate mission completion rates.
 
@@ -165,7 +165,7 @@ for tier, rate in rates.items():
 
 | Tier     | Completion Rate |
 |----------|-----------------|
-| Bronze   | 38%             |
+| Bronze   | 12%             |
 | Silver   | 20%             |
 | Gold     | 20%             |
 | Platinum | 17%             |
@@ -174,7 +174,7 @@ for tier, rate in rates.items():
 
 | Tier     | Completion Rate |
 |----------|-----------------|
-| Bronze   | 48%             |
+| Bronze   | 15%             |
 | Silver   | 25%             |
 | Gold     | 25%             |
 | Platinum | 21%             |
@@ -183,7 +183,7 @@ for tier, rate in rates.items():
 
 | Tier     | Completion Rate |
 |----------|-----------------|
-| Bronze   | 58%             |
+| Bronze   | 18%             |
 | Silver   | 30%             |
 | Gold     | 29%             |
 | Platinum | 26%             |
@@ -207,8 +207,8 @@ The LLM calculates **one mission completion rate at a time** and outputs it to t
 After calculation, verify:
 
 - [ ] All completion rates are between 0% and 100%
-- [ ] Bronze (one-time) has highest rate (12-month window)
-- [ ] Platinum has lowest rate (highest target)
+- [ ] Bronze (one-time) rate reflects low pursuit factor (0.25)
+- [ ] Platinum has lowest rate among monthly missions (highest target)
 - [ ] Conservative < Base < Optimistic for each tier
 - [ ] Rates are plausible (not 0%, not 100% for monthly)
 
