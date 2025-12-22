@@ -23,11 +23,16 @@ import type { MissionsPageResponse } from '@/types/missions'
  * - app/home/page.tsx (pattern source)
  */
 export default async function MissionsPage() {
+  const PAGE_START = Date.now();
+  console.log(`[TIMING][MissionsPage] START`);
+
   // Get auth cookie for API call (explicit construction for reliability)
+  const t0 = Date.now();
   const cookieStore = await cookies()
   const cookieHeader = cookieStore.getAll()
     .map(c => `${c.name}=${c.value}`)
     .join('; ')
+  console.log(`[TIMING][MissionsPage] cookies(): ${Date.now() - t0}ms`);
 
   // Fetch data server-side
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
@@ -36,10 +41,12 @@ export default async function MissionsPage() {
   }
   const fetchUrl = baseUrl || 'http://localhost:3000'
 
+  const t1 = Date.now();
   const response = await fetch(`${fetchUrl}/api/missions`, {
     headers: { Cookie: cookieHeader },
     cache: 'no-store', // CRITICAL: Dynamic user data must not be cached
   })
+  console.log(`[TIMING][MissionsPage] fetch(/api/missions): ${Date.now() - t1}ms`);
 
   // Handle auth error - redirect server-side
   if (response.status === 401) {
@@ -51,7 +58,11 @@ export default async function MissionsPage() {
     return <MissionsClient initialData={null} error="Failed to load missions" />
   }
 
+  const t2 = Date.now();
   const data: MissionsPageResponse = await response.json()
+  console.log(`[TIMING][MissionsPage] response.json(): ${Date.now() - t2}ms`);
+
+  console.log(`[TIMING][MissionsPage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   // Pass data to client component
   return <MissionsClient initialData={data} error={null} />
