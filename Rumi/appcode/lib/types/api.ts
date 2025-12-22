@@ -291,26 +291,9 @@ export interface DashboardResponse {
 // SECTION 4: Missions Endpoints
 // =============================================================================
 
-/**
- * Mission status (comprehensive)
- */
-export type MissionStatus =
-  | 'in_progress'
-  | 'default_claim'
-  | 'default_schedule'
-  | 'scheduled'
-  | 'active'
-  | 'redeeming'
-  | 'redeeming_physical'
-  | 'sending'
-  | 'pending_info'
-  | 'clearing'
-  | 'dormant'
-  | 'raffle_available'
-  | 'raffle_processing'
-  | 'raffle_claim'
-  | 'raffle_won'
-  | 'locked';
+// MissionStatus is now defined in lib/types/missions.ts (single source of truth)
+// Re-export here for backwards compatibility
+export type { MissionStatus } from './missions';
 
 /**
  * Mission progress data
@@ -397,34 +380,13 @@ export interface FlippableCard {
   }> | null;
 }
 
-/**
- * Full mission item
- */
-export interface Mission {
-  id: string;
-  missionType: MissionType;
-  displayName: string;
-  targetUnit: TargetUnit;
-  tierEligibility: MissionTierEligibility;
-  rewardType: RewardType;
-  rewardDescription: string;
-  rewardSource: 'vip_tier' | 'mission';
-  status: MissionStatus;
-  progress: MissionProgress | null;
-  deadline: MissionDeadline | null;
-  valueData: RewardValueData | null;
-  scheduling: MissionScheduling | null;
-  raffleData: RaffleData | null;
-  lockedData: LockedData | null;
-  flippableCard: FlippableCard | null;
-}
-
-// GET /api/missions
-export interface MissionsPageResponse {
-  user: UserInfo;
-  featuredMissionId: string;
-  missions: Mission[];
-}
+// =============================================================================
+// Mission Types - Re-exported from canonical source
+// =============================================================================
+// The canonical Mission and MissionsPageResponse types are defined in
+// lib/types/missions.ts. Re-export here for backwards compatibility.
+// Note: MissionStatus, MissionProgress, etc. are defined locally above.
+export type { Mission, MissionsPageResponse } from './missions';
 
 // POST /api/missions/:id/claim
 export interface ClaimMissionRequest {

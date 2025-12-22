@@ -1,69 +1,77 @@
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server-client'
+import { dashboardRepository } from '@/lib/repositories/dashboardRepository'
+import { listAvailableMissions } from '@/lib/services/missionService'
 import { MissionsClient } from './missions-client'
-import type { MissionsPageResponse } from '@/types/missions'
 
 /**
  * Missions Page (Server Component)
  *
- * Fetches missions data server-side for faster page load.
- * Data is passed to MissionsClient for interactive rendering.
+ * DIRECT SERVICE PATTERN (ENH-007):
+ * Calls services directly instead of fetching from /api/missions.
+ * This eliminates ~550ms of redundant middleware/auth overhead.
  *
- * MAINTAINER NOTES:
- * 1. This follows the same pattern as app/home/page.tsx
- * 2. Cookie forwarding is CRITICAL for auth to work
- * 3. cache: 'no-store' prevents stale data caching
- * 4. Must use full URL (not relative) for server-side fetch
- * 5. CRITICAL: /api/missions MUST remain in middleware.ts matcher (line 224)
- *    for token refresh to work. Server-side fetch passes cookies but middleware
- *    handles refresh. Removing from matcher will cause 401 errors.
+ * The API route (/api/missions) is KEPT for client-side refresh/mutations.
+ *
+ * Auth Flow:
+ * 1. Middleware runs setSession() for /missions page route
+ * 2. Server Component calls getUser() once (not redundant - we need user ID)
+ * 3. Service calls reuse existing repository methods and RPCs
  *
  * References:
- * - MissionsServerFetchEnhancement.md (ENH-004)
- * - app/home/page.tsx (pattern source)
+ * - MissionsPageDirectServiceEnhancement.md (ENH-007)
+ * - app/api/missions/route.ts (logic source)
  */
 export default async function MissionsPage() {
-  const PAGE_START = Date.now();
-  console.log(`[TIMING][MissionsPage] START`);
+  // 1. Get authenticated user
+  // NOTE: Middleware already ran setSession(), this just retrieves the user
+  const supabase = await createClient();
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
-  // Get auth cookie for API call (explicit construction for reliability)
-  const t0 = Date.now();
-  const cookieStore = await cookies()
-  const cookieHeader = cookieStore.getAll()
-    .map(c => `${c.name}=${c.value}`)
-    .join('; ')
-  console.log(`[TIMING][MissionsPage] cookies(): ${Date.now() - t0}ms`);
-
-  // Fetch data server-side
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (!baseUrl && process.env.NODE_ENV === 'production') {
-    throw new Error('NEXT_PUBLIC_SITE_URL must be set in production')
-  }
-  const fetchUrl = baseUrl || 'http://localhost:3000'
-
-  const t1 = Date.now();
-  const response = await fetch(`${fetchUrl}/api/missions`, {
-    headers: { Cookie: cookieHeader },
-    cache: 'no-store', // CRITICAL: Dynamic user data must not be cached
-  })
-  console.log(`[TIMING][MissionsPage] fetch(/api/missions): ${Date.now() - t1}ms`);
-
-  // Handle auth error - redirect server-side
-  if (response.status === 401) {
-    redirect('/login/start')
+  if (authError || !authUser) {
+    redirect('/login/start');
   }
 
-  // Handle other errors - pass to client for error UI
-  if (!response.ok) {
-    return <MissionsClient initialData={null} error="Failed to load missions" />
+  // 2. Get client ID from environment (same as API route)
+  const clientId = process.env.CLIENT_ID;
+  if (!clientId) {
+    console.error('[MissionsPage] CLIENT_ID not configured');
+    return <MissionsClient initialData={null} error="Server configuration error" />;
   }
 
-  const t2 = Date.now();
-  const data: MissionsPageResponse = await response.json()
-  console.log(`[TIMING][MissionsPage] response.json(): ${Date.now() - t2}ms`);
+  // 3. Get dashboard data - REUSES existing repository method
+  const dashboardData = await dashboardRepository.getUserDashboard(
+    authUser.id,
+    clientId,
+    { includeAllTiers: true }
+  );
 
-  console.log(`[TIMING][MissionsPage] TOTAL: ${Date.now() - PAGE_START}ms`);
+  if (!dashboardData) {
+    return <MissionsClient initialData={null} error="Failed to load user data" />;
+  }
 
-  // Pass data to client component
-  return <MissionsClient initialData={data} error={null} />
+  // 4. Build tier lookup - same logic as API route
+  const tierLookup = new Map<string, { name: string; color: string }>();
+  if (dashboardData.allTiers) {
+    for (const tier of dashboardData.allTiers) {
+      tierLookup.set(tier.id, { name: tier.name, color: tier.color });
+    }
+  }
+
+  // 5. Get missions - REUSES existing service function (which uses existing RPC)
+  const missionsResponse = await listAvailableMissions(
+    authUser.id,
+    clientId,
+    {
+      handle: dashboardData.user.handle ?? '',
+      currentTier: dashboardData.currentTier.id,
+      currentTierName: dashboardData.currentTier.name,
+      currentTierColor: dashboardData.currentTier.color,
+    },
+    dashboardData.client.vipMetric as 'sales' | 'units',
+    tierLookup
+  );
+
+  // 6. Return client component with data
+  return <MissionsClient initialData={missionsResponse} error={null} />;
 }

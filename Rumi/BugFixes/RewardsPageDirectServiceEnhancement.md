@@ -10,6 +10,19 @@
 
 ---
 
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2025-12-22 | Initial draft |
+| 1.1 | 2025-12-22 | **Audit feedback:** Added type import `@/types/rewards`, added Auth/Error Parity Table |
+| 1.2 | 2025-12-22 | **Audit feedback:** Added path prefix note, clarified doc update checklist |
+| 1.3 | 2025-12-22 | **Audit feedback:** Added Section 6.0 Type Consolidation Prerequisite, expanded Files to Create/Modify |
+
+**Note:** All file paths in this document are relative to `appcode/` (the Next.js project root). For example, `app/rewards/page.tsx` refers to `appcode/app/rewards/page.tsx`.
+
+---
+
 ## 1. Project Context
 
 Rumi is a loyalty platform for TikTok Shop creators built with Next.js 14, TypeScript, and Supabase (PostgreSQL). The application uses a layered architecture: Server Components → Services → Repositories → Supabase RPC. Authentication uses Supabase Auth with custom cookie handling via middleware.
@@ -168,6 +181,46 @@ page.tsx (Server Component)
 
 ## 6. Proposed Solution - SPECIFICATION FOR NEW CODE
 
+### 6.0 Type Consolidation Prerequisite (CRITICAL)
+
+**Problem:** 3 duplicate `RewardsPageResponse` definitions exist:
+
+| File | Type Style | Layer |
+|------|------------|-------|
+| `app/types/rewards.ts` | Strict (literal unions) | Client |
+| `lib/services/rewardService.ts` | Broad (`string`) | Service |
+| `lib/types/api.ts` | Unknown | Shared |
+
+**Why this matters:**
+- Server Component will import `RewardsPageResponse` from `@/types/rewards` (strict)
+- `rewardService.listAvailableRewards()` returns its own `RewardsPageResponse` (broad)
+- Type mismatch → TypeScript error or requires unsafe cast
+
+**Solution: Shared Types Directory (Option C)**
+
+| File | Action | Description |
+|------|--------|-------------|
+| `lib/types/rewards.ts` | CREATE | Single source of truth for all reward types |
+| `lib/services/rewardService.ts` | MODIFY | Import from `@/lib/types/rewards`, delete local interfaces |
+| `app/types/rewards.ts` | MODIFY | Re-export from `@/lib/types/rewards` |
+| `lib/types/api.ts` | MODIFY | Remove duplicate `RewardsPageResponse` |
+
+**Verification after consolidation:**
+```bash
+# Must show only 1 definition
+grep -rn "interface RewardsPageResponse" appcode/
+
+# All imports must resolve
+grep -rn "RewardsPageResponse" appcode/ | grep -v node_modules
+
+# Full type check must pass
+npx tsc --noEmit
+```
+
+**Must complete before proceeding to main implementation.**
+
+---
+
 ### Approach
 
 **Direct Service Call:** Server Component calls existing service functions directly (no fetch, no API route for initial load). This follows ENH-007 pattern.
@@ -180,11 +233,35 @@ page.tsx (Server Component)
 
 ### Files to Create/Modify
 
+**Prerequisite (Type Consolidation):**
+
+| File | Action | Description |
+|------|--------|-------------|
+| `lib/types/rewards.ts` | CREATE | Shared type definitions (single source of truth) |
+| `lib/services/rewardService.ts` | MODIFY | Import from shared types, delete local interfaces |
+| `app/types/rewards.ts` | MODIFY | Re-export from shared types |
+| `lib/types/api.ts` | MODIFY | Remove duplicate RewardsPageResponse |
+
+**Main Implementation:**
+
 | File | Action | Description |
 |------|--------|-------------|
 | `app/rewards/page.tsx` | RENAME → `rewards-client.tsx` | Preserve git history with `git mv` |
 | `app/rewards/rewards-client.tsx` | MODIFY | Add props interface, remove mockData, named export |
 | `app/rewards/page.tsx` | CREATE | New Server Component with direct service calls |
+
+### Auth/Error Parity Table
+
+**IMPORTANT:** The Server Component must mirror the API route's auth/error semantics exactly.
+
+| Scenario | API Route (`route.ts`) | Server Component (`page.tsx`) | Parity |
+|----------|------------------------|-------------------------------|--------|
+| No authUser or authError | 401 UNAUTHORIZED | `redirect('/login/start')` | ✅ |
+| No CLIENT_ID env var | 500 INTERNAL_ERROR | `<RewardsClient error="Server configuration error" />` | ✅ |
+| User not found in DB | 401 UNAUTHORIZED | `redirect('/login/start')` | ✅ |
+| User clientId mismatch | 403 FORBIDDEN | `<RewardsClient error="Access denied" />` | ✅ |
+| No dashboardData | 500 USER_DATA_ERROR | `<RewardsClient error="Failed to load user data" />` | ✅ |
+| Success | 200 + RewardsPageResponse | `<RewardsClient initialData={response} />` | ✅ |
 
 ### New Server Component
 
@@ -199,6 +276,7 @@ import { userRepository } from '@/lib/repositories/userRepository'
 import { dashboardRepository } from '@/lib/repositories/dashboardRepository'
 import { rewardService } from '@/lib/services/rewardService'
 import { RewardsClient } from './rewards-client'
+import type { RewardsPageResponse } from '@/types/rewards'  // Same source as rewards-client.tsx
 
 /**
  * Rewards Page (Server Component)
@@ -557,8 +635,9 @@ No explicit parity test needed because:
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.3
 **Last Updated:** 2025-12-22
+**Revision:** Audit feedback incorporated (type alignment, auth/error parity table, path prefix note, type consolidation prerequisite)
 **Author:** Claude Code
 **Status:** Analysis Complete - Ready for Implementation
 
@@ -577,3 +656,8 @@ No explicit parity test needed because:
 - [x] Source Documents Analyzed thoroughly enriched (13 documents)
 - [x] Tech stack respected (Supabase)
 - [x] External auditor could implement from this document alone
+- [x] **Audit v1.1:** Type import aligned with client component (`@/types/rewards`)
+- [x] **Audit v1.1:** Auth/error parity table added (Section 6)
+- [x] **Audit v1.2:** Path prefix note added (paths relative to `appcode/`)
+- [x] **Audit v1.3:** Type Consolidation Prerequisite added (Section 6.0)
+- [x] **Audit v1.3:** Files to Create/Modify expanded with prerequisite files

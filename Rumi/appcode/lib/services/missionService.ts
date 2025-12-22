@@ -20,6 +20,14 @@ import type {
   ClaimRequestData,
   ClaimResult,
 } from '@/lib/repositories/missionRepository';
+import type {
+  MissionStatus,
+  MissionsPageResponse,
+  MissionItem,
+  MissionType,
+  RewardType,
+} from '@/lib/types/missions';
+import { isMissionType, isRewardType } from '@/lib/types/enums';
 
 // ============================================
 // Constants (per API_CONTRACTS.md)
@@ -86,114 +94,11 @@ const MISSION_TYPE_PRIORITY: Record<string, number> = {
 };
 
 // ============================================
-// Response Types (per API_CONTRACTS.md)
+// Response Types - imported from @/lib/types/missions
 // ============================================
-
-/**
- * Mission status type
- * Per API_CONTRACTS.md lines 2996-3001
- */
-export type MissionStatus =
-  | 'in_progress'
-  | 'default_claim'
-  | 'default_schedule'
-  | 'scheduled'
-  | 'active'
-  | 'redeeming'
-  | 'redeeming_physical'
-  | 'sending'
-  | 'pending_info'
-  | 'clearing'
-  | 'dormant'
-  | 'raffle_available'
-  | 'raffle_processing'
-  | 'raffle_claim'
-  | 'raffle_won'
-  | 'locked';
-
-/**
- * Main missions page response
- * Per API_CONTRACTS.md lines 2968-3072
- */
-export interface MissionsPageResponse {
-  user: {
-    id: string;
-    handle: string;
-    currentTier: string;
-    currentTierName: string;
-    currentTierColor: string;
-  };
-  featuredMissionId: string | null;
-  missions: MissionItem[];
-}
-
-/**
- * Individual mission item
- * Per API_CONTRACTS.md lines 2983-3071
- */
-export interface MissionItem {
-  id: string;
-  missionType: string;
-  displayName: string;
-  targetUnit: string;
-  tierEligibility: string;
-  rewardType: string;
-  rewardDescription: string;
-  rewardSource: string;
-  status: MissionStatus;
-  progress: {
-    currentValue: number;
-    currentFormatted: string;
-    targetValue: number;
-    targetFormatted: string;
-    percentage: number;
-    remainingText: string;
-    progressText: string;
-  } | null;
-  deadline: {
-    checkpointEnd: string;
-    checkpointEndFormatted: string;
-    daysRemaining: number;
-  } | null;
-  valueData: {
-    percent?: number;
-    durationDays?: number;
-    amount?: number;
-    displayText?: string;
-    requiresSize?: boolean;
-    sizeCategory?: string;
-    sizeOptions?: string[];
-  } | null;
-  scheduling: {
-    scheduledActivationDate: string;
-    scheduledActivationTime: string;
-    scheduledActivationFormatted: string;
-    activationDate: string | null;
-    activationDateFormatted: string | null;
-    expirationDate: string | null;
-    expirationDateFormatted: string | null;
-    durationText: string;
-  } | null;
-  raffleData: {
-    raffleEndDate: string;
-    raffleEndFormatted: string;
-    daysUntilDraw: number;
-    isWinner: boolean | null;
-    prizeName: string;
-  } | null;
-  lockedData: {
-    requiredTier: string;
-    requiredTierName: string;
-    requiredTierColor: string;
-    unlockMessage: string;
-    previewFromTier: string | null;
-  } | null;
-  flippableCard: {
-    backContentType: 'dates' | 'message';
-    message: string | null;
-    dates: Array<{ label: string; value: string }> | null;
-  } | null;
-}
+// MissionStatus, MissionsPageResponse, MissionItem are now imported from shared types.
+// Re-export for backwards compatibility with any code importing from this file.
+export type { MissionStatus, MissionsPageResponse, MissionItem } from '@/lib/types/missions';
 
 /**
  * Claim response
@@ -887,15 +792,25 @@ function transformMission(
   // Generate flippable card
   const flippableCard = generateFlippableCard(status, data);
 
+  // Validate enum types at service boundary (makes bad data noisy)
+  if (!isMissionType(mission.type)) {
+    console.error(`[MissionService] Invalid missionType: ${mission.type} for mission ${mission.id}`);
+    throw new Error(`Invalid mission type: ${mission.type}`);
+  }
+  if (!isRewardType(reward.type)) {
+    console.error(`[MissionService] Invalid rewardType: ${reward.type} for mission ${mission.id}`);
+    throw new Error(`Invalid reward type: ${reward.type}`);
+  }
+
   return {
     id: progress?.id ?? mission.id, // Use progress ID for claim calls, mission ID as fallback
-    missionType: mission.type,
+    missionType: mission.type, // Validated above
     displayName: MISSION_DISPLAY_NAMES[mission.type] ?? mission.displayName,
-    targetUnit: mission.targetUnit,
+    targetUnit: mission.targetUnit as 'dollars' | 'units' | 'count',
     tierEligibility: mission.tierEligibility,
-    rewardType: reward.type,
+    rewardType: reward.type, // Validated above
     rewardDescription: generateRewardDescription(reward.type, valueData, reward.description),
-    rewardSource: reward.rewardSource,
+    rewardSource: reward.rewardSource as 'vip_tier' | 'mission',
     status,
     progress: progressData,
     deadline: deadlineData,
