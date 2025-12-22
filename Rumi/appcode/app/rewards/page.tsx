@@ -23,9 +23,16 @@ import type { RewardsPageResponse } from '@/types/rewards'
  * - No dashboardData → error component
  */
 export default async function RewardsPage() {
+  const PAGE_START = Date.now()
+
   // 1. Get authenticated user via Supabase
+  const t1 = Date.now()
   const supabase = await createClient()
+  console.log(`[TIMING][RewardsPage] createClient(): ${Date.now() - t1}ms`)
+
+  const t2 = Date.now()
   const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+  console.log(`[TIMING][RewardsPage] auth.getUser(): ${Date.now() - t2}ms`)
 
   if (authError || !authUser) {
     redirect('/login/start')
@@ -39,7 +46,9 @@ export default async function RewardsPage() {
   }
 
   // 3. Get user from our users table - REUSES existing repository
+  const t3 = Date.now()
   const user = await userRepository.findByAuthId(authUser.id)
+  console.log(`[TIMING][RewardsPage] findByAuthId(): ${Date.now() - t3}ms`)
   if (!user) {
     redirect('/login/start')
   }
@@ -50,13 +59,16 @@ export default async function RewardsPage() {
   }
 
   // 5. Get dashboard data for tier info - REUSES existing repository
+  const t4 = Date.now()
   const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId)
+  console.log(`[TIMING][RewardsPage] getUserDashboard(): ${Date.now() - t4}ms`)
   if (!dashboardData) {
     return <RewardsClient initialData={null} error="Failed to load user data" />
   }
 
   // 6. Get rewards - REUSES existing service (which uses existing RPC)
   // This is the exact same call as app/api/rewards/route.ts lines 89-98
+  const t5 = Date.now()
   const rewardsResponse = await rewardService.listAvailableRewards({
     userId: user.id,
     clientId,
@@ -67,6 +79,9 @@ export default async function RewardsPage() {
     tierName: dashboardData.currentTier.name,
     tierColor: dashboardData.currentTier.color,
   })
+  console.log(`[TIMING][RewardsPage] listAvailableRewards(): ${Date.now() - t5}ms`)
+
+  console.log(`[TIMING][RewardsPage] TOTAL: ${Date.now() - PAGE_START}ms`)
 
   // 7. Return client component with real data
   return <RewardsClient initialData={rewardsResponse} error={null} />

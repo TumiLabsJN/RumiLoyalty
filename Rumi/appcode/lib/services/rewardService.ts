@@ -805,6 +805,7 @@ export const rewardService = {
   async listAvailableRewards(
     params: ListAvailableRewardsParams
   ): Promise<RewardsPageResponse> {
+    const SVC_START = Date.now();
     const {
       userId,
       clientId,
@@ -817,15 +818,18 @@ export const rewardService = {
     } = params;
 
     // Step 1: Fetch rewards with active redemptions and sub-states
+    const t1 = Date.now();
     const rawRewards = await rewardRepository.listAvailable(
       userId,
       clientId,
       currentTier,
       currentTierOrder
     );
+    console.log(`[TIMING][rewardService] listAvailable(): ${Date.now() - t1}ms (${rawRewards.length} rewards)`);
 
     // Step 2: Get usage counts for all rewards in one batch query
     const rewardIds = rawRewards.map((r) => r.reward.id);
+    const t2 = Date.now();
     const usageCountMap = await rewardRepository.getUsageCountBatch(
       userId,
       rewardIds,
@@ -833,9 +837,12 @@ export const rewardService = {
       currentTier,
       tierAchievedAt
     );
+    console.log(`[TIMING][rewardService] getUsageCountBatch(): ${Date.now() - t2}ms`);
 
     // Step 3: Get redemption count for history link
+    const t3 = Date.now();
     const redemptionCount = await rewardRepository.getRedemptionCount(userId, clientId);
+    console.log(`[TIMING][rewardService] getRedemptionCount(): ${Date.now() - t3}ms`);
 
     // Step 4: Transform each reward with computed status and formatting
     const rewards: Reward[] = rawRewards.map((data) => {
@@ -894,6 +901,7 @@ export const rewardService = {
     });
 
     // Step 6: Build response
+    console.log(`[TIMING][rewardService] TOTAL listAvailableRewards(): ${Date.now() - SVC_START}ms`);
     return {
       user: {
         id: userId,
