@@ -54,25 +54,33 @@ import {
   createCommissionBoostScheduledEvent,
 } from '@/lib/utils/googleCalendar';
 
-// ============================================================================
-// Types
-// ============================================================================
+// Import shared types from canonical source (ENH-006)
+import type {
+  RewardsPageResponse,
+  Reward,
+  RewardType,
+  RewardStatus,
+  RedemptionFrequency,
+  RedemptionType,
+  ValueData,
+  StatusDetails,
+  ClaimRewardRequest,
+  ClaimRewardResponse,
+} from '@/lib/types/rewards';
 
-/**
- * Reward status - 10 possible values in priority order
- * Per API_CONTRACTS.md lines 4428-4561
- */
-export type RewardStatus =
-  | 'pending_info'
-  | 'clearing'
-  | 'sending'
-  | 'active'
-  | 'scheduled'
-  | 'redeeming_physical'
-  | 'redeeming'
-  | 'claimable'
-  | 'limit_reached'
-  | 'locked';
+// Re-export for consumers that import from service
+export type {
+  RewardsPageResponse,
+  Reward,
+  RewardType,
+  RewardStatus,
+  ValueData,
+  StatusDetails,
+};
+
+// ============================================================================
+// Types (Service-specific)
+// ============================================================================
 
 /**
  * Status priority for sorting (lower = higher priority)
@@ -91,67 +99,8 @@ const STATUS_PRIORITY: Record<RewardStatus, number> = {
   locked: 10, // Informational
 };
 
-/**
- * User info for response header
- * Per API_CONTRACTS.md lines 4076-4082
- */
-export interface RewardUserInfo {
-  id: string;
-  handle: string;
-  currentTier: string;
-  currentTierName: string;
-  currentTierColor: string;
-}
-
-/**
- * Status details with formatted dates/times
- * Per API_CONTRACTS.md lines 4132-4147
- */
-export interface StatusDetails {
-  scheduledDate?: string;
-  scheduledDateRaw?: string;
-  activationDate?: string;
-  expirationDate?: string;
-  daysRemaining?: number;
-  shippingCity?: string;
-  clearingDays?: number;
-}
-
-/**
- * Single reward in the response
- * Per API_CONTRACTS.md lines 4088-4154
- */
-export interface RewardItem {
-  id: string;
-  type: string;
-  name: string;
-  description: string;
-  displayText: string;
-  valueData: Record<string, unknown> | null;
-  status: RewardStatus;
-  canClaim: boolean;
-  isLocked: boolean;
-  isPreview: boolean;
-  usedCount: number;
-  totalQuantity: number | null;
-  tierEligibility: string;
-  requiredTierName: string | null;
-  rewardSource: string;
-  displayOrder: number;
-  statusDetails: StatusDetails | null;
-  redemptionFrequency: string;
-  redemptionType: string;
-}
-
-/**
- * Full response for GET /api/rewards
- * Per API_CONTRACTS.md lines 4073-4155
- */
-export interface RewardsPageResponse {
-  user: RewardUserInfo;
-  redemptionCount: number;
-  rewards: RewardItem[];
-}
+// NOTE: RewardUserInfo, StatusDetails, RewardItem, RewardsPageResponse
+// are now imported from @/lib/types/rewards (ENH-006 type consolidation)
 
 /**
  * Input parameters for listAvailableRewards
@@ -215,7 +164,13 @@ export interface RewardHistoryItem {
  * Per API_CONTRACTS.md lines 5490-5510
  */
 export interface RedemptionHistoryResponse {
-  user: RewardUserInfo;
+  user: {
+    id: string;
+    handle: string;
+    currentTier: string;
+    currentTierName: string;
+    currentTierColor: string;
+  };
   history: RewardHistoryItem[];
 }
 
@@ -271,37 +226,67 @@ export interface SavePaymentInfoResponse {
   userPaymentUpdated: boolean;
 }
 
+// NOTE: ClaimRewardResponse is now imported from @/lib/types/rewards (ENH-006)
+
+// ============================================================================
+// Type Guard Helpers (ENH-006: Centralized boundary validation)
+// ============================================================================
+
+const VALID_REWARD_TYPES = new Set<RewardType>([
+  'gift_card', 'commission_boost', 'spark_ads', 'discount', 'physical_gift', 'experience'
+]);
+
+const VALID_REDEMPTION_FREQUENCIES = new Set<RedemptionFrequency>([
+  'one-time', 'monthly', 'weekly', 'unlimited'
+]);
+
+const VALID_REDEMPTION_TYPES = new Set<RedemptionType>([
+  'instant', 'scheduled'
+]);
+
 /**
- * Response for claimReward
- * Per API_CONTRACTS.md lines 5007-5057
+ * Validate and convert string to RewardType at DB boundary.
+ * Throws if invalid to prevent bad data from silently flowing.
  */
-export interface ClaimRewardResponse {
-  success: boolean;
-  message: string;
-  redemption: {
-    id: string;
-    status: 'claimed';
-    rewardType: 'gift_card' | 'commission_boost' | 'discount' | 'spark_ads' | 'physical_gift' | 'experience';
-    claimedAt: string;
-    reward: {
-      id: string;
-      name: string;
-      displayText: string;
-      type: string;
-      rewardSource: 'vip_tier';
-      valueData: Record<string, unknown> | null;
-    };
-    scheduledActivationAt?: string;
-    usedCount: number;
-    totalQuantity: number;
-    nextSteps: NextSteps;
-  };
-  updatedRewards: Array<{
-    id: string;
-    status: string;
-    canClaim: boolean;
-    usedCount: number;
-  }>;
+function toRewardType(value: string): RewardType {
+  if (VALID_REWARD_TYPES.has(value as RewardType)) {
+    return value as RewardType;
+  }
+  console.error(`[rewardService] Invalid reward type: ${value}`);
+  throw new Error(`Invalid reward type: ${value}`);
+}
+
+/**
+ * Validate and convert string to RedemptionFrequency at DB boundary.
+ */
+function toRedemptionFrequency(value: string): RedemptionFrequency {
+  if (VALID_REDEMPTION_FREQUENCIES.has(value as RedemptionFrequency)) {
+    return value as RedemptionFrequency;
+  }
+  console.error(`[rewardService] Invalid redemption frequency: ${value}`);
+  throw new Error(`Invalid redemption frequency: ${value}`);
+}
+
+/**
+ * Validate and convert string to RedemptionType at DB boundary.
+ */
+function toRedemptionType(value: string): RedemptionType {
+  if (VALID_REDEMPTION_TYPES.has(value as RedemptionType)) {
+    return value as RedemptionType;
+  }
+  console.error(`[rewardService] Invalid redemption type: ${value}`);
+  throw new Error(`Invalid redemption type: ${value}`);
+}
+
+/**
+ * Validate reward source at DB boundary.
+ */
+function toRewardSource(value: string): 'vip_tier' | 'mission' {
+  if (value === 'vip_tier' || value === 'mission') {
+    return value;
+  }
+  console.error(`[rewardService] Invalid reward source: ${value}`);
+  throw new Error(`Invalid reward source: ${value}`);
 }
 
 // ============================================================================
@@ -853,7 +838,7 @@ export const rewardService = {
     const redemptionCount = await rewardRepository.getRedemptionCount(userId, clientId);
 
     // Step 4: Transform each reward with computed status and formatting
-    const rewards: RewardItem[] = rawRewards.map((data) => {
+    const rewards: Reward[] = rawRewards.map((data) => {
       const { reward } = data;
       const usedCount = usageCountMap.get(reward.id) || 0;
 
@@ -880,24 +865,24 @@ export const rewardService = {
 
       return {
         id: reward.id,
-        type: reward.type,
+        type: toRewardType(reward.type),
         name,
         description: reward.description ?? '',
         displayText,
-        valueData: transformedValueData,
+        valueData: transformedValueData as ValueData | null,
         status,
         canClaim,
         isLocked,
         isPreview,
         usedCount,
-        totalQuantity: reward.redemptionQuantity,
+        totalQuantity: reward.redemptionQuantity ?? 0,
         tierEligibility: reward.tierEligibility,
         requiredTierName,
-        rewardSource: reward.rewardSource,
+        rewardSource: toRewardSource(reward.rewardSource),
         displayOrder: reward.displayOrder ?? 0,
         statusDetails,
-        redemptionFrequency: reward.redemptionFrequency,
-        redemptionType: reward.redemptionType,
+        redemptionFrequency: toRedemptionFrequency(reward.redemptionFrequency),
+        redemptionType: toRedemptionType(reward.redemptionType),
       };
     });
 

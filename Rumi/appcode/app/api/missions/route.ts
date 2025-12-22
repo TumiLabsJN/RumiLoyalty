@@ -29,18 +29,10 @@ import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
  */
 
 export async function GET(request: NextRequest) {
-  const API_START = Date.now();
-  console.log(`[TIMING][/api/missions] START`);
-
   try {
     // Step 1: Validate session token
-    const t0 = Date.now();
     const supabase = await createClient();
-    console.log(`[TIMING][/api/missions] createClient(): ${Date.now() - t0}ms`);
-
-    const t1 = Date.now();
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    console.log(`[TIMING][/api/missions] auth.getUser(): ${Date.now() - t1}ms`);
 
     if (authError || !authUser) {
       return NextResponse.json(
@@ -61,13 +53,11 @@ export async function GET(request: NextRequest) {
     // Step 3: Get dashboard data - pass authUser.id directly
     // REMOVED: findByAuthId() call - users.id === authUser.id (same UUID)
     // REMOVED: Tenant mismatch check - RPC enforces via WHERE client_id = p_client_id
-    const t2 = Date.now();
     const dashboardData = await dashboardRepository.getUserDashboard(
       authUser.id,
       clientId,
       { includeAllTiers: true }
     );
-    console.log(`[TIMING][/api/missions] getUserDashboard(): ${Date.now() - t2}ms`);
 
     if (!dashboardData) {
       return NextResponse.json(
@@ -77,17 +67,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 4: Build tier lookup map
-    const t3 = Date.now();
     const tierLookup = new Map<string, { name: string; color: string }>();
     if (dashboardData.allTiers) {
       for (const tier of dashboardData.allTiers) {
         tierLookup.set(tier.id, { name: tier.name, color: tier.color });
       }
     }
-    console.log(`[TIMING][/api/missions] tierLookup build: ${Date.now() - t3}ms`);
 
     // Step 5: Get missions from service
-    const t4 = Date.now();
     const missionsResponse = await listAvailableMissions(
       authUser.id,
       clientId,
@@ -100,9 +87,6 @@ export async function GET(request: NextRequest) {
       dashboardData.client.vipMetric as 'sales' | 'units',
       tierLookup
     );
-    console.log(`[TIMING][/api/missions] listAvailableMissions(): ${Date.now() - t4}ms`);
-
-    console.log(`[TIMING][/api/missions] TOTAL: ${Date.now() - API_START}ms`);
 
     return NextResponse.json(missionsResponse, { status: 200 });
 

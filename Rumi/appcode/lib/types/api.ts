@@ -480,116 +480,18 @@ export interface MissionHistoryResponse {
 
 // =============================================================================
 // SECTION 6: Rewards Endpoints
+// Re-exported from canonical source (ENH-006 type consolidation)
 // =============================================================================
 
-/**
- * Reward status
- */
-export type RewardStatus =
-  | 'clearing'
-  | 'sending'
-  | 'active'
-  | 'pending_info'
-  | 'scheduled'
-  | 'redeeming_physical'
-  | 'redeeming'
-  | 'claimable'
-  | 'limit_reached'
-  | 'locked';
-
-/**
- * Reward status details
- */
-export interface RewardStatusDetails {
-  scheduledDate?: string;
-  scheduledDateRaw?: string;
-  activationDate?: string;
-  expirationDate?: string;
-  daysRemaining?: number;
-  shippingCity?: string;
-  clearingDays?: number;
-}
-
-/**
- * Full reward item
- */
-export interface Reward {
-  id: string;
-  type: RewardType;
-  name: string;
-  description: string;
-  displayText: string;
-  valueData: RewardValueData | null;
-  status: RewardStatus;
-  canClaim: boolean;
-  isLocked: boolean;
-  isPreview: boolean;
-  usedCount: number;
-  totalQuantity: number;
-  tierEligibility: TierId;
-  requiredTierName: string | null;
-  rewardSource: 'vip_tier' | 'mission';
-  displayOrder: number;
-  statusDetails: RewardStatusDetails | null;
-  redemptionFrequency: RedemptionFrequency;
-  redemptionType: RedemptionType;
-}
-
-// GET /api/rewards
-export interface RewardsPageResponse {
-  user: UserInfo;
-  redemptionCount: number;
-  rewards: Reward[];
-}
-
-// POST /api/rewards/:id/claim
-export interface ClaimRewardRequest {
-  scheduledActivationAt?: string;
-  sizeValue?: string;
-  shippingInfo?: {
-    firstName: string;
-    lastName: string;
-    addressLine1: string;
-    addressLine2?: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
-    phone: string;
-  };
-}
-
-export interface ClaimRewardResponse {
-  success: boolean;
-  message: string;
-  redemption: {
-    id: string;
-    status: 'claimed';
-    rewardType: RewardType;
-    claimedAt: string;
-    reward: {
-      id: string;
-      name: string;
-      displayText: string;
-      type: RewardType;
-      rewardSource: 'vip_tier';
-      valueData: RewardValueData | null;
-    };
-    scheduledActivationAt?: string;
-    usedCount: number;
-    totalQuantity: number;
-    nextSteps: {
-      action: 'wait_fulfillment' | 'shipping_confirmation' | 'scheduled_confirmation';
-      message: string;
-    };
-  };
-  updatedRewards: Array<{
-    id: string;
-    status: RewardStatus;
-    canClaim: boolean;
-    usedCount: number;
-  }>;
-}
+export {
+  type RewardStatus,
+  type StatusDetails as RewardStatusDetails,
+  type Reward,
+  type RewardsPageResponse,
+  type ClaimRewardRequest,
+  type ClaimRewardResponse,
+  type ValueData as RewardValueData_Shared,
+} from '@/lib/types/rewards';
 
 // =============================================================================
 // SECTION 7: Rewards History & Payment Endpoints
