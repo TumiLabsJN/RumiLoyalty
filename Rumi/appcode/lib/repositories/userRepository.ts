@@ -157,11 +157,15 @@ export const userRepository = {
    * @returns User data or null if not found
    */
   async findByAuthId(authId: string): Promise<UserData | null> {
+    const t0 = Date.now();
     const supabase = createAdminClient();
+    console.log(`[TIMING][userRepository] createAdminClient(): ${Date.now() - t0}ms`);
 
+    const t1 = Date.now();
     const { data, error } = await supabase.rpc('auth_find_user_by_id', {
       p_user_id: authId,
     });
+    console.log(`[TIMING][userRepository] RPC auth_find_user_by_id: ${Date.now() - t1}ms`);
 
     if (error) {
       throw error;

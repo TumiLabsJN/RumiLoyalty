@@ -106,9 +106,12 @@ export const dashboardRepository = {
     clientId: string,
     options?: { includeAllTiers?: boolean }
   ): Promise<UserDashboardData | null> {
+    const t0 = Date.now();
     const supabase = await createClient();
+    console.log(`[TIMING][dashboardRepository] createClient(): ${Date.now() - t0}ms`);
 
     // Get user AND all tiers IN PARALLEL (they're independent)
+    const t1 = Date.now();
     const [userResult, tiersResult] = await Promise.all([
       // Get user with client data
       supabase
@@ -143,6 +146,7 @@ export const dashboardRepository = {
         .eq('client_id', clientId)
         .order('tier_order', { ascending: true })
     ]);
+    console.log(`[TIMING][dashboardRepository] Promise.all(users+tiers): ${Date.now() - t1}ms`);
 
     const { data: user, error: userError } = userResult;
     const { data: allTiers, error: tiersError } = tiersResult;
