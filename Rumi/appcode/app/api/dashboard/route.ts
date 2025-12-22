@@ -28,16 +28,10 @@ import { getDashboardOverview } from '@/lib/services/dashboardService';
  */
 
 export async function GET(request: NextRequest) {
-  const API_START = Date.now();
   try {
     // Step 1: Validate session token
-    const t0 = Date.now();
     const supabase = await createClient();
-    console.log(`[TIMING][/api/dashboard] createClient(): ${Date.now() - t0}ms`);
-
-    const t1 = Date.now();
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    console.log(`[TIMING][/api/dashboard] auth.getUser(): ${Date.now() - t1}ms`);
 
     if (authError || !authUser) {
       return NextResponse.json(
@@ -58,9 +52,7 @@ export async function GET(request: NextRequest) {
     // Step 3: Get dashboard data - pass authUser.id directly
     // REMOVED: findByAuthId() call - users.id === authUser.id (same UUID)
     // NOTE: If user row is missing (null response), this is data corruption - return 500, not 401
-    const t2 = Date.now();
     const dashboardData = await getDashboardOverview(authUser.id, clientId);
-    console.log(`[TIMING][/api/dashboard] getDashboardOverview(): ${Date.now() - t2}ms`);
 
     if (!dashboardData) {
       return NextResponse.json(
@@ -69,7 +61,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`[TIMING][/api/dashboard] TOTAL: ${Date.now() - API_START}ms`);
     return NextResponse.json(dashboardData, { status: 200 });
 
   } catch (error) {

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server-client'
-import { userRepository } from '@/lib/repositories/userRepository'
 import { dashboardRepository } from '@/lib/repositories/dashboardRepository'
 import { rewardService } from '@/lib/services/rewardService'
 import { RewardsClient } from './rewards-client'
@@ -30,13 +29,16 @@ export default async function RewardsPage() {
   const supabase = await createClient()
   console.log(`[TIMING][RewardsPage] createClient(): ${Date.now() - t1}ms`)
 
+  // ENH-008: Use getSession() instead of getUser() - validates JWT locally, no network call
   const t2 = Date.now()
-  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-  console.log(`[TIMING][RewardsPage] auth.getUser(): ${Date.now() - t2}ms`)
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  console.log(`[TIMING][RewardsPage] auth.getSession(): ${Date.now() - t2}ms`)
 
-  if (authError || !authUser) {
+  if (sessionError || !session?.user) {
     redirect('/login/start')
   }
+
+  const authUser = session.user
 
   // 2. Get client ID from environment (MVP: single tenant)
   const clientId = process.env.CLIENT_ID
@@ -45,41 +47,31 @@ export default async function RewardsPage() {
     return <RewardsClient initialData={null} error="Server configuration error" />
   }
 
-  // 3. Get user from our users table - REUSES existing repository
+  // ENH-008: Get dashboard data directly (includes user info + tier) - SKIP findByAuthId
+  // getUserDashboard queries users table with client_id filter (multitenancy enforced)
   const t3 = Date.now()
-  const user = await userRepository.findByAuthId(authUser.id)
-  console.log(`[TIMING][RewardsPage] findByAuthId(): ${Date.now() - t3}ms`)
-  if (!user) {
+  const dashboardData = await dashboardRepository.getUserDashboard(authUser.id, clientId)
+  console.log(`[TIMING][RewardsPage] getUserDashboard(): ${Date.now() - t3}ms`)
+
+  if (!dashboardData) {
+    // User not found or doesn't belong to this client
     redirect('/login/start')
   }
 
-  // 4. Verify user belongs to this client (multitenancy)
-  if (user.clientId !== clientId) {
-    return <RewardsClient initialData={null} error="Access denied" />
-  }
-
-  // 5. Get dashboard data for tier info - REUSES existing repository
+  // 4. Get rewards - REUSES existing service (which uses existing RPC)
+  // ENH-008: Now uses dashboardData.user for tierAchievedAt and handle
   const t4 = Date.now()
-  const dashboardData = await dashboardRepository.getUserDashboard(user.id, clientId)
-  console.log(`[TIMING][RewardsPage] getUserDashboard(): ${Date.now() - t4}ms`)
-  if (!dashboardData) {
-    return <RewardsClient initialData={null} error="Failed to load user data" />
-  }
-
-  // 6. Get rewards - REUSES existing service (which uses existing RPC)
-  // This is the exact same call as app/api/rewards/route.ts lines 89-98
-  const t5 = Date.now()
   const rewardsResponse = await rewardService.listAvailableRewards({
-    userId: user.id,
+    userId: dashboardData.user.id,
     clientId,
     currentTier: dashboardData.currentTier.id,
     currentTierOrder: dashboardData.currentTier.order,
-    tierAchievedAt: user.tierAchievedAt ?? null,
-    userHandle: user.tiktokHandle ?? '',
+    tierAchievedAt: dashboardData.user.tierAchievedAt,
+    userHandle: dashboardData.user.handle,
     tierName: dashboardData.currentTier.name,
     tierColor: dashboardData.currentTier.color,
   })
-  console.log(`[TIMING][RewardsPage] listAvailableRewards(): ${Date.now() - t5}ms`)
+  console.log(`[TIMING][RewardsPage] listAvailableRewards(): ${Date.now() - t4}ms`)
 
   console.log(`[TIMING][RewardsPage] TOTAL: ${Date.now() - PAGE_START}ms`)
 

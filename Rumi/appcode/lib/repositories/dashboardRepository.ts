@@ -27,6 +27,7 @@ export interface UserDashboardData {
     id: string;
     handle: string;
     email: string | null;
+    tierAchievedAt: string | null;  // ENH-008: Added to eliminate findByAuthId call
   };
   client: {
     id: string;
@@ -121,6 +122,7 @@ export const dashboardRepository = {
           tiktok_handle,
           email,
           current_tier,
+          tier_achieved_at,
           checkpoint_sales_current,
           checkpoint_units_current,
           manual_adjustments_total,
@@ -194,6 +196,7 @@ export const dashboardRepository = {
         id: user.id,
         handle: user.tiktok_handle,
         email: user.email,
+        tierAchievedAt: user.tier_achieved_at,  // ENH-008: Added to eliminate findByAuthId call
       },
       client: {
         id: clientData.id,

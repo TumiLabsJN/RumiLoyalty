@@ -15,6 +15,12 @@ import { missionRepository } from '@/lib/repositories/missionRepository';
 import type { UserDashboardData, DashboardReward } from '@/lib/repositories/dashboardRepository';
 import type { FeaturedMissionData, CongratsModalData } from '@/lib/repositories/missionRepository';
 import type { DashboardRPCResponse } from '@/lib/types/dashboard-rpc';
+import type { DashboardResponse, FeaturedMissionResponse, FormattedReward } from '@/lib/types/dashboard';
+import { isMissionType, isRewardType } from '@/lib/types/enums';
+import type { MissionType, RewardType } from '@/lib/types/enums';
+
+// Re-export for backwards compatibility
+export type { DashboardResponse, FeaturedMissionResponse, FormattedReward } from '@/lib/types/dashboard';
 
 /**
  * Static display name mapping per mission type
@@ -40,99 +46,6 @@ const UNIT_TEXT_MAP: Record<string, string> = {
   views: 'views',
   raffle: '',
 };
-
-// ============================================
-// Response Types (matching API_CONTRACTS.md)
-// ============================================
-
-export interface DashboardResponse {
-  user: {
-    id: string;
-    handle: string;
-    email: string | null;
-    clientName: string;
-  };
-  client: {
-    id: string;
-    vipMetric: 'sales' | 'units';
-    vipMetricLabel: string;
-  };
-  currentTier: {
-    id: string;
-    name: string;
-    color: string;
-    order: number;
-    checkpointExempt: boolean;
-  };
-  nextTier: {
-    id: string;
-    name: string;
-    color: string;
-    minSalesThreshold: number;
-  } | null;
-  tierProgress: {
-    currentValue: number;
-    targetValue: number;
-    progressPercentage: number;
-    currentFormatted: string;
-    targetFormatted: string;
-    checkpointExpiresAt: string | null;
-    checkpointExpiresFormatted: string;
-    checkpointMonths: number;
-  };
-  featuredMission: FeaturedMissionResponse;
-  currentTierRewards: FormattedReward[];
-  totalRewardsCount: number;
-}
-
-export interface FeaturedMissionResponse {
-  status: 'active' | 'completed' | 'claimed' | 'fulfilled' | 'no_missions' | 'raffle_available';
-  mission: {
-    id: string;
-    progressId: string | null;
-    type: string;
-    displayName: string;
-    currentProgress: number;
-    targetValue: number;
-    progressPercentage: number;
-    currentFormatted: string | null;
-    targetFormatted: string | null;
-    targetText: string;
-    progressText: string;
-    isRaffle: boolean;
-    raffleEndDate: string | null;
-    rewardType: string;
-    rewardAmount: number | null;
-    rewardCustomText: string | null;
-    rewardDisplayText: string;
-    rewardValueData: Record<string, unknown> | null;
-    unitText: string;
-  } | null;
-  tier: {
-    name: string;
-    color: string;
-  };
-  showCongratsModal: boolean;
-  congratsMessage: string | null;
-  supportEmail: string;
-  emptyStateMessage: string | null;
-}
-
-export interface FormattedReward {
-  id: string;
-  type: string;
-  name: string | null;
-  displayText: string;
-  description: string | null;
-  valueData: {
-    amount?: number;
-    percent?: number;
-    durationDays?: number;
-  } | null;
-  rewardSource: string;
-  redemptionQuantity: number;
-  displayOrder: number;
-}
 
 // ============================================
 // Formatting Helpers
@@ -275,6 +188,17 @@ export async function getDashboardOverview(
 
   if (rpcData.featuredMission) {
     const fm = rpcData.featuredMission;
+
+    // Runtime validation at service boundary (ENH-008)
+    if (fm.missionType && !isMissionType(fm.missionType)) {
+      console.error(`[DashboardService] Invalid missionType: ${fm.missionType}`);
+      throw new Error(`Invalid mission type: ${fm.missionType}`);
+    }
+    if (fm.rewardType && !isRewardType(fm.rewardType)) {
+      console.error(`[DashboardService] Invalid rewardType: ${fm.rewardType}`);
+      throw new Error(`Invalid reward type: ${fm.rewardType}`);
+    }
+
     const isRaffle = fm.missionType === 'raffle';
     const missionCurrentValue = fm.currentValue || 0;
     const missionProgressPercentage = isRaffle
@@ -363,7 +287,7 @@ export async function getDashboardOverview(
       mission: {
         id: fm.missionId,
         progressId: fm.progressId ?? null,
-        type: fm.missionType,
+        type: fm.missionType as MissionType,  // Safe: validated above
         displayName: MISSION_DISPLAY_NAMES[fm.missionType] ?? fm.displayName,
         currentProgress: missionCurrentValue,
         targetValue: fm.targetValue,
@@ -374,7 +298,7 @@ export async function getDashboardOverview(
         progressText,
         isRaffle,
         raffleEndDate: fm.raffleEndDate,
-        rewardType: fm.rewardType,
+        rewardType: fm.rewardType as RewardType,  // Safe: validated above
         rewardAmount,
         rewardCustomText,
         rewardDisplayText,
@@ -436,12 +360,12 @@ export async function getDashboardOverview(
     };
     return {
       id: r.id,
-      type: r.type,
+      type: r.type as RewardType,  // DB value trusted
       name: r.name,
       displayText: generateRewardDisplayText(rewardForDisplay),
       description: r.description,
       valueData: transformValueData(r.value_data),
-      rewardSource: r.reward_source,
+      rewardSource: r.reward_source as 'vip_tier' | 'mission',  // DB value trusted
       redemptionQuantity: r.redemption_quantity,
       displayOrder: r.display_order,
     };
@@ -613,7 +537,7 @@ export async function getFeaturedMission(
     mission: {
       id: mission.id,
       progressId: progress?.id ?? null,
-      type: mission.type,
+      type: mission.type as MissionType,  // DB value trusted
       displayName: MISSION_DISPLAY_NAMES[mission.type] ?? mission.displayName,
       currentProgress,
       targetValue,
@@ -624,7 +548,7 @@ export async function getFeaturedMission(
       progressText,
       isRaffle,
       raffleEndDate: mission.raffleEndDate,
-      rewardType: reward.type,
+      rewardType: reward.type as RewardType,  // DB value trusted
       rewardAmount,
       rewardCustomText,
       rewardDisplayText,

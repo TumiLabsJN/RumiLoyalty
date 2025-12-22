@@ -167,125 +167,22 @@ export interface ResetPasswordResponse {
 // SECTION 3: Dashboard / Home Endpoints
 // =============================================================================
 
-/**
- * Featured mission status
- */
-export type FeaturedMissionStatus =
-  | 'active'
-  | 'completed'
-  | 'claimed'
-  | 'fulfilled'
-  | 'no_missions'
-  | 'raffle_available';
-
-/**
- * Featured mission data
- */
-export interface FeaturedMission {
-  id: string;
-  type: MissionType;
-  displayName: string;
-  currentProgress: number;
-  targetValue: number;
-  progressPercentage: number;
-  currentFormatted: string | null;
-  targetFormatted: string | null;
-  targetText: string;
-  progressText: string;
-  isRaffle: boolean;
-  raffleEndDate: string | null;
-  rewardType: RewardType;
-  rewardAmount: number | null;
-  rewardCustomText: string | null;
-  rewardDisplayText: string;
-}
-
-/**
- * Featured mission response wrapper
- */
-export interface FeaturedMissionResponse {
-  status: FeaturedMissionStatus;
-  mission: FeaturedMission | null;
-  tier: TierInfo;
-  showCongratsModal: boolean;
-  congratsMessage: string | null;
-  supportEmail: string;
-  emptyStateMessage: string | null;
-}
-
-// GET /api/dashboard/featured-mission
-export type GetFeaturedMissionResponse = FeaturedMissionResponse;
-
-/**
- * Client configuration for dashboard
- */
-export interface ClientInfo {
-  id: string;
-  vipMetric: VipMetric;
-  vipMetricLabel: string;
-}
-
-/**
- * Current tier data
- */
-export interface CurrentTierInfo {
-  id: string;
-  name: string;
-  color: string;
-  order: number;
-  checkpointExempt: boolean;
-}
-
-/**
- * Next tier data
- */
-export interface NextTierInfo {
-  id: string;
-  name: string;
-  color: string;
-  minSalesThreshold: number;
-}
-
-/**
- * Tier progression data
- */
-export interface TierProgress {
-  currentValue: number;
-  targetValue: number;
-  progressPercentage: number;
-  currentFormatted: string;
-  targetFormatted: string;
-  checkpointExpiresAt: string;
-  checkpointExpiresFormatted: string;
-  checkpointMonths: number;
-}
-
-/**
- * Current tier reward item
- */
-export interface CurrentTierReward {
-  id: string;
-  type: RewardType;
-  name: string;
-  displayText: string;
-  description: string;
-  valueData: RewardValueData | null;
-  rewardSource: 'vip_tier' | 'mission';
-  redemptionQuantity: number;
-  displayOrder: number;
-}
-
-// GET /api/dashboard
-export interface DashboardResponse {
-  user: UserInfo;
-  client: ClientInfo;
-  currentTier: CurrentTierInfo;
-  nextTier: NextTierInfo | null;
-  tierProgress: TierProgress;
-  featuredMission: FeaturedMissionResponse;
-  currentTierRewards: CurrentTierReward[];
-  totalRewardsCount: number;
-}
+// Dashboard types are defined in lib/types/dashboard.ts (single source of truth)
+// Re-export here for backwards compatibility
+// NOTE: Reward, RewardValueData, TierInfo not re-exported - they're defined locally in this file
+export type {
+  FeaturedMissionStatus,
+  FeaturedMission,
+  FeaturedMissionResponse,
+  GetFeaturedMissionResponse,
+  ClientInfo,
+  CurrentTierInfo,
+  NextTierInfo,
+  TierProgress,
+  CurrentTierReward,
+  DashboardResponse,
+  FormattedReward,
+} from './dashboard';
 
 // =============================================================================
 // SECTION 4: Missions Endpoints

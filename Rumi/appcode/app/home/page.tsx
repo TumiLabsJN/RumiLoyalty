@@ -1,58 +1,50 @@
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server-client'
+import { getDashboardOverview } from '@/lib/services/dashboardService'
 import { HomeClient } from './home-client'
-import type { DashboardResponse } from '@/types/dashboard'
 
 /**
  * Home Page (Server Component)
  *
- * Fetches dashboard data server-side for faster page load.
- * Data is passed to HomeClient for interactive rendering.
+ * DIRECT SERVICE PATTERN (ENH-008):
+ * Calls services directly instead of fetching from /api/dashboard.
+ * This eliminates ~500-600ms of redundant middleware/auth overhead.
+ *
+ * The API route (/api/dashboard) is KEPT for client-side refresh/mutations.
+ *
+ * Auth Flow:
+ * 1. Middleware runs setSession() for /home page route
+ * 2. Server Component calls getUser() once (not redundant - we need user ID)
+ * 3. Service calls reuse existing repository methods and RPCs
  *
  * References:
- * - PageLoadRefactor.md (Server Component + Client Islands pattern)
- * - DASHBOARD_IMPL.md (API documentation)
+ * - HomePageDirectServiceEnhancement.md (ENH-008)
+ * - app/api/dashboard/route.ts (logic source)
  */
 export default async function HomePage() {
-  const PAGE_START = Date.now();
+  // 1. Get authenticated user
+  // NOTE: Middleware already ran setSession(), this just retrieves the user
+  const supabase = await createClient();
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
-  // Get auth cookie for API call (explicit construction for reliability)
-  const t_cookies = Date.now();
-  const cookieStore = await cookies()
-  const cookieHeader = cookieStore.getAll()
-    .map(c => `${c.name}=${c.value}`)
-    .join('; ')
-  console.log(`[TIMING][HomePage] cookies(): ${Date.now() - t_cookies}ms`);
-
-  // Fetch data server-side
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (!baseUrl && process.env.NODE_ENV === 'production') {
-    throw new Error('NEXT_PUBLIC_SITE_URL must be set in production')
-  }
-  const fetchUrl = baseUrl || 'http://localhost:3000'
-
-  const t_fetch = Date.now();
-  const response = await fetch(`${fetchUrl}/api/dashboard`, {
-    headers: { Cookie: cookieHeader },
-    cache: 'no-store', // CRITICAL: Dynamic user data must not be cached
-  })
-  console.log(`[TIMING][HomePage] fetch(/api/dashboard): ${Date.now() - t_fetch}ms`);
-
-  // Handle auth error - redirect server-side
-  if (response.status === 401) {
-    redirect('/login/start')
+  if (authError || !authUser) {
+    redirect('/login/start');
   }
 
-  // Handle other errors
-  if (!response.ok) {
-    return <HomeClient initialData={null} error="Failed to load dashboard" />
+  // 2. Get client ID from environment (same as API route)
+  const clientId = process.env.CLIENT_ID;
+  if (!clientId) {
+    console.error('[HomePage] CLIENT_ID not configured');
+    return <HomeClient initialData={null} error="Server configuration error" />;
   }
 
-  const t_json = Date.now();
-  const data: DashboardResponse = await response.json()
-  console.log(`[TIMING][HomePage] response.json(): ${Date.now() - t_json}ms`);
-  console.log(`[TIMING][HomePage] TOTAL: ${Date.now() - PAGE_START}ms`);
+  // 3. Get dashboard data - DIRECT SERVICE CALL (no fetch)
+  const dashboardData = await getDashboardOverview(authUser.id, clientId);
 
-  // Pass data to client component
-  return <HomeClient initialData={data} error={null} />
+  if (!dashboardData) {
+    return <HomeClient initialData={null} error="Failed to load dashboard" />;
+  }
+
+  // 4. Return client component with data
+  return <HomeClient initialData={dashboardData} error={null} />;
 }
