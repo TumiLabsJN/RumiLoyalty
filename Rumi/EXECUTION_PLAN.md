@@ -1716,10 +1716,11 @@
     - **Acceptance Criteria:** Completed and claimed missions show with correct dates and rewards
 
 ## Step 9.5: Rewards Integration
-- [ ] **Task 9.5.1:** Verify Rewards backend API
+- [x] **Task 9.5.1:** Verify Rewards backend API
     - **Action:** Read REWARDS_IMPL.md and confirm `GET /api/rewards` exists and response shape matches mock data
     - **References:** REWARDS_IMPL.md, `app/rewards/page.tsx` lines 319-615 (mock data structure)
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+    - **Completed:** 2025-12-22 - API route verified at app/api/rewards/route.ts, RewardsPageResponse type matches mock exactly
 
 - [ ] **Task 9.5.2:** Add data fetching to Rewards page
     - **Action:** Replace mock `mockData` object with `fetch('/api/rewards')` call in `app/rewards/page.tsx`

@@ -740,7 +740,244 @@ TODO: Document after /missions/missionhistory
 
 ## /rewards
 
-TODO: Document after /tiers
+**File:** `app/rewards/page.tsx`
+
+### API Calls
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/rewards` | GET | Fetch all VIP tier rewards with status, eligibility, usage counts |
+
+### Data Flow
+
+```
+page.tsx
+  └── fetch('/api/rewards')
+        └── app/api/rewards/route.ts
+              ├── userRepository.findByAuthId()
+              ├── dashboardRepository.getUserDashboard()
+              └── rewardService.listAvailableRewards()
+                    ├── rewardRepository.listAvailable()
+                    │     └── RPC: get_available_rewards
+                    ├── rewardRepository.getRedemptionCount()
+                    ├── computeStatus()
+                    ├── generateName()
+                    └── generateDisplayText()
+```
+
+### Service Layer
+
+**File:** `lib/services/rewardService.ts`
+
+| Function | Purpose |
+|----------|---------|
+| `listAvailableRewards(params)` | Main orchestrator - fetches rewards, computes status, formats display |
+| `computeStatus(data)` | Derives status from active redemption and sub-state data |
+| `generateName(type, valueData, description)` | Formats reward name by type (e.g., "$50 Gift Card", "5% Pay Boost") |
+| `generateDisplayText(type, valueData, description)` | Formats display text by type (e.g., "Amazon Gift Card", "Higher earnings (30d)") |
+
+### Repository Layer
+
+**File:** `lib/repositories/userRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `findByAuthId(authId)` | RPC: `auth_find_user_by_id` | Get user from Supabase Auth ID |
+
+**File:** `lib/repositories/dashboardRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `getUserDashboard(userId, clientId)` | SELECT with JOIN | Get user, client, tier data |
+
+**File:** `lib/repositories/rewardRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `listAvailable(userId, clientId, currentTier, currentTierOrder)` | RPC: `get_available_rewards` | Get all VIP tier rewards with active redemptions and sub-states |
+| `getRedemptionCount(userId, clientId)` | SELECT COUNT | Count concluded redemptions for history link |
+
+### Database Tables
+
+| Table | Fields Used | Purpose |
+|-------|-------------|---------|
+| `users` | id, client_id, current_tier, tier_achieved_at, tiktok_handle | User profile and tier info |
+| `clients` | id, name, vip_metric | Client configuration |
+| `tiers` | tier_id, tier_name, tier_color, tier_order | Tier definitions for eligibility |
+| `rewards` | id, type, name, description, value_data, tier_eligibility, reward_source, redemption_quantity, redemption_frequency, display_order, enabled | Reward definitions |
+| `redemptions` | id, user_id, reward_id, status, claimed_at, scheduled_activation_date, tier_at_claim, mission_progress_id | Claim tracking (mission_progress_id IS NULL for VIP tier) |
+| `commission_boost_redemptions` | boost_status, scheduled_activation_date, activated_at, expires_at, duration_days, payment_method | Commission boost sub-state |
+| `physical_gift_redemptions` | shipped_at, shipping_city, requires_size | Physical gift sub-state |
+
+### RPC Functions
+
+| Function | Purpose |
+|----------|---------|
+| `auth_find_user_by_id(p_user_id)` | Bypass RLS to find user by Supabase Auth ID |
+| `get_available_rewards(p_user_id, p_client_id, p_current_tier, p_current_tier_order)` | Single query with JOINs for all reward data with active redemptions |
+
+### Validation Queries
+
+Run these queries in Supabase SQL Editor to verify data exists for /rewards to work.
+
+**Replace placeholders:**
+- `:client_id` → Your CLIENT_ID from .env.local
+- `:user_id` → User's UUID from users table
+- `:current_tier` → User's current_tier value (e.g., 'tier_1')
+
+```sql
+-- 1. Verify user exists and has valid current_tier
+SELECT id, tiktok_handle, current_tier, client_id, tier_achieved_at
+FROM users
+WHERE id = ':user_id'
+  AND client_id = ':client_id';
+
+-- 2. Verify user's tier exists in tiers table
+SELECT tier_id, tier_name, tier_color, tier_order
+FROM tiers
+WHERE client_id = ':client_id'
+  AND tier_id = ':current_tier';
+
+-- 3. Verify VIP tier rewards exist for user's tier
+SELECT id, type, name, tier_eligibility, reward_source,
+       redemption_quantity, redemption_frequency, display_order, enabled
+FROM rewards
+WHERE client_id = ':client_id'
+  AND reward_source = 'vip_tier'
+  AND enabled = true
+  AND (tier_eligibility = ':current_tier' OR preview_from_tier = ':current_tier')
+ORDER BY display_order;
+
+-- 4. Check user's VIP tier redemptions (not mission-linked)
+SELECT r.id, r.status, r.claimed_at, r.tier_at_claim,
+       rw.type as reward_type, rw.name as reward_name
+FROM redemptions r
+JOIN rewards rw ON r.reward_id = rw.id
+WHERE r.user_id = ':user_id'
+  AND r.client_id = ':client_id'
+  AND r.mission_progress_id IS NULL
+  AND r.deleted_at IS NULL;
+
+-- 5. Check commission boost sub-states
+SELECT cb.boost_status, cb.scheduled_activation_date,
+       cb.activated_at, cb.expires_at, cb.duration_days
+FROM commission_boost_redemptions cb
+WHERE cb.client_id = ':client_id'
+  AND cb.redemption_id IN (
+    SELECT id FROM redemptions
+    WHERE user_id = ':user_id'
+      AND mission_progress_id IS NULL
+  );
+
+-- 6. Check physical gift sub-states
+SELECT pg.shipped_at, pg.shipping_city, pg.requires_size
+FROM physical_gift_redemptions pg
+WHERE pg.client_id = ':client_id'
+  AND pg.redemption_id IN (
+    SELECT id FROM redemptions
+    WHERE user_id = ':user_id'
+      AND mission_progress_id IS NULL
+  );
+
+-- 7. Count concluded redemptions (for history link)
+SELECT COUNT(*) as redemption_count
+FROM redemptions
+WHERE user_id = ':user_id'
+  AND client_id = ':client_id'
+  AND status = 'concluded';
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Validation Query |
+|---------|--------------|------------------|
+| 500 error on page load | User's `current_tier` doesn't exist in `tiers` table | Query #2 |
+| No rewards shown | No `vip_tier` rewards for user's tier | Query #3 |
+| Reward shows wrong status | Active redemption or sub-state has incorrect status | Query #4, #5 |
+| Commission boost stuck | `commission_boost_redemptions.boost_status` incorrect | Query #5 |
+| Physical gift not showing as shipped | `physical_gift_redemptions.shipped_at` is NULL | Query #6 |
+| Wrong usage count (X/Y) | Redemptions not linked correctly or wrong tier_at_claim | Query #4 |
+| Locked reward not visible | `preview_from_tier` doesn't match user's tier | Query #3 |
+| History count wrong | Redemptions not in 'concluded' status | Query #7 |
+
+### Frontend State
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `mockData` | Currently mock, will be API | All rewards data (user, redemptionCount, rewards[]) |
+| `showScheduleModal` | Local | Discount scheduling modal |
+| `selectedDiscount` | Local | Discount being scheduled (id, percent, durationDays) |
+| `showPayboostModal` | Local | Commission boost scheduling modal |
+| `selectedPayboost` | Local | Payboost being scheduled (id, percent, durationDays) |
+| `showPhysicalGiftModal` | Local | Physical gift claim modal |
+| `selectedPhysicalGift` | Local | Physical gift being claimed |
+| `showPaymentInfoModal` | Local | Payment info collection modal |
+| `selectedReward` | Local | Reward for payment info |
+| `userTimezone` | Browser | User's timezone for date formatting |
+
+**TODO:** Add after frontend integration:
+- `isLoading` - Show loading skeleton during fetch
+- `error` - Show error state with retry button
+
+### Key Business Logic
+
+1. **10 Reward Statuses:** `clearing`, `sending`, `active`, `pending_info`, `scheduled`, `redeeming_physical`, `redeeming`, `claimable`, `limit_reached`, `locked`
+
+2. **Backend Priority Sorting:** actionable (pending_info, claimable) → status updates (clearing, sending, active, scheduled) → processing (redeeming) → informational (limit_reached, locked)
+
+3. **Tier Eligibility:** User must match `tier_eligibility` exactly OR be in `preview_from_tier` (locked preview)
+
+4. **Usage Limits:** `usedCount` vs `totalQuantity` - based on `redemption_quantity` and `tier_at_claim` matching current tier
+
+5. **VIP Tier Filter:** Only `reward_source='vip_tier'` rewards (not mission rewards)
+
+6. **Scheduling Required:** `discount` and `commission_boost` types open scheduling modal before claim
+
+7. **Flippable Cards:** 6 card types for: clearing, scheduled, active, pending_info, sending, redeeming
+
+8. **Payment Info Flow:** `pending_info` status requires payment method before commission boost can proceed
+
+### Seed Data Requirements
+
+For /rewards to function correctly, seed data must be created in the correct order with proper relationships.
+
+#### Dependency Order (Must seed in this order)
+
+```
+1. clients          (no dependencies)
+2. tiers            (depends on: clients)
+3. rewards          (depends on: clients, tiers for tier_eligibility)
+4. users            (depends on: clients, tiers for current_tier, Supabase Auth for id)
+5. redemptions      (depends on: users, rewards, clients) - optional, for active claims
+6. commission_boost_redemptions (depends on: redemptions) - optional, for boost sub-states
+7. physical_gift_redemptions    (depends on: redemptions) - optional, for gift sub-states
+```
+
+#### Minimum Viable Seed Data
+
+| Table | Required Rows | Critical Fields |
+|-------|---------------|-----------------|
+| `clients` | 1 | `id`, `vip_metric` ('sales' or 'units') |
+| `tiers` | At least 1 | `tier_id`, `tier_name`, `tier_color`, `tier_order`, `client_id` |
+| `users` | 1 test user | `id` (MUST match Supabase Auth UUID), `client_id`, `current_tier` |
+| `rewards` | At least 1 VIP tier reward | `tier_eligibility`, `reward_source='vip_tier'`, `enabled=true`, `type` |
+
+#### Critical Constraints
+
+| Constraint | Requirement | What Breaks If Violated |
+|------------|-------------|-------------------------|
+| **User ID = Auth ID** | `users.id` MUST equal Supabase Auth user UUID | Login succeeds but user lookup fails → redirect loop |
+| **Tier Exists** | `users.current_tier` must exist in `tiers.tier_id` | 500 error on dashboard lookup |
+| **reward_source='vip_tier'** | Rewards must have this to appear on /rewards | Empty rewards list |
+| **mission_progress_id IS NULL** | VIP tier redemptions have no mission link | Redemptions won't be counted correctly |
+
+### Current Implementation Status
+
+**Backend:** ✅ Complete (API route, service, repository, RPC all implemented)
+
+**Frontend:** 🔄 Using mock data - needs to call `/api/rewards`
+
+**TODO for Task 9.5:** Replace mock data in `page.tsx` (lines 319-615) with `fetch('/api/rewards')`
 
 ---
 
