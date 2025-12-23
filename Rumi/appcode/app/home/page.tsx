@@ -24,9 +24,9 @@ export default async function HomePage() {
 
   // 1. Get user ID from validated token (local decode, ~1ms)
   // Middleware already validated via setSession()
-  const t_token = Date.now();
+  const t1 = Date.now();
   const userId = await getUserIdFromToken();
-  console.log(`[HomePage] t_getUserIdFromToken: ${Date.now() - t_token}ms`);
+  console.log(`[TIMING][HomePage] getUserIdFromToken(): ${Date.now() - t1}ms`);
 
   if (!userId) {
     redirect('/login/start');
@@ -40,15 +40,15 @@ export default async function HomePage() {
   }
 
   // 3. Get dashboard data - DIRECT SERVICE CALL (no fetch)
-  const t1 = Date.now();
+  const t2 = Date.now();
   const dashboardData = await getDashboardOverview(userId, clientId);
-  console.log(`[HomePage] t_getDashboardOverview: ${Date.now() - t1}ms`);
+  console.log(`[TIMING][HomePage] getDashboardOverview(): ${Date.now() - t2}ms`);
+
+  console.log(`[TIMING][HomePage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   if (!dashboardData) {
     return <HomeClient initialData={null} error="Failed to load dashboard" />;
   }
-
-  console.log(`[HomePage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   // 4. Return client component with data
   return <HomeClient initialData={dashboardData} error={null} />;

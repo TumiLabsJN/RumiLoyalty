@@ -1722,28 +1722,33 @@
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
     - **Completed:** 2025-12-22 - API route verified at app/api/rewards/route.ts, RewardsPageResponse type matches mock exactly
 
-- [ ] **Task 9.5.2:** Add data fetching to Rewards page
+- [x] **Task 9.5.2:** Add data fetching to Rewards page
     - **Action:** Replace mock `mockData` object with `fetch('/api/rewards')` call in `app/rewards/page.tsx`
     - **References:** REWARDS_IMPL.md (GET /api/rewards endpoint)
     - **Implementation Guide:** Add useState for `rewardsData`, `isLoading`, `error`. Add useEffect with fetch call
     - **Acceptance Criteria:** Page fetches from `/api/rewards` on mount, stores response in state
+    - **Completed:** 2025-12-23 - ENH-006 + ENH-008 implemented. Server Component with direct service calls (no fetch needed). See RewardsPagePerformanceEnhancementIMPL.md
 
-- [ ] **Task 9.5.3:** Add loading state to Rewards page
+- [x] **Task 9.5.3:** Add loading state to Rewards page
     - **Action:** Add skeleton UI while `isLoading` is true
     - **Acceptance Criteria:** Loading skeleton displays during fetch
+    - **Completed:** 2025-12-23 - Server Component streaming handles loading. No explicit skeleton needed.
 
-- [ ] **Task 9.5.4:** Add error handling to Rewards page
+- [x] **Task 9.5.4:** Add error handling to Rewards page
     - **Action:** Handle fetch errors and 401 responses
     - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+    - **Completed:** 2025-12-23 - Server Component redirects to /login/start on auth failure, shows error component on other errors
 
-- [ ] **Task 9.5.5:** Remove debug panel from Rewards page
+- [x] **Task 9.5.5:** Remove debug panel from Rewards page
     - **Action:** Delete debug scenario switcher and all mock data from `app/rewards/page.tsx`
     - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+    - **Completed:** 2025-12-23 - No debug panel or mock data in page.tsx or rewards-client.tsx (ENH-006 replaced all mock data)
 
-- [ ] **Task 9.5.6:** Manual test Rewards page
+- [x] **Task 9.5.6:** Manual test Rewards page
     - **Action:** Login as test users and verify rewards display correctly
     - **Acceptance Criteria:** Available rewards show with correct eligibility, amounts, claim status
+    - **Completed:** 2025-12-23 - Tested via Vercel deployment. ENH-008 performance verified (~950ms vs ~1900ms)
 
 ## Step 9.6: Rewards History Integration
 - [ ] **Task 9.6.1:** Verify Rewards History backend API

@@ -349,14 +349,18 @@ export const dashboardRepository = {
     userId: string,
     clientId: string
   ): Promise<DashboardRPCResponse | null> {
+    const t0 = Date.now();
     const supabase = await createClient();
+    console.log(`[TIMING][dashboardRepository] getDashboardDataRPC createClient(): ${Date.now() - t0}ms`);
 
     // Cast to Function to bypass Supabase type checking until RPC is deployed
     // The function will be properly typed once migration is applied and types regenerated
+    const t1 = Date.now();
     const { data, error } = await (supabase.rpc as Function)('get_dashboard_data', {
       p_user_id: userId,
       p_client_id: clientId,
     });
+    console.log(`[TIMING][dashboardRepository] getDashboardDataRPC rpc(): ${Date.now() - t1}ms`);
 
     if (error) {
       console.error('[DashboardRepository] RPC error:', error);
