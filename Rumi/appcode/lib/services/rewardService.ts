@@ -1292,6 +1292,7 @@ export const rewardService = {
   async getRewardHistory(
     params: GetRewardHistoryParams
   ): Promise<RedemptionHistoryResponse> {
+    const SVC_START = Date.now();
     const {
       userId,
       clientId,
@@ -1302,10 +1303,12 @@ export const rewardService = {
     } = params;
 
     // Fetch concluded redemptions from repository
+    const t_repo = Date.now();
     const rawHistory = await rewardRepository.getConcludedRedemptions(
       userId,
       clientId
     );
+    console.log(`[TIMING][RewardService.getRewardHistory] getConcludedRedemptions(): ${Date.now() - t_repo}ms`);
 
     // Transform each redemption with backend formatting
     const history: RewardHistoryItem[] = rawHistory.map((item) => {
@@ -1325,6 +1328,8 @@ export const rewardService = {
         status: 'concluded' as const,
       };
     });
+
+    console.log(`[TIMING][RewardService.getRewardHistory] TOTAL: ${Date.now() - SVC_START}ms (${rawHistory.length} items)`);
 
     return {
       user: {

@@ -975,9 +975,221 @@ For /rewards to function correctly, seed data must be created in the correct ord
 
 **Backend:** ✅ Complete (API route, service, repository, RPC all implemented)
 
-**Frontend:** 🔄 Using mock data - needs to call `/api/rewards`
+**Frontend:** ✅ Complete (ENH-006 + ENH-008 - Server Component + direct service calls)
 
-**TODO for Task 9.5:** Replace mock data in `page.tsx` (lines 319-615) with `fetch('/api/rewards')`
+**Files:**
+- `page.tsx` - Server Component (calls `rewardService.listAvailableRewards()` directly, handles 401 redirect)
+- `rewards-client.tsx` - Client Component (receives `initialData` prop, renders UI with modals)
+
+**Completed:** 2025-12-23 (Step 9.5)
+
+---
+
+## /rewards/rewardshistory
+
+**File:** `app/rewards/rewardshistory/page.tsx`
+
+### API Calls
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/rewards/history` | GET | Fetch concluded VIP tier redemptions |
+
+### Data Flow
+
+**Target (Server Component - TO BE IMPLEMENTED):**
+```
+page.tsx (Server Component)
+  └── rewardService.getRewardHistory() [Direct service call]
+        ├── rewardRepository.getConcludedRedemptions()
+        │     └── SELECT with JOIN (redemptions + rewards)
+        ├── generateName()
+        └── generateDisplayText()
+```
+
+**Current (Mock):**
+```
+page.tsx (Client Component)
+  └── useState(scenarios)
+        └── Mock data (5 scenarios, lines 39-329)
+```
+
+### Service Layer
+
+**File:** `lib/services/rewardService.ts`
+
+| Function | Lines | Purpose |
+|----------|-------|---------|
+| `getRewardHistory(params)` | 1306-1352 | Main orchestrator - fetches concluded redemptions, formats for display |
+| `generateName(type, valueData, description)` | 315-340 | Formats reward name by type (e.g., "$50 Gift Card") |
+| `generateDisplayText(type, valueData, description)` | 342-427 | Formats display text by type (e.g., "Amazon Gift Card") |
+
+### Repository Layer
+
+**File:** `lib/repositories/userRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `findByAuthId(authId)` | RPC: `auth_find_user_by_id` | Get user from Supabase Auth ID |
+
+**File:** `lib/repositories/dashboardRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `getUserDashboard(userId, clientId)` | SELECT with JOIN | Get user, client, tier data for header |
+
+**File:** `lib/repositories/rewardRepository.ts`
+
+| Function | Lines | Query Type | Purpose |
+|----------|-------|------------|---------|
+| `getConcludedRedemptions(userId, clientId)` | 546-610 | SELECT with JOIN | Get concluded redemptions with reward details |
+
+### Database Tables
+
+| Table | Fields Used | Purpose |
+|-------|-------------|---------|
+| `users` | id, tiktok_handle, current_tier, client_id | User identification |
+| `tiers` | tier_id, tier_name, tier_color | Current tier for header badge |
+| `redemptions` | id, reward_id, claimed_at, concluded_at, status, user_id, client_id, mission_progress_id, deleted_at | Concluded redemption records |
+| `rewards` | id, type, name, description, value_data, reward_source | Reward details for display |
+
+### RPC Functions
+
+| Function | Purpose |
+|----------|---------|
+| `auth_find_user_by_id(p_user_id)` | Bypass RLS to find user by Supabase Auth ID |
+
+### Validation Queries
+
+Run these queries in Supabase SQL Editor to verify data exists for /rewards/rewardshistory to work.
+
+**Replace placeholders:**
+- `:client_id` → Your CLIENT_ID from .env.local
+- `:user_id` → User's UUID from users table
+
+```sql
+-- 1. Verify user exists and has valid current_tier (for header badge)
+SELECT id, tiktok_handle, current_tier, client_id
+FROM users
+WHERE id = ':user_id'
+  AND client_id = ':client_id';
+
+-- 2. Verify user's tier exists (for tier badge in header)
+SELECT tier_id, tier_name, tier_color
+FROM tiers
+WHERE client_id = ':client_id'
+  AND tier_id = (SELECT current_tier FROM users WHERE id = ':user_id');
+
+-- 3. Check concluded VIP tier redemptions (main history data)
+-- NOTE: mission_progress_id IS NULL = VIP tier reward (not mission reward)
+SELECT red.id, red.status, red.claimed_at, red.concluded_at,
+       rw.type as reward_type, rw.name as reward_name,
+       rw.value_data, rw.reward_source
+FROM redemptions red
+JOIN rewards rw ON red.reward_id = rw.id
+WHERE red.user_id = ':user_id'
+  AND red.client_id = ':client_id'
+  AND red.status = 'concluded'
+  AND red.mission_progress_id IS NULL
+  AND red.deleted_at IS NULL
+ORDER BY red.concluded_at DESC;
+
+-- 4. Count concluded redemptions (should match history length)
+SELECT COUNT(*) as history_count
+FROM redemptions
+WHERE user_id = ':user_id'
+  AND client_id = ':client_id'
+  AND status = 'concluded'
+  AND mission_progress_id IS NULL
+  AND deleted_at IS NULL;
+
+-- 5. Verify rewards table has data for JOIN
+SELECT id, type, name, description, value_data, reward_source
+FROM rewards
+WHERE client_id = ':client_id'
+  AND reward_source = 'vip_tier';
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Validation Query |
+|---------|--------------|------------------|
+| 500 error on page load | User's `current_tier` doesn't exist in `tiers` table | Query #2 |
+| Empty history list | No `redemptions` with status='concluded' | Query #3 |
+| Missing items in history | `mission_progress_id` is NOT NULL (mission rewards excluded) | Query #3 |
+| Wrong reward name | `generateName()` not matching reward type | Query #3 (check value_data) |
+| "null" in description | `rewards.value_data` or `description` is NULL | Query #5 |
+| Dates showing wrong | `concluded_at` timestamp missing or malformed | Query #3 |
+
+### Frontend State
+
+**Current (Mock - TO BE REMOVED):**
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `activeScenario` | useState | Debug scenario switcher |
+| `debugPanelOpen` | useState | Toggle debug panel |
+| `user` | mockData | User tier info for header |
+| `history` | mockData | Concluded redemption list |
+
+**Target (Server Component Pattern):**
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `initialData` | Server Component prop | RedemptionHistoryResponse from service |
+| `error` | Server Component prop | Error message if service fails |
+
+### Key Business Logic
+
+1. **VIP Tier Only:** Only shows `mission_progress_id IS NULL` redemptions (not mission rewards)
+2. **Status Filter:** Only `status='concluded'` (terminal state)
+3. **Sorting:** `concluded_at DESC` (most recent first)
+4. **Name Formatting:** Uses `generateName()` for backend-formatted names
+5. **Display Text:** Uses `generateDisplayText()` for descriptions
+6. **No Pagination:** Per API spec, returns all history items
+
+### Seed Data Requirements
+
+For /rewards/rewardshistory to show data, users must have claimed and concluded VIP tier rewards.
+
+#### Dependency Order
+
+```
+1. clients          (no dependencies)
+2. tiers            (depends on: clients)
+3. rewards          (depends on: clients) - reward_source='vip_tier'
+4. users            (depends on: clients, tiers, Supabase Auth)
+5. redemptions      (depends on: users, rewards) - status='concluded', mission_progress_id=NULL
+```
+
+#### Minimum Viable Seed Data
+
+| Table | Required Rows | Critical Fields |
+|-------|---------------|-----------------|
+| `users` | 1 test user | `id` (MUST match Supabase Auth UUID), `client_id`, `current_tier` |
+| `tiers` | At least 1 | `tier_id`, `tier_name`, `tier_color` (for header badge) |
+| `rewards` | At least 1 VIP tier | `type`, `value_data`, `reward_source='vip_tier'` |
+| `redemptions` | 1 per history entry | `status='concluded'`, `concluded_at` NOT NULL, `mission_progress_id=NULL` |
+
+#### Critical Constraints
+
+| Constraint | Requirement | What Breaks If Violated |
+|------------|-------------|-------------------------|
+| **mission_progress_id IS NULL** | VIP tier redemptions have no mission link | Items won't appear in history |
+| **status='concluded'** | Only terminal state appears | Nothing shows if status is 'claimed' or 'fulfilled' |
+| **concluded_at NOT NULL** | Required for sorting | Sorting fails, may show at bottom |
+| **Tier exists** | `users.current_tier` must exist in `tiers.tier_id` | 500 error on dashboard lookup |
+
+### Current Implementation Status
+
+**Backend:** ✅ Complete (API route, service, repository all implemented)
+
+**Frontend:** 🔄 Using mock data - needs Server Component conversion
+
+**TODO for Task 9.6:**
+1. Convert `page.tsx` to Server Component (direct service call)
+2. Create `rewardshistory-client.tsx` Client Component (UI)
+3. Remove mock data (lines 39-329) and debug panel (lines 337-390)
 
 ---
 
