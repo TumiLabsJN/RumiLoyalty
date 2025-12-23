@@ -27,7 +27,11 @@ import type {
   MissionType,
   RewardType,
 } from '@/lib/types/missions';
-import { isMissionType, isRewardType } from '@/lib/types/enums';
+import type {
+  MissionHistoryResponse,
+  MissionHistoryItem,
+} from '@/lib/types/api';
+import { isMissionType, isRewardType, isTierId } from '@/lib/types/enums';
 
 // ============================================
 // Constants (per API_CONTRACTS.md)
@@ -130,46 +134,7 @@ export interface ParticipateResponse {
   };
 }
 
-/**
- * History response
- * Per API_CONTRACTS.md lines 3844-3884
- */
-export interface MissionHistoryResponse {
-  user: {
-    id: string;
-    currentTier: string;
-    currentTierName: string;
-    currentTierColor: string;
-  };
-  history: HistoryItem[];
-}
-
-/**
- * History item
- * Per API_CONTRACTS.md lines 3853-3883
- */
-export interface HistoryItem {
-  id: string;
-  missionType: string;
-  displayName: string;
-  status: 'concluded' | 'rejected_raffle';
-  rewardType: string;
-  rewardName: string;
-  rewardSubtitle: string;
-  rewardSource: string;
-  completedAt: string;
-  completedAtFormatted: string;
-  claimedAt: string | null;
-  claimedAtFormatted: string | null;
-  deliveredAt: string | null;
-  deliveredAtFormatted: string | null;
-  raffleData: {
-    isWinner: boolean;
-    drawDate: string;
-    drawDateFormatted: string;
-    prizeName: string;
-  } | null;
-}
+// ENH-009: MissionHistoryResponse and MissionHistoryItem now imported from @/lib/types/api (SSoT)
 
 // ============================================
 // Formatting Helpers
@@ -1228,7 +1193,8 @@ export async function getMissionHistory(
   const rawHistory = await missionRepository.getHistory(userId, clientId);
 
   // Transform to response format
-  const history: HistoryItem[] = rawHistory.map((data) => {
+  // ENH-009: Use MissionHistoryItem from SSoT with type guards at boundary
+  const history: MissionHistoryItem[] = rawHistory.map((data) => {
     const valueData = data.reward.valueData as Record<string, unknown> | null;
 
     // Determine status
@@ -1240,7 +1206,7 @@ export async function getMissionHistory(
     }
 
     // Generate raffle data if applicable
-    let raffleData: HistoryItem['raffleData'] = null;
+    let raffleData: MissionHistoryItem['raffleData'] = null;
     if (data.raffleParticipation) {
       const displayText = (valueData?.display_text as string) ?? data.reward.description ?? 'a prize';
       raffleData = {
@@ -1253,15 +1219,20 @@ export async function getMissionHistory(
 
     const displayName = MISSION_DISPLAY_NAMES[data.mission.type] ?? data.mission.displayName;
 
+    // ENH-009: Use type guards at mapping boundary for strict types
+    const missionType = isMissionType(data.mission.type) ? data.mission.type : 'sales_dollars';
+    const rewardType = isRewardType(data.reward.type) ? data.reward.type : 'gift_card';
+    const rewardSource = data.reward.rewardSource === 'vip_tier' ? 'vip_tier' : 'mission';
+
     return {
       id: data.mission.id,
-      missionType: data.mission.type,
+      missionType,
       displayName,
       status,
-      rewardType: data.reward.type,
+      rewardType,
       rewardName: generateRewardName(data.reward.type, valueData, data.reward.description),
       rewardSubtitle: `From: ${displayName} mission`,
-      rewardSource: data.reward.rewardSource,
+      rewardSource,
       completedAt: data.raffleParticipation?.participatedAt ?? data.progress.completedAt ?? '',
       completedAtFormatted: formatDateShort(
         data.raffleParticipation?.participatedAt ?? data.progress.completedAt
@@ -1274,10 +1245,14 @@ export async function getMissionHistory(
     };
   });
 
+  // ENH-009: Use type guard for currentTier (TierId)
+  const currentTier = isTierId(userInfo.currentTier) ? userInfo.currentTier : undefined;
+
   return {
     user: {
       id: userId,
-      currentTier: userInfo.currentTier,
+      handle: '', // Not available in this context, but required by UserInfo
+      currentTier,
       currentTierName: userInfo.currentTierName,
       currentTierColor: userInfo.currentTierColor,
     },

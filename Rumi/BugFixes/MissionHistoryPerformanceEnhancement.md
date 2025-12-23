@@ -322,10 +322,10 @@ TOTAL: ~500ms (vs ~1400ms before)
 
 #### Multi-Tenant Considerations
 
-| Query | client_id Filter Required | Verified |
-|-------|---------------------------|----------|
-| getUserDashboard | Yes - `.eq('client_id', clientId)` | [x] |
-| getHistory RPC | Yes - `p_client_id` parameter | [x] |
+| Query | client_id Filter Required | Verified | Location |
+|-------|---------------------------|----------|----------|
+| getUserDashboard | Yes - `.eq('client_id', clientId)` | [x] | dashboardRepository.ts:142 |
+| getHistory RPC | Yes - `WHERE red.client_id = p_client_id` | [x] | baseline.sql:603 |
 
 ---
 
@@ -346,15 +346,17 @@ This is a Server Component optimization. API route is KEPT for any future client
 
 ## 11. Performance Considerations
 
-#### Expected Improvement
+#### Expected Improvement (Real Baseline Data - Verified 2025-12-23)
 
-| Metric | Before | After | Savings |
-|--------|--------|-------|---------|
-| HTTP fetch overhead | ~150ms | 0ms | 150ms |
-| auth.getUser() | ~500ms | ~5ms (getSession) | 495ms |
-| getUserDashboard() | ~300ms | ~300ms | 0ms |
-| getMissionHistory() | ~200ms | ~200ms | 0ms |
-| **TOTAL** | ~1150ms | ~505ms | **~645ms (56%)** |
+| Metric | Before (Measured) | After (Expected) | Savings |
+|--------|-------------------|------------------|---------|
+| Middleware (API route) | 184ms | 0ms | 184ms |
+| HTTP fetch overhead | ~600ms | 0ms | ~600ms |
+| auth.getUser() | 538ms | ~5ms (getSession) | 533ms |
+| getUserDashboard() | 246ms | ~250ms | 0ms |
+| getMissionHistory() | 180ms | ~180ms | 0ms |
+| **API Route TOTAL** | 970ms | - | - |
+| **Network (RSC)** | **1.78s** | **~620ms** | **~1.16s (65%)** |
 
 #### Optimization Needed?
 - [x] Yes - this document specifies the optimization
@@ -386,6 +388,17 @@ This is a Server Component optimization. API route is KEPT for any future client
 | Service call throws | Low | Medium | Try/catch with error UI |
 
 **Security Note:** `auth.getSession()` validates the JWT signature using Supabase's JWT secret. Forged or tampered tokens will be rejected. This is NOT raw JWT decode - it's cryptographic verification.
+
+**Middleware + getSession() Flow (Audit v1.1):**
+- Middleware runs FIRST → calls `setSession()` → refreshes tokens → sets cookies
+- Page runs AFTER middleware → `getSession()` reads from already-refreshed cookies
+- If session is invalid/expired → getSession() returns null → redirect to `/login/start`
+- This is safe because middleware always executes before the page component
+
+**Multi-Tenant Isolation (Audit v1.1):**
+- `missionRepository.getHistory()` passes `p_client_id` to RPC (line 655)
+- RPC enforces: `WHERE red.client_id = p_client_id` (baseline.sql line 603)
+- Client_id filtering is enforced at the database level via RPC
 
 ---
 
@@ -460,7 +473,7 @@ N/A - No new business logic, only pattern change.
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1 (Audit clarifications added)
 **Last Updated:** 2025-12-22
 **Author:** Claude Code
 **Status:** Implementation Ready
