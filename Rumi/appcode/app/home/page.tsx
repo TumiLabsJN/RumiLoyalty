@@ -1,44 +1,38 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server-client'
+import { getUserIdFromToken } from '@/lib/supabase/get-user-id-from-token'
 import { getDashboardOverview } from '@/lib/services/dashboardService'
 import { HomeClient } from './home-client'
 
 /**
  * Home Page (Server Component)
  *
- * DIRECT SERVICE PATTERN (ENH-008):
- * Calls services directly instead of fetching from /api/dashboard.
- * This eliminates ~500-600ms of redundant middleware/auth overhead.
- *
- * The API route (/api/dashboard) is KEPT for client-side refresh/mutations.
+ * PERFORMANCE OPTIMIZATIONS:
+ * - ENH-008: Direct service calls (no fetch to /api/dashboard)
+ * - ENH-010: Local JWT decode (no getUser() network call)
  *
  * Auth Flow:
- * 1. Middleware runs setSession() for /home page route
- * 2. Server Component calls getUser() once (not redundant - we need user ID)
+ * 1. Middleware runs setSession() - validates token, refreshes if needed
+ * 2. Server Component decodes JWT locally to get user ID (~1ms vs ~577ms)
  * 3. Service calls reuse existing repository methods and RPCs
  *
  * References:
  * - HomePageDirectServiceEnhancement.md (ENH-008)
- * - app/api/dashboard/route.ts (logic source)
+ * - HomePageAuthOptimizationEnhancement.md (ENH-010)
  */
 export default async function HomePage() {
   const PAGE_START = Date.now();
 
-  // 1. Get authenticated user
-  // NOTE: Middleware already ran setSession(), this just retrieves the user
-  const t_client = Date.now();
-  const supabase = await createClient();
-  console.log(`[HomePage] t_createClient: ${Date.now() - t_client}ms`);
+  // 1. Get user ID from validated token (local decode, ~1ms)
+  // Middleware already validated via setSession()
+  const t_token = Date.now();
+  const userId = await getUserIdFromToken();
+  console.log(`[HomePage] t_getUserIdFromToken: ${Date.now() - t_token}ms`);
 
-  const t0 = Date.now();
-  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-  console.log(`[HomePage] t_getUser: ${Date.now() - t0}ms`);
-
-  if (authError || !authUser) {
+  if (!userId) {
     redirect('/login/start');
   }
 
-  // 2. Get client ID from environment (same as API route)
+  // 2. Get client ID from environment
   const clientId = process.env.CLIENT_ID;
   if (!clientId) {
     console.error('[HomePage] CLIENT_ID not configured');
@@ -47,7 +41,7 @@ export default async function HomePage() {
 
   // 3. Get dashboard data - DIRECT SERVICE CALL (no fetch)
   const t1 = Date.now();
-  const dashboardData = await getDashboardOverview(authUser.id, clientId);
+  const dashboardData = await getDashboardOverview(userId, clientId);
   console.log(`[HomePage] t_getDashboardOverview: ${Date.now() - t1}ms`);
 
   if (!dashboardData) {

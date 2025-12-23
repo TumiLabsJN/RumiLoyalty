@@ -18,7 +18,6 @@ import type { NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
-  const MW_START = Date.now();
   const { pathname } = request.nextUrl;
 
   // Create response that we can modify
@@ -85,12 +84,10 @@ export async function middleware(request: NextRequest) {
   // Supabase expects sb-xxx-auth-token but we use custom names.
   // Call setSession() to restore session - this also handles token refresh.
   if (authToken) {
-    const t0 = Date.now();
     const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
       access_token: authToken,
       refresh_token: refreshToken || '',
     });
-    console.log(`[Middleware] ${pathname} t_setSession: ${Date.now() - t0}ms`);
 
     // If tokens were refreshed, update our custom cookies
     if (sessionData?.session) {
@@ -136,7 +133,6 @@ export async function middleware(request: NextRequest) {
   // For non-admin routes, session restoration is done - return response
   // This allows the route handler to use the restored session
   if (!pathname.startsWith('/admin')) {
-    console.log(`[Middleware] ${pathname} TOTAL: ${Date.now() - MW_START}ms`);
     return response;
   }
 

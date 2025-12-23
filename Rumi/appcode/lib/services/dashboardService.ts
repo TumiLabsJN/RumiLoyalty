@@ -156,12 +156,8 @@ export async function getDashboardOverview(
   userId: string,
   clientId: string
 ): Promise<DashboardResponse | null> {
-  const SVC_START = Date.now();
-
   // 1. Call RPC - single database round-trip
-  const t_rpc = Date.now();
   const rpcData = await dashboardRepository.getDashboardDataRPC(userId, clientId);
-  console.log(`[DashboardService] t_RPC: ${Date.now() - t_rpc}ms`);
 
   if (!rpcData) {
     return null;
@@ -381,7 +377,6 @@ export async function getDashboardOverview(
   });
 
   // 5. Return fully-formed DashboardResponse
-  console.log(`[DashboardService] TOTAL: ${Date.now() - SVC_START}ms`);
   return {
     user: {
       id: rpcData.user.id,
