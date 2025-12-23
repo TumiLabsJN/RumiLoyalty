@@ -22,10 +22,17 @@ import { HomeClient } from './home-client'
  * - app/api/dashboard/route.ts (logic source)
  */
 export default async function HomePage() {
+  const PAGE_START = Date.now();
+
   // 1. Get authenticated user
   // NOTE: Middleware already ran setSession(), this just retrieves the user
+  const t_client = Date.now();
   const supabase = await createClient();
+  console.log(`[HomePage] t_createClient: ${Date.now() - t_client}ms`);
+
+  const t0 = Date.now();
   const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+  console.log(`[HomePage] t_getUser: ${Date.now() - t0}ms`);
 
   if (authError || !authUser) {
     redirect('/login/start');
@@ -39,11 +46,15 @@ export default async function HomePage() {
   }
 
   // 3. Get dashboard data - DIRECT SERVICE CALL (no fetch)
+  const t1 = Date.now();
   const dashboardData = await getDashboardOverview(authUser.id, clientId);
+  console.log(`[HomePage] t_getDashboardOverview: ${Date.now() - t1}ms`);
 
   if (!dashboardData) {
     return <HomeClient initialData={null} error="Failed to load dashboard" />;
   }
+
+  console.log(`[HomePage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   // 4. Return client component with data
   return <HomeClient initialData={dashboardData} error={null} />;
