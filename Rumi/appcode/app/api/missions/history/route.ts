@@ -18,10 +18,16 @@ import { dashboardRepository } from '@/lib/repositories/dashboardRepository';
  */
 
 export async function GET(request: NextRequest) {
+  const ROUTE_START = Date.now();
   try {
     // Step 1: Validate session token
+    const t1 = Date.now();
     const supabase = await createClient();
+    console.log(`[TIMING][MissionHistoryAPI] createClient(): ${Date.now() - t1}ms`);
+
+    const t2 = Date.now();
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    console.log(`[TIMING][MissionHistoryAPI] auth.getUser(): ${Date.now() - t2}ms`);
 
     if (authError || !authUser) {
       return NextResponse.json(
@@ -53,7 +59,9 @@ export async function GET(request: NextRequest) {
     // Multi-tenant isolation enforced by dashboardRepository via client_id parameter
     // TRADE-OFF: 403 TENANT_MISMATCH consolidated into 401 (acceptable for multi-tenant
     // deployment where tenant mismatch indicates data corruption/misconfiguration)
+    const t3 = Date.now();
     const dashboardData = await dashboardRepository.getUserDashboard(authUser.id, clientId);
+    console.log(`[TIMING][MissionHistoryAPI] getUserDashboard(): ${Date.now() - t3}ms`);
     if (!dashboardData) {
       return NextResponse.json(
         {
@@ -66,6 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 4: Get mission history from service
+    const t4 = Date.now();
     const historyResponse = await getMissionHistory(
       authUser.id,
       clientId,
@@ -75,6 +84,9 @@ export async function GET(request: NextRequest) {
         currentTierColor: dashboardData.currentTier.color,
       }
     );
+    console.log(`[TIMING][MissionHistoryAPI] getMissionHistory(): ${Date.now() - t4}ms`);
+
+    console.log(`[TIMING][MissionHistoryAPI] TOTAL: ${Date.now() - ROUTE_START}ms`);
 
     // Step 6: Return history response
     // Per API_CONTRACTS.md lines 3844-3884
