@@ -58,10 +58,10 @@ Commission Boost ✅
 Discount ✅
 
 **Instant**
-Gift Card
-Physical Gift (Size)
-Physical Gift (No Size)
-Experience
+Gift Card  ✅
+Physical Gift (Size)  ✅
+Physical Gift (No Size)  ✅
+Experience  ✅
 
 ##### Views
 **Scheduled**
@@ -1618,3 +1618,6 @@ Home: Admin generates Raffle name and stores it = rewards.name
 
 Mission: Admin uses value_data.percent inputted into a hardcoded name
 **"Win a Follower Discount of ${percent}% for ${days} days!"**
+
+### Physical Gift / Experience
+See naming 
