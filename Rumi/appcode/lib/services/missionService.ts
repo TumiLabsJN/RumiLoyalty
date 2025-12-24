@@ -873,10 +873,20 @@ export async function listAvailableMissions(
     return { item, data };
   });
 
+  // 2a. Filter out lost raffles (defense in depth - RPC should already exclude)
+  // Per BUG-RAFFLE-002: Losers should not see raffle on active missions page
+  const filteredMissions = missionsWithData.filter(({ data }) => {
+    // Exclude lost raffles - they belong in history, not available missions
+    if (data.raffleParticipation?.isWinner === false) {
+      return false;
+    }
+    return true;
+  });
+
   // 3. Determine featured mission (first in-progress or claimable non-locked mission)
   // Per API_CONTRACTS.md lines 3247-3251
   let featuredMissionId: string | null = null;
-  for (const { item } of missionsWithData) {
+  for (const { item } of filteredMissions) {
     if (item.status !== 'locked' && item.status !== 'dormant') {
       featuredMissionId = item.id;
       break;
@@ -884,7 +894,7 @@ export async function listAvailableMissions(
   }
 
   // 4. Sort missions by priority
-  const sortedMissions = sortMissions(missionsWithData, vipMetric, featuredMissionId);
+  const sortedMissions = sortMissions(filteredMissions, vipMetric, featuredMissionId);
 
   // 5. Return response
   return {
