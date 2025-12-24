@@ -84,11 +84,12 @@ export default async function SignupPage() {
       version: '1.0'
     }
   } else {
-    // Fallback: Use API routes (slower but works if files missing)
-    console.warn(`[SignupPage] Files not found, falling back to API routes`);
+    // Fallback: Use 'fizee' default legal docs (original behavior)
+    // Client-specific files can be added per ClientLegalDocuments.md guide
+    console.warn(`[SignupPage] Files not found for client ${clientId}, using default (fizee)`);
     const t2 = Date.now();
-    const fallbackResult = await fetchLegalDocumentsFallback(clientId)
-    console.log(`[TIMING][SignupPage] API fallback(terms+privacy): ${Date.now() - t2}ms`);
+    const fallbackResult = await fetchLegalDocumentsFallback('fizee')
+    console.log(`[TIMING][SignupPage] API fallback(fizee): ${Date.now() - t2}ms`);
 
     terms = fallbackResult.terms
     privacy = fallbackResult.privacy
