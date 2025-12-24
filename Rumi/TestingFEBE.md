@@ -139,7 +139,7 @@ missions	mission_progress
 activated=false	status='dormant'
 
 
-##### Step 1b UI = CARD STATE: Raffle Available
+##### Step 1b UI = CARD STATE: Raffle Available ✅
 **Description**: Admin Activates Raffle
 
 missions	mission_progress

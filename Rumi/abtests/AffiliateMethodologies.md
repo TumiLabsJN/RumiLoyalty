@@ -831,6 +831,18 @@ Nine components identified:
 | **"前端导流+后端转化"闭环** | Source 4 | Front-end traffic + back-end conversion closed loop |
 | **Platform differentiation models** | Source 4 | 5 distinct platform strategies: trust/interest/shelf/seeding/co-creation |
 | **价值共鸣 vs 价格竞争** | Source 4 | Value resonance replacing price competition as driver |
+| **三力 framework (商品力+内容力+服务力)** | Source 4 | Product + Content + Service powers mapped to formats |
+| **"所见即所得" (WYSIWYG)** | Source 4 | Multi-angle display → trust → ↑conversion ↓returns |
+| **"边看边买" (Watch-while-buy)** | Source 4 | Real-time interaction converts fan enthusiasm to purchases |
+| **情绪价值 (Emotional value)** | Source 4 | Entertainment/knowledge/games beyond shopping needs |
+| **"货找人" paradigm** | Source 4 | Products find people = creates NEW demand |
+| **"唯流量论"→"品质直播" shift** | Source 4 | Industry moving from traffic-only to quality focus |
+| **"前播后产" model** | Source 4 | Front-broadcast, back-produce for industrial belts |
+| **"车间直播+工匠主播"** | Source 4 | Workshop livestream + craftsman hosts for authenticity |
+| **爆品计划 (Hit Product Plan)** | Source 4 | Head + mid-tier influencer coverage for high-ticket items |
+| **50% repurchase rate benchmark** | Source 4 | "小叶子" case: trust + quality = high loyalty |
+| **"自营+分销+达人" model** | Source 4 | Omni-domain growth: self-operated + distribution + influencers |
+| **95% cold-start coverage** | Source 4 | Kuaishou's SME support mechanism |
 
 ## Contradictions / Tensions
 | Tension | Sources | Notes |
@@ -881,6 +893,14 @@ Nine components identified:
 34. **Market tier segmentation** — 新线市场 (Tier 3-5) shows different patterns (Source 4, NEW)
 35. **"Seeding + livestream" integration** — 小红书 model vs separate content/sales (Source 4, NEW)
 36. **Dual-format "直播+货架" strategies** — 2024 marks shift to dual-wheel drive (Source 4, NEW)
+37. **三力 (Three Powers) balance testing** — product vs content vs service power as levers (Source 4, NEW)
+38. **"货找人" discovery formats** — creates NEW demand vs capturing existing intent (Source 4, NEW)
+39. **Emotional value content** — entertainment/knowledge/games vs pure product content (Source 4, NEW)
+40. **Quality signals over traffic metrics** — 唯流量论 → 品质直播 shift (Source 4, NEW)
+41. **Workshop/factory livestream formats** — "车间直播" for authenticity + craftsmanship (Source 4, NEW)
+42. **爆品计划 strategies for high-ticket items** — head + mid-tier influencer coverage (Source 4, NEW)
+43. **Repurchase rate as primary loyalty metric** — 50% benchmark from "小叶子" case (Source 4, NEW)
+44. **"自营+分销+达人" omni-domain model** — brand growth framework (Source 4, NEW)
 
 ---
 
@@ -999,7 +1019,83 @@ Nine components identified:
 
 ---
 
-*Source 4 IN PROGRESS (6/22 chunks processed)*
+### What This Source Teaches Us (Chunks 7-13)
+
+#### Trust Ecosystem Model (Figure 4)
+
+**Three Powers (三力) Framework:**
+| Power | Format | Role |
+|-------|--------|------|
+| **商品力** (Product) | 短视频 | Product showcase |
+| **内容力** (Content) | 直播 | Engagement/trust |
+| **服务力** (Service) | 货架 | Transaction/fulfillment |
+
+**Two Pathways to Consumer:**
+1. 品牌自营 (Brand self-operated)
+2. 达人推荐 (Creator recommendation)
+
+#### Industry Innovation Mechanisms
+
+| Mechanism | Effect |
+|-----------|--------|
+| **"所见即所得"** (WYSIWYG) | Multi-angle display → trust → ↑conversion, ↓returns |
+| **"边看边买"** (Watch-while-buy) | Real-time interaction → participation → purchasing power |
+| **情绪价值** (Emotional value) | Entertainment + knowledge + games beyond shopping |
+| **"货找人"** vs "人找货" | Products find people (creates NEW demand) vs people find products |
+| **"信任经济"** (Trust economy) | Seamless seeding → conversion via trust |
+
+**Critical Industry Shift:**
+- FROM: **"唯流量论"** (Traffic-only thinking)
+- TO: **"品质直播"** (Quality livestreaming)
+
+#### Economic Value Data
+
+**Consumer Impact:**
+| Metric | Value | Source |
+|--------|-------|--------|
+| Users who bought due to video/livestream | **71.2%** | China Audiovisual Report 2024 |
+| New customers from livestream (enterprises) | **72%** | Kuaishou survey |
+| Product innovation speed after livestream | **2x faster** | Kuaishou survey |
+
+**Regional Models:**
+- **"在地资源-数字平台-全国市场"** value loop
+- **"前播后产"** (Front-broadcast, back-produce) model
+- **Guangzhou 2024:** 517.1B yuan livestream retail — **#1 in China**
+- Merchant transformation: **10-20x revenue growth**
+
+**Industrial Belt Cases:**
+| Case | Model | Key Result |
+|------|-------|------------|
+| Jiangshan Doors | "车间直播+工匠主播" | 3B+ yuan online orders |
+| Honor V Purse | 爆品计划 (Hit Product Plan) | **+2000% MoM GMV** |
+| "小叶子" Paper | Source goods + refined ops | **50% repurchase rate** |
+
+**SME Support (Kuaishou):**
+- New merchant cold-start coverage: **>95%**
+- Programs: 新商启航, 新星计划, 爆品计划, 零元开店, 退货补贴, 销售托管
+- Full lifecycle support system
+
+### Additional Test Implications (Chunks 7-13)
+
+- **We should test 三力 (Three Powers) balance** — product power vs content power vs service power as levers
+
+- **We should test "货找人" discovery formats** because this creates NEW demand vs capturing existing intent
+
+- **We should test emotional value content** (entertainment, knowledge, games) vs pure product content
+
+- **We should test quality signals over traffic metrics** because industry shifting from 唯流量论 → 品质直播
+
+- **We should test workshop/factory livestream formats** ("车间直播") because authenticity + craftsmanship messaging drives trust
+
+- **We should test 爆品计划 (hit product) strategies** for high-ticket items — head + mid-tier influencer coverage
+
+- **We should measure repurchase rate as primary loyalty metric** because "小叶子" achieved 50% via trust + quality
+
+- **We should test "自营+分销+达人" omni-domain model** as brand growth framework
+
+---
+
+*Source 4 IN PROGRESS (13/22 chunks processed)*
 
 ---
 

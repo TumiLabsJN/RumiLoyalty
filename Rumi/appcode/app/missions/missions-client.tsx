@@ -785,6 +785,11 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                   </div>
                 )}
 
+                {/* CARD STATE: Dormant Raffle - "Coming Soon!" text */}
+                {isDormant && isRaffle && (
+                  <p className="text-sm text-slate-500 font-medium">Coming Soon!</p>
+                )}
+
                 {/* CARD STATE: Raffle Claim - Green "Claim Reward" button */}
                 {isRaffleClaim && (
                   <Button
