@@ -38,6 +38,7 @@ export interface MissionsPageResponse {
 export interface Mission {
   // Core mission data
   id: string                          // UUID from missions.id
+  progressId: string | null           // UUID from mission_progress.id (for claim calls; null if no progress)
   missionType: MissionType
   displayName: string                 // Backend-generated from missions.display_name
   targetUnit: 'dollars' | 'units' | 'count'  // From missions.target_unit

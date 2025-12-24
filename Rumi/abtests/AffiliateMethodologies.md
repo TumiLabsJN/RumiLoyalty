@@ -843,6 +843,35 @@ Nine components identified:
 | **50% repurchase rate benchmark** | Source 4 | "小叶子" case: trust + quality = high loyalty |
 | **"自营+分销+达人" model** | Source 4 | Omni-domain growth: self-operated + distribution + influencers |
 | **95% cold-start coverage** | Source 4 | Kuaishou's SME support mechanism |
+| **Employment multiplier** | Source 4 | ~1,200 jobs per 100M yuan GMV |
+| **174 new professions** | Source 4 | Kuaishou ecosystem job creation |
+| **AI-powered recommendation** | Source 4 | Shopping cycle, weather, lifestyle factors → ultra-personalization |
+| **"信任购" trust guarantee** | Source 4 | 3B yuan compensation → +12% repurchase, -27% disputes |
+| **AI false ad detection (96%)** | Source 4 | AI risk control enables quality at scale |
+| **流量驱动→智能工业化** | Source 4 | Future shift from traffic to intelligent industrialization |
+| **跨境电商+直播** | Source 4 | Cross-border e-commerce + livestream emerging model |
+| **AI democratization** | Source 4 | Small merchants compete with large via AI tools |
+| **15 regulations / 9 years** | Source 4 | Comprehensive regulatory framework evolution |
+| **Three Traffic Sources Model** | Source 5 | Taobao Search + Social Media + Private Traffic |
+| **Private Traffic (私域流量)** | Source 5 | Extracting traffic to private pools; reduces CAC, increases repurchase |
+| **Platform-native search behavior** | Source 5 | Chinese search ON e-commerce platforms, not Google |
+| **Taoke (淘客) commission model** | Source 5 | Taobao influencer system since 2007; commission-based |
+| **LOT (Likelihood of Transfer) Model** | Source 5 | EOU + U - DOU - S = transfer potential |
+| **Red (小红书) uniqueness** | Source 5 | NO Western equivalent; UGC + community shopping reviews |
+| **KOL data falsification risk** | Source 5 | Unique SME challenge; fake data from influencer cooperation |
+| **Shopping festival atmosphere** | Source 5 | Purchase intention influenced by promotional atmosphere |
+| **Platform feature gaps (China vs West)** | Source 5 | Mini-programs, product links, live sell — China ahead |
+| **Five Social Commerce Archetypes** | Source 6 | 社交引流型, 社交营销式, 社交砍价型, 社区团购/S2B2C, 社交DTC |
+| **Social influence on purchase (3.6x growth)** | Source 6 | Purchase behavior influenced: 7%→25% (2017→2019) |
+| **Public→Private domain journey** | Source 6 | Perfect Diary: public domain → WeChat groups → conversion |
+| **"微商" WeChat commerce model** | Source 6 | TST: 30B RMB, 150% CAGR via social direct sales |
+| **Four Capabilities Playbook** | Source 6 | User acquisition, community ops, content ops, CRM infrastructure |
+| **Lifestyle content > product promotion** | Source 6 | Overt promotion causes consumer fatigue |
+| **"Mini-CEO" community manager model** | Source 6 | Store managers own community + store engagement |
+| **Social "War Room" agile approach** | Source 6 | Pilot test, iterate rapidly, scale in 6 months |
+| **Low-tier city opportunity** | Source 6 | Disposable income + love online deals |
+| **Group buying mechanics** | Source 6 | 30% discount for friend referrals → top 4 brand in 2 years |
+| **6,000+ KOL/KOC army model** | Source 6 | Perfect Diary's public + private domain engagement |
 
 ## Contradictions / Tensions
 | Tension | Sources | Notes |
@@ -901,6 +930,28 @@ Nine components identified:
 42. **爆品计划 strategies for high-ticket items** — head + mid-tier influencer coverage (Source 4, NEW)
 43. **Repurchase rate as primary loyalty metric** — 50% benchmark from "小叶子" case (Source 4, NEW)
 44. **"自营+分销+达人" omni-domain model** — brand growth framework (Source 4, NEW)
+45. **AI-powered ultra-personalization** — shopping cycle, weather, lifestyle-aware recommendations (Source 4, NEW)
+46. **"信任购" trust guarantee programs** — compensation programs drove +12% repurchase, -27% disputes (Source 4, NEW)
+47. **AI content generation (AIGC)** — digital humans, auto-generated materials scaling fast (Source 4, NEW)
+48. **Cross-border livestream formats** — "跨境电商+直播" emerging model (Source 4, NEW)
+49. **Rural/agricultural product positioning** — policy targets 100K rural livestream entities (Source 4, NEW)
+50. **Dispute rate as quality metric** — track alongside repurchase as trust indicator (Source 4, NEW)
+51. **Private traffic pool strategies** — creator communities to reduce CAC, increase repurchase (Source 5, NEW)
+52. **Platform-native search behavior** — TikTok Shop search differs from Google/Amazon intent (Source 5, NEW)
+53. **Live streaming for dual trust** — builds trust in BOTH sellers AND products; LOT score 7/10 (Source 5, NEW)
+54. **Customer review ecosystem** — Red-style community reviews have no Western equivalent (Source 5, NEW)
+55. **Short video for "fragmented info"** — stimulating, quick content preferred by users (Source 5, NEW)
+56. **KOL data verification mechanisms** — mitigate false data from influencer cooperation (Source 5, NEW)
+57. **Shopping festival atmosphere** — promotional atmosphere drives purchase intention (Source 5, NEW)
+58. **Affiliate/commission model adoption** — Taoke-style underused in West due to fraud concerns (Source 5, NEW)
+59. **Five Archetypes framework application** — determine which model(s) fit TikTok Shop best (Source 6, NEW)
+60. **Social referral commission structures** — 15-32% range drove 150% CAGR at TST (Source 6, NEW)
+61. **Public→Private domain journey** — Perfect Diary's WeChat conversion = 25% of sales (Source 6, NEW)
+62. **Lifestyle vs product content ratio** — overt promotion causes fatigue (Source 6, NEW)
+63. **"Mini-CEO" community manager model** — store managers own community engagement (Source 6, NEW)
+64. **Group buying mechanics** — 30% discounts for friend referrals (Source 6, NEW)
+65. **Agile "War Room" approach** — pilot, iterate, scale in 6 months (Source 6, NEW)
+66. **Low-tier city targeting** — disposable income + love online deals (Source 6, NEW)
 
 ---
 
@@ -908,9 +959,223 @@ Nine components identified:
 
 ---
 
+## Source 5: Potential lessons from Chinese businesses and platforms for online networking and marketing: An exploratory study
+**File:** ScienceDirect paper (3 chunks)
+**Authors:** Lingjun Zhang, Emre Erturk
+**Journal:** Social Sciences & Humanities Open, Vol 6, Issue 1, 2022
+**DOI:** 10.1016/j.ssaho.2022.100274
+**Methodology:** Qualitative — 12 Chinese SME cases (Taobao sellers) + NZ marketing experts
+**Platform Focus:** Taobao, with cross-platform comparisons
+**Read date:** 2025-12-24
+
+### What This Source Teaches Us
+
+#### Core Framework: Three Traffic Sources Model (Figure 1)
+Chinese SMEs increase online traffic through:
+1. **Taobao Search** (Free: SEO, livestream, tag match; Paid: sponsored, Taoke, festivals)
+2. **Social Media** (WeChat, Douyin, Weibo, Red, Commission Apps)
+3. **Private Traffic** (controllable pool of loyal customers)
+
+#### CRITICAL CONCEPT: Private Traffic (私域流量)
+- **NEW term** with no prior academic research at time of study
+- Definition: Extracting traffic from public platforms to private pools
+- Purpose: Retain loyal customers, increase repurchase rate
+- Response to **increasingly expensive CAC** (customer acquisition cost)
+- Chinese customers **accepting** of joining private traffic pools
+- Primary channel: WeChat (groups, Moments, Mini-Programs)
+
+#### China vs West CRITICAL DIFFERENCE
+> "Chinese consumers search on **e-commerce platforms** to find products, NOT search engines"
+
+Western consumers use Google first; Chinese use Taobao/JD directly.
+
+#### Platform Usage Among 12 Chinese SME Cases
+| Platform | Usage | Function |
+|----------|-------|----------|
+| WeChat | 12/12 | Loyal engagement, repurchase |
+| Red (小红书) | 6/12 | Acquisition + retention |
+| Douyin | 5/12 | New customer acquisition |
+| Weitao | 5/12 | In-platform social |
+| Weibo | 2/12 | Broadcast reach |
+
+#### Free Traffic Strategies
+1. **SEO on Taobao** — keyword optimization, content/picture/video optimization, store performance
+2. **Live streaming** — free method to attract new customers, real-time communication increases conversion
+3. **Persona tags match** — Taobao empowers sellers with consumer tag database
+
+#### Paid Traffic Strategies
+1. **Sponsored ads** — Express Train (CPC), Drillings (CPM)
+2. **Taoke (Taobao influencer)** — commission-based since 2007
+3. **Shopping festivals** — Double 11, Double 12, etc.
+
+#### Four Key SME Challenges
+1. Marketing budget
+2. Social media content creation ability
+3. Digital marketing expertise
+4. **False data from KOL cooperation** (UNIQUE — not in prior literature)
+
+#### Platform Feature Comparison (Table 1)
+| Feature | China | West | Gap |
+|---------|-------|------|-----|
+| Mini-programs | WeChat ✓ | Facebook ✗ | Major |
+| Product links in video | Douyin ✓ | TikTok ✗ | Major |
+| Live stream sell | Douyin ✓ | TikTok ✗ | Major |
+| E-commerce link | Weibo ✓ | Twitter ✗ | Major |
+
+#### CRITICAL GAP: Red (小红书)
+- **NO comparable platform in West**
+- Shopping experience sharing within community
+- Decentralized UGC model
+- Features: UGC + cross-border commerce
+
+#### Likelihood of Transferring (LOT) Model
+Formula: `LOT = EOU + U – DOU – S`
+
+| Strategy | LOT Score | Transferability |
+|----------|-----------|-----------------|
+| **Live streaming** | **7** | Highest |
+| **Red (reviews)** | **6** | High |
+| **Douyin/TikTok** | **4** | Medium |
+| **Private traffic** | **4** | Medium |
+| SEO | 1 | Lowest |
+| Taobao influencer | 1 | Lowest |
+
+#### Knowledge Transfer Barriers
+- Cultural difference
+- Language barriers
+- Attitudes toward non-Western innovation
+- Availability of technology
+- Western marketers mainly follow US media for trends
+
+#### Key Conclusion
+> "Live-streaming, short video, customer reviews, and private traffic management are the skills which should be acquired by [Western] marketing practitioners in the future."
+
+### Test Implications
+
+- **We should test private traffic strategies** because Chinese SMEs use private pools to reduce CAC and increase repurchase — creator communities may serve similar function
+
+- **We should test platform-native search behavior** because Chinese consumers search ON e-commerce platforms, not via Google — TikTok Shop search differs from Amazon
+
+- **We should test live streaming for trust-building** because LOT model rates it highest (7/10) for Western transfer — enhances trust in BOTH sellers AND products
+
+- **We should test customer review ecosystem development** because Red has no Western equivalent but drives high engagement
+
+- **We should test short video marketing** because "fragmented and stimulating information is preferred" by users
+
+- **We should measure KOL data falsification risk** because Chinese SMEs identified false data from influencer cooperation as unique challenge
+
+- **We should test shopping festival atmosphere effects** because consumers' purchase intention influenced by shopping atmosphere
+
+- **We should test affiliate/commission models** because similar to Taoke system but underused in West due to fraud concerns
+
+---
+
+*Source 5 COMPLETE (3/3 chunks processed)*
+
+---
+
+## Source 6: 发挥社交电商力量，推动中国业务增长 (Harnessing Social Commerce Power to Drive China Business Growth)
+**File:** McKinsey China Consumer Special (3 chunks)
+**Authors:** 贝山 (Caleb Balloch), 卜览, 李智博
+**Publisher:** McKinsey & Company
+**Type:** Strategy report
+**Read date:** 2025-12-24
+
+### What This Source Teaches Us
+
+#### Market Context
+- Chinese social commerce: **triple-digit growth** over 5 years
+- Consumers spend **>7 hours/day** on mobile internet (+20% post-COVID)
+- **2/3 of time** on social/content apps
+- Traditional e-commerce (Alibaba/JD) growth slowed to **20-25%**
+- CAC and retention costs **rising sharply**
+
+#### Social Influence on Purchase (Figure 1)
+| Metric | 2017 | 2019 | Change |
+|--------|------|------|--------|
+| Shopping **interest** influenced | 37% | **50%** | +35% |
+| **Purchase** behavior influenced | 7% | **25%** | **3.6x** |
+
+#### Market Size
+- 2021 projected: **2.9 trillion RMB** (>2x from 2019)
+- Platform MAU growth: Pinduoduo +92%, 京喜 +2829%, 兴盛优选 +233%
+
+#### FIVE SOCIAL COMMERCE ARCHETYPES (Critical Framework)
+| Archetype | Description | Example |
+|-----------|-------------|---------|
+| **社交引流型** | KOL/KOC drive traffic to platforms | 李子柒 (>100M RMB sales) |
+| **社交营销式** | KOL/KOC guide to brand stores | — |
+| **社交砍价型** | Group buying, price drops | Pinduoduo, 植护, 韩束 |
+| **社区团购/S2B2C** | Commission-based friend selling | TST (30B RMB, 150% CAGR) |
+| **社交DTC** | WeChat group + mini-program | 完美日记 (3B RMB, 5x YoY) |
+
+#### Value Chain Disruption (4 shifts)
+1. **Consumer engagement more active** — brand equity built through social interaction + WOM between consumers
+2. **Business models more complex** — direct sales revival; referral rewards; higher margins, lower marketing spend
+3. **Innovation becomes collaborative** — brands + KOL/KOC co-develop products
+4. **Internal operations become agile** — cross-functional teams, fast iterations
+
+#### Case Study Highlights
+
+**TST庭秘密 (S2B2C model):**
+- 2020 sales: **>30 billion RMB**
+- Members: **6 million** in 7 years
+- CAGR since 2017: **150%**
+- Commission: **15%-32%** for referrals
+- Model: "微商" WeChat commerce
+
+**完美日记 (Social DTC model):**
+- 2019 sales: **>3 billion RMB** (5x YoY)
+- WeChat groups + mini-programs = **~25% of sales**
+- **6,000+ KOL/KOC** army
+- Journey: Public domain → Private domain → WeChat groups → conversion
+
+#### FOUR CAPABILITIES FOR SOCIAL DTC PLAYBOOK (Figure 4)
+| Capability | Key Elements |
+|------------|--------------|
+| **1. 用户获取** | 公域 (paid) + 社交推荐 (referral) + 流量交换 (traffic exchange) |
+| **2. 用户/社区运营** | "Mini-CEO" managers; 3 KOL types (ambassadors, celebrities, community partners) |
+| **3. 社交内容运营** | **Lifestyle content is KEY** — overt promotion causes fatigue |
+| **4. 社交+CRM基础架构** | WeChat migration, mini-programs, omni-channel CRM |
+
+#### Success Roadmap
+- **Pilot test + rapid iteration** (NOT lengthy strategies)
+- **Social "War Room"** — agile team experiments daily
+- Successful brands build social commerce business **within 6 months**
+- Consolidate learnings → scale to other products/regions
+
+#### Low-Tier City Opportunity
+- Cities like 绵阳, 盐城, 自贡 becoming important
+- Consumers have significant disposable income
+- Love online deals and "value-for-money" positioning
+
+### Test Implications
+
+- **We should test the Five Archetypes framework** to determine which model(s) fit TikTok Shop affiliate commerce best
+
+- **We should test social referral commission structures** (15-32% range from TST) because S2B2C model drove 150% CAGR
+
+- **We should test public→private domain journeys** because Perfect Diary's WeChat group conversion = 25% of sales
+
+- **We should test lifestyle vs product content ratio** because "overt promotion causes consumer fatigue"
+
+- **We should test "Mini-CEO" community manager models** where store managers own community engagement
+
+- **We should test group buying mechanics** because 30% discounts for friend referrals drove brand to top 4 in 2 years
+
+- **We should implement agile "War Room" approach** — pilot test, iterate rapidly, scale in 6 months
+
+- **We should test low-tier city targeting** because these consumers have disposable income + love online deals
+
+---
+
+*Source 6 COMPLETE (3/3 chunks processed)*
+
+---
+
 ## Source 4: 直播电商高质量发展报告 2024 (Livestream E-commerce High-Quality Development Report 2024)
-**File:** chinatrends2.pdf (22 chunks — IN PROGRESS)
-**Pages:** ~19+ (processing chunks 1-6)
+**File:** chinatrends2.pdf (22 chunks — COMPLETE)
+**Pages:** 19
 **Author:** 中国国际电子商务中心研究院 (China International Electronic Commerce Center Research Institute) — **Official government body**
 **Published:** May 2025
 **Type:** Industry report with official statistics
@@ -1095,7 +1360,85 @@ Nine components identified:
 
 ---
 
-*Source 4 IN PROGRESS (13/22 chunks processed)*
+### What This Source Teaches Us (Chunks 14-22)
+
+#### Social Value & Employment
+
+**Employment Multiplier:**
+| Metric | Value |
+|--------|-------|
+| Jobs per 100M yuan GMV | ~1,200 |
+| New professions per livestream room | 30+ |
+| Professional anchors (2024) | **38.8 million** (+150% YoY) |
+| Short video accounts | **1.62 billion** |
+| Kuaishou ecosystem new professions | **174** |
+
+**Rural Revitalization Policy Targets:**
+- 2025: Rural 5G >80%, cultivate 100,000 rural livestream entities
+- Case: Binchuan purple garlic — ~100M yuan sales, 70% e-commerce, 100 tons/day
+
+#### AI Transformation
+
+**Kuaishou AI Products:**
+- LLMs: 快意 (Language), 可图 (Image), 可灵 (Video)
+- Applications: 女娲数字人, 智能客服π, AIGC短视频素材
+
+**AI Metrics:**
+| Product | Result |
+|---------|--------|
+| AIGC + Digital Human daily consumption | >30M yuan (2024 Q4) |
+| UAX auto-placement penetration | ~60% |
+| UAX cold-start success | +25% |
+| 全站推广 Agent organic GMV | +60% |
+| AI false ad detection accuracy | **96%** |
+
+#### Regulatory Framework (2016-2024)
+
+**15 regulations over 9 years** covering:
+- Real-name verification, content storage
+- Anti-fraud (刷单 prohibited)
+- 31 prohibited anchor behaviors
+- Consumer protection, tax compliance
+- Platform accountability
+
+#### Platform Governance Results (Kuaishou)
+
+| Measure | Result |
+|---------|--------|
+| Risk products intercepted | 110,000+ |
+| "信任购" annual compensation | >3B yuan |
+| AI false ad accuracy | 96% |
+| **Repurchase rate** | **+12% YoY** |
+| **Dispute rate** | **-27%** |
+
+#### Future Trends
+
+**Three Major Shifts:**
+| From | To |
+|------|----|
+| 流量驱动 (Traffic) | 产业纵深整合 (Industrial integration) |
+| 流量驱动 (Traffic) | 智能工业化 (Intelligent industrialization) |
+| Domestic | 跨境电商+直播 (Cross-border + livestream) |
+
+**AI democratization:** Small merchants can now compete with large ones via AI tools
+
+### Additional Test Implications (Chunks 14-22)
+
+- **We should test AI-powered recommendation** because AI enables ultra-personalized product matching based on shopping cycle, weather, lifestyle
+
+- **We should test "信任购" trust guarantee programs** because Kuaishou's 3B yuan compensation drove +12% repurchase, -27% disputes
+
+- **We should test AI content generation** (AIGC素材, digital humans) as these are scaling rapidly (>30M yuan daily)
+
+- **We should test cross-border livestream formats** because "跨境电商+直播" is emerging trend
+
+- **We should test rural/agricultural product positioning** because policy targets 100,000 rural livestream entities
+
+- **We should measure dispute rate alongside repurchase** as trust quality indicators
+
+---
+
+*Source 4 COMPLETE (22/22 chunks processed)*
 
 ---
 

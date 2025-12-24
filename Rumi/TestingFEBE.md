@@ -7,8 +7,10 @@
   | Gold     | testgold@test.com     | @testgold     |
   | Platinum | testplatinum@test.com | @testplatinum |
 
-  TestPass123!
-
+  TestPass123! 
+## Silver
+@silvercreator1 silver1@test.com    | Local bcrypt (same hash as silver2) |
+@silvercreator2 silver2@test.com    | Local bcrypt (same hash as silver1) |
 
 # HOME PAGE
 ## Reward Claiming
@@ -146,7 +148,7 @@ missions	mission_progress
 activated=true	status='active'
 
 
-##### STAGE 2: CARD STATE: Raffle Processing
+##### STAGE 2: CARD STATE: Raffle Processing ✅
 **Description**: User participates
 
 mission_progress	redemptions	"raffle_participations

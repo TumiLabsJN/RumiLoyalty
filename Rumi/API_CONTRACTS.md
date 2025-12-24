@@ -2984,7 +2984,8 @@ interface MissionsPageResponse {
   // Missions list (sorted by actionable priority - see Sorting Logic below)
   missions: Array<{
     // Core mission data
-    id: string                          // UUID from mission_progress.id (NOT missions.id - for claim/participate calls)
+    id: string                          // UUID from missions.id
+    progressId: string | null           // UUID from mission_progress.id (for claim calls; null if no progress)
     missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
     displayName: string                 // Backend-generated from missions.display_name
     targetUnit: 'dollars' | 'units' | 'count'  // From missions.target_unit
@@ -3728,6 +3729,8 @@ POST /api/missions/550e8400-e29b-41d4-a716-446655440000/claim
 Authorization: Bearer <supabase-jwt-token>
 Content-Type: application/json
 ```
+
+> **Parameter Clarification:** The `:id` parameter in this endpoint is `mission_progress.id` (aliased as `progressId` in the missions API response), NOT `missions.id`. Despite the folder name `[missionId]`, callers must pass `progressId` from the missions API response.
 
 ### Request Body Schema
 

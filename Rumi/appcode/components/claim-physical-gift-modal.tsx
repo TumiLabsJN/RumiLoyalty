@@ -16,6 +16,7 @@ import { toast } from "sonner"
 
 interface PhysicalGiftReward {
   id: string
+  progressId?: string  // For claim calls (mission_progress.id)
   displayName: string
   rewardType: "physical_gift"
   valueData: {
@@ -70,7 +71,7 @@ export function ClaimPhysicalGiftModal({
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(`/api/missions/${reward.id}/claim`, {
+      const response = await fetch(`/api/missions/${reward.progressId || reward.id}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

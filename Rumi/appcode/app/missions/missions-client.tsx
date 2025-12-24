@@ -55,7 +55,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   const [showPayboostModal, setShowPayboostModal] = useState(false)
   const [showPaymentInfoModal, setShowPaymentInfoModal] = useState(false)
   const [showPhysicalGiftModal, setShowPhysicalGiftModal] = useState(false)
-  const [selectedMission, setSelectedMission] = useState<{ id: string; percent: number; durationDays: number } | null>(null)
+  const [selectedMission, setSelectedMission] = useState<{ id: string; progressId?: string | null; percent: number; durationDays: number } | null>(null)
   const [selectedPaymentMission, setSelectedPaymentMission] = useState<{ id: string; name: string } | null>(null)
   const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null)
 
@@ -95,6 +95,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     if (mission.rewardType === "discount") {
       setSelectedMission({
         id: mission.id,
+        progressId: mission.progressId,
         percent: mission.valueData?.percent || 0,
         durationDays: mission.valueData?.durationDays || 30
       })
@@ -105,6 +106,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     if (mission.rewardType === "commission_boost") {
       setSelectedMission({
         id: mission.id,
+        progressId: mission.progressId,
         percent: mission.valueData?.percent || 0,
         durationDays: mission.valueData?.durationDays || 30
       })
@@ -122,7 +124,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     // For other reward types (gift_card, spark_ads, experience), claim immediately
     await claimMissionReward(
       {
-        missionProgressId: mission.id,
+        missionProgressId: mission.progressId || mission.id,
         successMessage: 'Reward claimed!',
         successDescription: 'Check back soon for fulfillment updates',
       },
@@ -143,7 +145,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
       const dateStr = isoString.split('T')[0]
       const timeStr = isoString.split('T')[1].split('.')[0]
 
-      const response = await fetch(`/api/missions/${selectedMission.id}/claim`, {
+      const response = await fetch(`/api/missions/${selectedMission.progressId || selectedMission.id}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -201,7 +203,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
       const dateStr = isoString.split('T')[0]
       const timeStr = isoString.split('T')[1].split('.')[0]
 
-      const response = await fetch(`/api/missions/${selectedMission.id}/claim`, {
+      const response = await fetch(`/api/missions/${selectedMission.progressId || selectedMission.id}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
