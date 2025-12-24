@@ -3,10 +3,14 @@
 **ID:** ENH-013
 **Type:** Enhancement (Performance Optimization)
 **Created:** 2025-12-24
-**Status:** Analysis Complete
+**Status:** Implemented
 **Priority:** Medium
 **Related Tasks:** Follows ENH-012 pattern (Direct Service Pattern)
-**Linked Issues:** ENH-012 (Login Layout Optimization)
+**Linked Issues:** ENH-012 (Login Layout Optimization), BUG-001 (Fallback fix)
+
+> **Implementation Note:** Implemented 2025-12-24. During deployment testing, BUG-001 was
+> discovered and fixed: the fallback now uses `'fizee'` as the default client for legal docs
+> when client-specific files don't exist. See `SignupPageFallbackBugFix.md` for details.
 
 ---
 

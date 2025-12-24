@@ -59,6 +59,9 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   const [selectedPaymentMission, setSelectedPaymentMission] = useState<{ id: string; name: string } | null>(null)
   const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null)
 
+  // Raffle participation state
+  const [participatingMissionId, setParticipatingMissionId] = useState<string | null>(null)
+
   // ============================================
   // DATA FETCHING - REMOVED (ENH-004)
   // ============================================
@@ -243,10 +246,52 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
     }
   }
 
-  const handleParticipateRaffle = (missionId: string) => {
-    console.log("[v0] Participate in raffle clicked:", missionId)
-    // TODO: POST /api/missions/:id/participate
-    // Creates mission_progress (status='processing'), raffle_participants, redemptions
+  const handleParticipateRaffle = async (missionId: string) => {
+    if (participatingMissionId) return // Prevent double-click
+
+    setParticipatingMissionId(missionId)
+
+    try {
+      const response = await fetch(`/api/missions/${missionId}/participate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to enter raffle')
+      }
+
+      // Null guard: only update if state exists
+      setMissionsData(prev =>
+        prev ? {
+          ...prev,
+          missions: prev.missions.map(m =>
+            m.id === missionId
+              ? { ...m, status: 'raffle_processing' as const }
+              : m
+          )
+        } : prev
+      )
+
+      // Show success toast with draw date
+      toast.success("You're entered in the raffle!", {
+        description: data.raffleData?.drawDateFormatted
+          ? `Draw date: ${data.raffleData.drawDateFormatted}`
+          : "Good luck!",
+        duration: 5000,
+      })
+
+    } catch (error) {
+      console.error('[Missions] Participate error:', error)
+      toast.error('Failed to enter raffle', {
+        description: error instanceof Error ? error.message : 'Please try again',
+        duration: 5000,
+      })
+    } finally {
+      setParticipatingMissionId(null)
+    }
   }
 
   const handlePhysicalGiftSuccess = () => {
@@ -715,10 +760,19 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                 {isRaffleAvailable && (
                   <Button
                     onClick={() => handleParticipateRaffle(mission.id)}
+                    disabled={participatingMissionId === mission.id}
                     className="w-full bg-gradient-to-r from-purple-500 to-purple-600
-  hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 rounded-lg"
+  hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 rounded-lg
+  disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Participate
+                    {participatingMissionId === mission.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Entering...
+                      </>
+                    ) : (
+                      'Participate'
+                    )}
                   </Button>
                 )}
 
