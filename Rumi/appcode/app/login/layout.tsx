@@ -1,4 +1,5 @@
 import { ClientConfigProvider } from './ClientConfigProvider'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 
 // Force dynamic rendering for all login pages
 // This prevents static generation which fails because it tries to fetch from localhost during build
@@ -13,40 +14,65 @@ interface ClientConfig {
 
 /**
  * Server-side fetch for client configuration
- * Runs once per session, cached by Next.js for 1 hour
+ * ENH-012: Direct RPC call (eliminates fetch overhead)
+ * Uses admin client to bypass RLS (login pages are public)
+ *
+ * Security Note: SUPABASE_SERVICE_ROLE_KEY is server-side only.
+ * Not prefixed with NEXT_PUBLIC_ so it won't leak to client bundle.
  */
 async function getClientConfig(): Promise<ClientConfig> {
   const t0 = Date.now();
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const clientId = process.env.CLIENT_ID
 
-    const t1 = Date.now();
-    const response = await fetch(`${apiUrl}/api/internal/client-config`, {
-      headers: {
-        'x-internal-request': 'true',  // Internal-only security header
-      },
-      cache: 'no-store',  // Dynamic pages should not cache
-    })
-    console.log(`[TIMING][LoginLayout] fetch(client-config): ${Date.now() - t1}ms`);
-
-    if (!response.ok) {
-      throw new Error(`Config fetch failed: ${response.status}`)
+    if (!clientId) {
+      console.error('[LoginLayout] CLIENT_ID not configured')
+      throw new Error('CLIENT_ID not configured')
     }
 
+    // ENH-012: Direct admin client + RPC (no fetch overhead)
+    const t1 = Date.now();
+    const supabase = createAdminClient()
+    console.log(`[TIMING][LoginLayout] createAdminClient(): ${Date.now() - t1}ms`);
+
     const t2 = Date.now();
-    const data = await response.json();
-    console.log(`[TIMING][LoginLayout] response.json(): ${Date.now() - t2}ms`);
+    const { data, error } = await supabase.rpc('auth_get_client_by_id', {
+      p_client_id: clientId,
+    })
+    console.log(`[TIMING][LoginLayout] rpc(auth_get_client_by_id): ${Date.now() - t2}ms`);
+
+    if (error) {
+      console.error('[LoginLayout] RPC error:', error)
+      throw error
+    }
+
+    if (!data || data.length === 0) {
+      console.error('[LoginLayout] Client not found:', clientId)
+      throw new Error('Client not found')
+    }
+
+    const client = data[0]
+    const privacyPolicyUrl = `/api/clients/${clientId}/privacy`
+
+    const config = {
+      logoUrl: client.logo_url || "/images/fizee-logo.png",
+      privacyPolicyUrl,
+      clientName: client.name || "Rewards Program",
+      primaryColor: client.primary_color || "#F59E0B"
+    }
+
     console.log(`[TIMING][LoginLayout] getClientConfig() TOTAL: ${Date.now() - t0}ms`);
-    return data;
+    return config
 
   } catch (error) {
-    console.error('Failed to load client config:', error)
+    console.error('[LoginLayout] Failed to load client config:', error)
     console.log(`[TIMING][LoginLayout] getClientConfig() FAILED: ${Date.now() - t0}ms`);
 
     // Fallback to defaults (auth flow continues)
+    const fallbackClientId = process.env.CLIENT_ID || 'fizee'
     return {
       logoUrl: "/images/fizee-logo.png",
-      privacyPolicyUrl: "/privacy-policy",
+      privacyPolicyUrl: `/api/clients/${fallbackClientId}/privacy`,
       clientName: "Rewards Program",
       primaryColor: "#F59E0B"
     }
@@ -62,7 +88,6 @@ export default async function LoginLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Server-side fetch (runs once per session)
   const config = await getClientConfig()
 
   return (
