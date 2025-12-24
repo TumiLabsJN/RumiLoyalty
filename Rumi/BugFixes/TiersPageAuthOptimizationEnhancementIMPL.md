@@ -39,19 +39,22 @@
 7. [ ] Page renders with real tier data
 8. [ ] Manual verification completed
 
-**From Audit Feedback (v1.1):**
-- Recommendation: APPROVE WITH CHANGES
-- Critical Issues Addressed: None
+**From Audit Feedback (v1.2):**
+- Recommendation: APPROVE (after addressing v1.2 feedback)
+- Critical Issues Addressed:
+  - Type source mismatch: Added Step 0 to consolidate types via re-export
+  - tiers-client.tsx now imports from @/app/types/tiers (SSoT)
 - Concerns Addressed:
-  - Added SchemaFinalv2.md and API_CONTRACTS.md to source documents
-  - Added "Security Note: Auth Helper Trust Boundary" section
+  - Added SchemaFinalv2.md and API_CONTRACTS.md to source documents (v1.1)
+  - Added "Security Note: Auth Helper Trust Boundary" section (v1.1)
+  - Added post-deploy step to remove timing logs (v1.2)
 
 **Expected Outcome:**
 - Feature implemented: YES
 - Files created: 1 (tiers-client.tsx)
-- Files modified: 1 (page.tsx - complete rewrite)
-- Lines added: ~450 (client) + ~50 (page) = ~500
-- Lines removed: ~805 (original page.tsx)
+- Files modified: 2 (app/types/tiers.ts + page.tsx rewrite)
+- Lines added: ~280 (client) + ~55 (page) + ~6 (types) = ~340
+- Lines removed: ~805 (original page.tsx) + ~100 (original types) = ~905
 - Breaking changes: NO
 - Schema changes: NO
 - API contract changes: NO
@@ -201,6 +204,60 @@ grep -n "/tiers" /home/jorge/Loyalty/Rumi/appcode/middleware.ts
 
 ---
 
+### Step 0: Consolidate Types (SSoT)
+
+**Target File:** `/home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts`
+**Action Type:** MODIFY
+**Purpose:** Re-export types from lib/types/api.ts to establish Single Source of Truth
+
+**Pre-Action: Read current state**
+```bash
+wc -l /home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts
+head -20 /home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts
+```
+**Expected:** File exists with local type definitions (~102 lines)
+
+**New File Content:**
+```typescript
+// /app/types/tiers.ts
+// ENH-012: Re-export from canonical source (SSoT)
+// Original definitions exist in lib/types/api.ts
+export type {
+  TiersPageResponse,
+  TierCard,
+  TierRewardPreview as AggregatedReward, // alias for client naming
+} from '@/lib/types/api';
+```
+
+**Write Command:**
+```
+Tool: Write
+File: /home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts
+Content: [full content above]
+```
+
+**Post-Write Verification:**
+```bash
+wc -l /home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts
+cat /home/jorge/Loyalty/Rumi/appcode/app/types/tiers.ts
+```
+**Expected:** ~8 lines, re-exports from lib/types/api
+
+**Type Check:**
+```bash
+npx tsc --noEmit 2>&1 | head -20
+```
+**Expected:** No type errors
+
+**Step Checkpoint:**
+- [ ] File modified ✅
+- [ ] Re-exports from lib/types/api ✅
+- [ ] Type check passes ✅
+
+**Checkpoint Status:** [PASS ✅ / FAIL ❌]
+
+---
+
 ### Step 1: Create tiers-client.tsx
 
 **Target File:** `/home/jorge/Loyalty/Rumi/appcode/app/tiers/tiers-client.tsx`
@@ -242,7 +299,7 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { PageLayout } from "@/components/pagelayout"
-import type { TiersPageResponse, TierCard, AggregatedReward } from "@/lib/services/tierService"
+import type { TiersPageResponse, TierCard, AggregatedReward } from "@/app/types/tiers"
 
 /**
  * Tiers Client Component
@@ -687,17 +744,18 @@ npx tsc --noEmit /home/jorge/Loyalty/Rumi/appcode/app/tiers/page.tsx 2>&1 | head
 
 ### Type Alignment Verification
 
-**Types Used:**
-```typescript
-TiersPageResponse - from '@/lib/services/tierService'
-TierCard - from '@/lib/services/tierService'
-AggregatedReward - from '@/lib/services/tierService'
+**Types Used (via SSoT chain):**
+```
+@/app/types/tiers (app-level SSoT)
+  └── re-exports from @/lib/types/api (canonical SSoT)
+
+tiers-client.tsx imports from: @/app/types/tiers ✅
 ```
 
 **Verification:**
-- [ ] Types exported from tierService.ts
-- [ ] Types imported in tiers-client.tsx
-- [ ] No type conflicts
+- [ ] Types re-exported in app/types/tiers.ts (Step 0)
+- [ ] Types imported in tiers-client.tsx from @/app/types/tiers
+- [ ] No type conflicts with lib/types/api.ts
 
 ---
 
@@ -1019,14 +1077,44 @@ wc -l /home/jorge/Loyalty/Rumi/appcode/app/tiers/page.tsx /home/jorge/Loyalty/Ru
 
 ### Timing Log Summary
 
+**Optional: Add timing logs for verification:**
+
+If timing verification is needed, add these logs to page.tsx during implementation:
+```typescript
+const PAGE_START = Date.now();
+
+const t1 = Date.now();
+const userId = await getUserIdFromToken();
+console.log(`[TIMING][TiersPage] getUserIdFromToken(): ${Date.now() - t1}ms`);
+
+const t2 = Date.now();
+const tiersData = await getTiersPageData(userId, clientId);
+console.log(`[TIMING][TiersPage] getTiersPageData(): ${Date.now() - t2}ms`);
+
+console.log(`[TIMING][TiersPage] TOTAL: ${Date.now() - PAGE_START}ms`);
+```
+
 **Expected after deploy (Vercel logs):**
 ```
-[TiersPage] getUserIdFromToken(): ~1ms
-[TiersPage] getTiersPageData(): ~200-300ms
-[TiersPage] TOTAL: ~300-400ms
+[TIMING][TiersPage] getUserIdFromToken(): ~1ms
+[TIMING][TiersPage] getTiersPageData(): ~200-300ms
+[TIMING][TiersPage] TOTAL: ~300-400ms
 ```
 
 **Compared to API route pattern:** ~1000ms (60% improvement)
+
+---
+
+### Post-Deploy Cleanup: Remove Timing Logs
+
+**After verifying performance improvement on Vercel:**
+
+1. Remove all `[TIMING]` console.log statements from page.tsx
+2. Remove timing variables (PAGE_START, t1, t2)
+3. Run `npm run build` to verify
+4. Deploy clean version
+
+**Reason:** Timing logs are for verification only. Remove to avoid noisy production logs.
 
 ---
 
@@ -1066,7 +1154,21 @@ wc -l /home/jorge/Loyalty/Rumi/appcode/app/tiers/page.tsx /home/jorge/Loyalty/Ru
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.3
 **Last Updated:** 2025-12-24
 **Author:** Claude Code
 **Status:** Ready for Implementation
+
+**v1.1 Changes (Audit Feedback):**
+- Added Step 0: Type consolidation (app/types/tiers.ts re-exports from lib/types/api.ts)
+- Updated Step 1: tiers-client.tsx imports from @/app/types/tiers (SSoT)
+- Added Post-Deploy Cleanup section for timing logs
+- Updated files modified count to include app/types/tiers.ts
+
+**v1.2 Changes (Audit Feedback):**
+- Fixed Type Alignment Verification section to reflect SSoT chain
+- Clarified: tiers-client.tsx imports types from @/app/types/tiers (not service)
+
+**v1.3 Changes (Discovery Feedback):**
+- Fixed Step 0: `AggregatedReward` doesn't exist in lib/types/api.ts - use alias `TierRewardPreview as AggregatedReward`
+- This keeps single import surface and avoids drift while maintaining SSoT
