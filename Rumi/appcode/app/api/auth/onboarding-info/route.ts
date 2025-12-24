@@ -6,6 +6,10 @@ import { formatErrorResponse } from '@/lib/utils/errors';
 /**
  * GET /api/auth/onboarding-info
  *
+ * STATUS: Currently unused (ENH-014)
+ * The /login/welcomeunr page now uses hardcoded content directly.
+ * Kept for future dynamic onboarding content per client.
+ *
  * Provide client-specific welcome and onboarding information for first-time users.
  *
  * References:

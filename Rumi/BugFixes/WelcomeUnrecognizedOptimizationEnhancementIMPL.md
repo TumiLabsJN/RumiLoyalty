@@ -19,6 +19,7 @@
 
 **Files to Modify:**
 - `app/login/welcomeunr/page.tsx` - MODIFY (remove fetch, use hardcoded constant)
+- `app/api/auth/onboarding-info/route.ts` - MODIFY (add "unused" annotation)
 
 **Files NOT Modified:**
 - `middleware.ts` - Page must remain publicly accessible (see note below)
@@ -47,8 +48,8 @@ Remove the `useEffect` fetch, loading state, and skeleton UI. Use hardcoded onbo
 **Expected Outcome:**
 - Feature implemented: YES
 - Files created: 0
-- Files modified: 1
-- Lines changed: ~75 (net reduction from 127)
+- Files modified: 2
+- Lines changed: ~75 (page.tsx net reduction) + ~3 (API comment)
 - Breaking changes: NO
 - Schema changes: NO
 - API contract changes: NO (API route kept for future use)
@@ -334,6 +335,116 @@ npx tsc --noEmit /home/jorge/Loyalty/Rumi/appcode/app/login/welcomeunr/page.tsx 
 
 ---
 
+### Step 2: Annotate API Route as Unused
+
+**Target File:** `/home/jorge/Loyalty/Rumi/appcode/app/api/auth/onboarding-info/route.ts`
+**Action Type:** MODIFY (add comment)
+**Purpose:** Document that this API is currently unused, kept for future dynamic content
+
+---
+
+#### Pre-Action Reality Check
+
+**Read Current State:**
+```bash
+Read /home/jorge/Loyalty/Rumi/appcode/app/api/auth/onboarding-info/route.ts lines 1-22
+```
+
+**Expected Current State (docstring):**
+```typescript
+/**
+ * GET /api/auth/onboarding-info
+ *
+ * Provide client-specific welcome and onboarding information for first-time users.
+ *
+ * References:
+ * - API_CONTRACTS.md lines 1304-1455 (GET /api/auth/onboarding-info)
+ * - ARCHITECTURE.md Section 5 (Presentation Layer)
+ *
+ * Request: Requires auth-token cookie
+ * Response: { heading, message, submessage, buttonText }
+ *
+ * MVP Implementation:
+ * - Returns hardcoded default response for single client
+ * - Future: Query onboarding_messages table by client_id
+ */
+```
+
+**Reality Check:**
+- [ ] Read command executed
+- [ ] Docstring matches expected: [YES / NO]
+
+---
+
+#### Edit Action
+
+**OLD Code (to be replaced):**
+```typescript
+/**
+ * GET /api/auth/onboarding-info
+ *
+ * Provide client-specific welcome and onboarding information for first-time users.
+```
+
+**NEW Code (replacement):**
+```typescript
+/**
+ * GET /api/auth/onboarding-info
+ *
+ * STATUS: Currently unused (ENH-014)
+ * The /login/welcomeunr page now uses hardcoded content directly.
+ * Kept for future dynamic onboarding content per client.
+ *
+ * Provide client-specific welcome and onboarding information for first-time users.
+```
+
+**Edit Command:**
+```
+Tool: Edit
+File: /home/jorge/Loyalty/Rumi/appcode/app/api/auth/onboarding-info/route.ts
+Old String: [exact match above]
+New String: [exact replacement above]
+```
+
+---
+
+#### Post-Action Verification
+
+**Read Modified State:**
+```bash
+Read /home/jorge/Loyalty/Rumi/appcode/app/api/auth/onboarding-info/route.ts lines 1-15
+```
+
+**Expected New State:**
+```typescript
+/**
+ * GET /api/auth/onboarding-info
+ *
+ * STATUS: Currently unused (ENH-014)
+ * The /login/welcomeunr page now uses hardcoded content directly.
+ * Kept for future dynamic onboarding content per client.
+ *
+ * Provide client-specific welcome and onboarding information for first-time users.
+```
+
+**State Verification:**
+- [ ] Read command executed
+- [ ] STATUS comment added: [YES / NO]
+
+---
+
+#### Step Checkpoint
+
+**Step Checkpoint:**
+- [ ] Action completed successfully
+- [ ] Post-action state matches expected
+- [ ] Comment clearly indicates unused status
+
+**Checkpoint Status:** [PASS / FAIL]
+**If FAIL:** [Exact failure point and actual state]
+
+---
+
 ## Integration Verification
 
 **All modified code must integrate cleanly with existing code.**
@@ -593,6 +704,7 @@ git diff app/login/welcomeunr/page.tsx | head -50
 **Implementation Steps:**
 ```
 [Timestamp] Step 1: Rewrite page.tsx - Modified - Verified
+[Timestamp] Step 2: Annotate API route - Modified - Verified
 ```
 
 **Integration Verification:**
@@ -630,8 +742,9 @@ git diff app/login/welcomeunr/page.tsx | head -50
 
 **Complete List:**
 1. `app/login/welcomeunr/page.tsx` - MODIFY - ~80 lines (reduced from 127) - Removed fetch/skeleton, added constant
+2. `app/api/auth/onboarding-info/route.ts` - MODIFY - +3 lines - Added "unused" annotation
 
-**Total:** 1 file modified
+**Total:** 2 files modified
 
 **Files NOT Modified (intentionally):**
 - `middleware.ts` - Page must remain publicly accessible for unrecognized users
@@ -672,7 +785,7 @@ git diff app/login/welcomeunr/page.tsx | head -50
 **Step 4: Implementation Phase**
 - StandardGapFixIMPL.md template applied
 - Created: WelcomeUnrecognizedOptimizationEnhancementIMPL.md (v2.0)
-- Single implementation step: Rewrite page.tsx
+- Two implementation steps: Rewrite page.tsx + annotate API route
 
 **Step 5: Current Status**
 - Implementation: [PENDING EXECUTION]
@@ -685,9 +798,9 @@ git diff app/login/welcomeunr/page.tsx | head -50
 **Quick Verification (Run These After Implementation):**
 
 ```bash
-# 1. Verify file changed
+# 1. Verify files changed
 git diff --stat
-# Should show: app/login/welcomeunr/page.tsx only
+# Should show: app/login/welcomeunr/page.tsx and app/api/auth/onboarding-info/route.ts
 
 # 2. Verify no type errors
 npx tsc --noEmit 2>&1 | tail -5
@@ -707,10 +820,11 @@ git diff middleware.ts
 ```
 
 **Expected Results:**
-- Files modified: page.tsx only
+- Files modified: page.tsx and API route.ts
 - No new type errors
 - useEffect removed from page
 - ONBOARDING_INFO constant present
+- API route has "unused" annotation
 - middleware.ts unchanged
 
 **Audit Status:** [PENDING EXECUTION]
@@ -721,7 +835,7 @@ git diff middleware.ts
 
 **Implementation Efficiency:**
 - Gates passed: [X/3] (2 skipped)
-- Steps completed: [X/1]
+- Steps completed: [X/2]
 - Verifications passed: [X/8]
 - Acceptance criteria met: [X/8]
 - Errors encountered: [0]
@@ -729,8 +843,8 @@ git diff middleware.ts
 
 **Code Quality:**
 - Files created: 0
-- Files modified: 1
-- Lines changed: ~80 (net reduction from 127)
+- Files modified: 2
+- Lines changed: ~80 (page) + 3 (API comment)
 - Breaking changes: 0
 - Security verified: YES (page intentionally public)
 - Tests added: N/A (manual verification)
@@ -756,6 +870,7 @@ git diff middleware.ts
 
 **Implementation:**
 - [ ] Step 1 completed (page rewrite)
+- [ ] Step 2 completed (API annotation)
 - [ ] All checkpoints passed
 - [ ] No steps skipped
 
@@ -829,6 +944,7 @@ Performance improvement:
 
 Files modified:
 - app/login/welcomeunr/page.tsx
+- app/api/auth/onboarding-info/route.ts (added "unused" annotation)
 
 References:
 - WelcomeUnrecognizedOptimizationEnhancement.md (v1.4)
