@@ -16,24 +16,32 @@ interface ClientConfig {
  * Runs once per session, cached by Next.js for 1 hour
  */
 async function getClientConfig(): Promise<ClientConfig> {
+  const t0 = Date.now();
   try {
     const apiUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
+    const t1 = Date.now();
     const response = await fetch(`${apiUrl}/api/internal/client-config`, {
       headers: {
         'x-internal-request': 'true',  // Internal-only security header
       },
       cache: 'no-store',  // Dynamic pages should not cache
     })
+    console.log(`[TIMING][LoginLayout] fetch(client-config): ${Date.now() - t1}ms`);
 
     if (!response.ok) {
       throw new Error(`Config fetch failed: ${response.status}`)
     }
 
-    return await response.json()
+    const t2 = Date.now();
+    const data = await response.json();
+    console.log(`[TIMING][LoginLayout] response.json(): ${Date.now() - t2}ms`);
+    console.log(`[TIMING][LoginLayout] getClientConfig() TOTAL: ${Date.now() - t0}ms`);
+    return data;
 
   } catch (error) {
     console.error('Failed to load client config:', error)
+    console.log(`[TIMING][LoginLayout] getClientConfig() FAILED: ${Date.now() - t0}ms`);
 
     // Fallback to defaults (auth flow continues)
     return {

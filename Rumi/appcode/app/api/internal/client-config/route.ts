@@ -24,6 +24,8 @@ function isInternalRequest(request: NextRequest): boolean {
 }
 
 export async function GET(request: NextRequest) {
+  const API_START = Date.now();
+
   // Security check: Block external requests
   if (!isInternalRequest(request)) {
     return NextResponse.json(
@@ -34,7 +36,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // Note: createAdminClient is SYNC, not async!
+    const t1 = Date.now();
     const supabase = createAdminClient()
+    console.log(`[TIMING][/api/internal/client-config] createAdminClient(): ${Date.now() - t1}ms`);
 
     // TODO: Determine client_id from subdomain or environment
     // MVP: Use single client from environment variable
@@ -46,9 +50,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Query via RPC function (bypasses RLS)
+    const t2 = Date.now();
     const { data, error } = await supabase.rpc('auth_get_client_by_id', {
       p_client_id: clientId,
     })
+    console.log(`[TIMING][/api/internal/client-config] rpc(auth_get_client_by_id): ${Date.now() - t2}ms`);
 
     if (error) {
       console.error('Supabase RPC failed:', error)
@@ -73,6 +79,8 @@ export async function GET(request: NextRequest) {
       clientName: client.name || "Rewards Program",
       primaryColor: client.primary_color || "#F59E0B"
     }
+
+    console.log(`[TIMING][/api/internal/client-config] TOTAL: ${Date.now() - API_START}ms`);
 
     // Return with aggressive caching (1 hour)
     return NextResponse.json(config, {

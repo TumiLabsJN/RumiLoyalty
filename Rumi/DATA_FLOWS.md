@@ -11,11 +11,12 @@ Quick reference for how each page fetches and displays data.
 ## Table of Contents
 
 1. [/home (Dashboard)](#home-dashboard)
-2. [/missions](#missions) - TODO
-3. [/missions/missionhistory](#missionsmissionhistory) - TODO
-4. [/tiers](#tiers) - TODO
-5. [/rewards](#rewards) - TODO
-6. [Login Pages](#login-pages) - TODO
+2. [/missions](#missions)
+3. [/missions/missionhistory](#missionsmissionhistory)
+4. [/tiers](#tiers)
+5. [/rewards](#rewards) ✅ Complete (ENH-006 + ENH-008)
+6. [/rewards/rewardshistory](#rewardsrewardshistory) ✅ Complete (ENH-011)
+7. [Login Pages](#login-pages) - TODO
 
 ---
 
@@ -734,7 +735,226 @@ For /missions/missionhistory to show data, users must have completed missions th
 
 ## /tiers
 
-TODO: Document after /missions/missionhistory
+**File:** `app/tiers/page.tsx`
+
+### API Calls
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/tiers` | GET | Fetch tier progression data with rewards |
+
+### Data Flow
+
+**Current (Mock):**
+```
+page.tsx (Client Component)
+  └── useState(scenarios)
+        └── Mock data (2 scenarios, lines 38-429)
+```
+
+**Target (Server Component - TO BE IMPLEMENTED):**
+```
+page.tsx (Server Component)
+  └── tierService.getTiersPageData() [Direct service call]
+        ├── tierRepository.getUserTierContext()
+        ├── tierRepository.getVipSystemSettings()
+        ├── tierRepository.getAllTiers()
+        ├── tierRepository.getVipTierRewards()
+        ├── tierRepository.getTierMissions()
+        └── aggregateRewardsForTier() (9-priority sorting)
+```
+
+### Service Layer
+
+**File:** `lib/services/tierService.ts`
+
+| Function | Purpose |
+|----------|---------|
+| `getTiersPageData(userId, clientId)` | Main orchestrator - fetches all tier data, builds response |
+| `formatSalesValue(value, metric)` | Format number as "$2,100" or "2,100 units" |
+| `formatProgressText(remaining, metric)` | Format "$900 to go" or "900 units to go" |
+| `formatSalesDisplayText(minSales, metric)` | Format "$1,000+ in sales" or "1,000+ in units sold" |
+| `generateRewardDisplayText(type, isRaffle, valueData, name, description)` | Format reward display text |
+| `getRewardPriority(type, isRaffle)` | Get sort priority (1-9) for reward |
+| `getExpirationInfo(tierLevel, nextCheckpointAt)` | Calculate expiration display (Bronze never expires) |
+| `aggregateRewardsForTier(vipRewards, missionRewards, tierEligibility)` | Group rewards by type+isRaffle, max 4 |
+
+### Repository Layer
+
+**File:** `lib/repositories/tierRepository.ts`
+
+| Function | Query Type | Purpose |
+|----------|------------|---------|
+| `getAllTiers(clientId)` | SELECT | Get all tiers ordered by tier_order |
+| `getUserTierContext(userId, clientId)` | SELECT + SELECT | Get user tier info + tier_order lookup |
+| `getVipSystemSettings(clientId)` | SELECT | Get client's vip_metric setting |
+| `getVipTierRewards(clientId)` | SELECT | Get VIP tier rewards (reward_source='vip_tier') |
+| `getTierMissions(clientId)` | SELECT with JOIN | Get missions with linked rewards |
+
+**Note:** tierRepository uses `createAdminClient` (bypasses RLS).
+
+### Database Tables
+
+| Table | Fields Used | Purpose |
+|-------|-------------|---------|
+| `users` | id, client_id, current_tier, total_sales, total_units, next_checkpoint_at, tier_achieved_at | User tier context |
+| `clients` | id, vip_metric | VIP system configuration |
+| `tiers` | id, tier_id, tier_name, tier_color, tier_order, sales_threshold, units_threshold, commission_rate, checkpoint_exempt | Tier definitions |
+| `rewards` | id, type, name, description, value_data, tier_eligibility, redemption_quantity, reward_source, enabled | VIP tier rewards |
+| `missions` | id, mission_type, tier_eligibility, reward_id, enabled | Mission definitions (for reward aggregation) |
+
+### RPC Functions
+
+| Function | Purpose |
+|----------|---------|
+| `auth_find_user_by_id(p_user_id)` | Bypass RLS to find user by Supabase Auth ID (used by API route) |
+
+### Validation Queries
+
+Run these queries in Supabase SQL Editor to verify data exists for /tiers to work.
+
+**Replace placeholders:**
+- `:client_id` → Your CLIENT_ID from .env.local
+- `:user_id` → User's UUID from users table
+- `:current_tier` → User's current_tier value (e.g., 'tier_1')
+
+```sql
+-- 1. Verify user exists with tier context
+SELECT id, current_tier, total_sales, total_units,
+       next_checkpoint_at, tier_achieved_at
+FROM users
+WHERE id = ':user_id'
+  AND client_id = ':client_id';
+
+-- 2. Verify client has vip_metric configured
+SELECT id, vip_metric
+FROM clients
+WHERE id = ':client_id';
+
+-- 3. Verify all tiers exist for client (with thresholds)
+SELECT tier_id, tier_name, tier_order, tier_color,
+       sales_threshold, units_threshold, commission_rate
+FROM tiers
+WHERE client_id = ':client_id'
+ORDER BY tier_order;
+
+-- 4. Verify user's current_tier exists in tiers table
+-- (CRITICAL: If this returns 0 rows, service will throw error)
+SELECT tier_id, tier_name, tier_order
+FROM tiers
+WHERE client_id = ':client_id'
+  AND tier_id = ':current_tier';
+
+-- 5. Verify VIP tier rewards exist per tier
+SELECT tier_eligibility, type, name, redemption_quantity
+FROM rewards
+WHERE client_id = ':client_id'
+  AND reward_source = 'vip_tier'
+  AND enabled = true
+ORDER BY tier_eligibility, display_order;
+
+-- 6. Verify missions have linked rewards for aggregation
+SELECT m.id, m.mission_type, m.tier_eligibility,
+       r.type as reward_type, r.name as reward_name
+FROM missions m
+JOIN rewards r ON m.reward_id = r.id
+WHERE m.client_id = ':client_id'
+  AND m.enabled = true
+  AND r.enabled = true
+ORDER BY m.tier_eligibility;
+
+-- 7. Check tier thresholds are sequential
+-- (tier_order 2 should have higher threshold than tier_order 1)
+SELECT tier_order, tier_name, sales_threshold, units_threshold
+FROM tiers
+WHERE client_id = ':client_id'
+ORDER BY tier_order;
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Validation Query |
+|---------|--------------|------------------|
+| 500 error on page load | User's `current_tier` doesn't exist in `tiers` table | Query #4 |
+| Empty tier cards | No tiers for client_id | Query #3 |
+| No rewards on tier cards | No `vip_tier` rewards or missions | Query #5, #6 |
+| Wrong progress percentage | `total_sales` or `total_units` is NULL | Query #1 |
+| Wrong VIP metric format | `clients.vip_metric` not set | Query #2 |
+| "Max tier reached" when not | Next tier not found (tier_order gap) | Query #7 |
+| Bronze showing expiration | `getExpirationInfo()` check failing | Query #4 (verify tier_order=1) |
+| Commission rate 0 | `tiers.commission_rate` not set | Query #3 |
+
+### Frontend State
+
+**Current (Mock - TO BE REMOVED):**
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `activeScenario` | useState | Debug scenario switcher |
+| `debugPanelOpen` | useState | Toggle debug panel |
+| `scenarios` | Mock data | 2 test scenarios (Bronze, Silver) |
+
+**Target (Server Component Pattern):**
+
+| State Variable | Source | Purpose |
+|----------------|--------|---------|
+| `initialData` | Server Component prop | TiersPageResponse from service |
+| `error` | Server Component prop | Error message if service fails |
+
+### Key Business Logic
+
+1. **Tier Filtering:** Only show current tier + higher tiers (`tier_order >= user's tier_order`)
+2. **VIP Metric:** Client setting determines `$X` (sales_dollars) vs `X units` (sales_units)
+3. **Progress Calculation:** `(currentSales / nextTierTarget) * 100`, capped at 100%
+4. **Expiration Logic:** Bronze (tier_order=1) never expires, higher tiers show `next_checkpoint_at`
+5. **Reward Aggregation:** Group by type+isRaffle, sum uses, max 4 per tier card
+6. **Priority Sorting (9 levels):** physical_gift_raffle(1) > experience_raffle(2) > gift_card_raffle(3) > experience(4) > physical_gift(5) > gift_card(6) > commission_boost(7) > spark_ads(8) > discount(9)
+7. **isRaffle Derivation:** `mission.mission_type === 'raffle'` (not stored on reward)
+8. **totalPerksCount:** Sum of all `redemption_quantity` values for tier
+
+### Seed Data Requirements
+
+For /tiers to function correctly, seed data must include tier thresholds and rewards.
+
+#### Dependency Order
+
+```
+1. clients          (no dependencies)
+2. tiers            (depends on: clients) - with thresholds + commission rates
+3. rewards          (depends on: clients, tiers) - reward_source='vip_tier'
+4. users            (depends on: clients, tiers, Supabase Auth)
+5. missions         (depends on: clients, tiers, rewards) - for reward aggregation
+```
+
+#### Minimum Viable Seed Data
+
+| Table | Required Rows | Critical Fields |
+|-------|---------------|-----------------|
+| `clients` | 1 | `id`, `vip_metric` ('sales' or 'units') |
+| `tiers` | At least 2 | `tier_id`, `tier_name`, `tier_order`, `tier_color`, `sales_threshold` OR `units_threshold`, `commission_rate` |
+| `users` | 1 test user | `id` (MUST match Supabase Auth UUID), `client_id`, `current_tier`, `total_sales` OR `total_units` |
+| `rewards` | At least 1 per tier | `tier_eligibility`, `reward_source='vip_tier'`, `enabled=true`, `type` |
+
+#### Critical Constraints
+
+| Constraint | Requirement | What Breaks If Violated |
+|------------|-------------|-------------------------|
+| **Tier Order Sequential** | tier_order must be 1, 2, 3, 4 (no gaps) | Next tier lookup fails |
+| **Thresholds Increasing** | Higher tier_order = higher threshold | Progress calculation wrong |
+| **VIP Metric Match** | Thresholds must match client's vip_metric | Wrong threshold used for progress |
+| **Commission Rate Set** | Each tier needs `commission_rate` | "0% Commission" displayed |
+
+### Current Implementation Status
+
+**Backend:** ✅ Complete (API route, service, repository all implemented)
+
+**Frontend:** 🔄 Using mock data - needs Server Component conversion
+
+**TODO for Task 9.7:**
+1. Convert `page.tsx` to Server Component (direct service call)
+2. Create `tiers-client.tsx` Client Component (UI)
+3. Remove mock data (lines 38-429) and debug panel (lines 517-566)
+4. Apply ENH-010 pattern (getUserIdFromToken + dashboardData.user)
 
 ---
 

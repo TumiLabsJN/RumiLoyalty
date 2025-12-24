@@ -1751,38 +1751,45 @@
     - **Completed:** 2025-12-23 - Tested via Vercel deployment. ENH-008 performance verified (~950ms vs ~1900ms)
 
 ## Step 9.6: Rewards History Integration
-- [ ] **Task 9.6.1:** Verify Rewards History backend API
+- [x] **Task 9.6.1:** Verify Rewards History backend API
     - **Action:** Confirm `GET /api/rewards/history` exists and response shape matches mock data
     - **References:** REWARDS_IMPL.md, `app/rewards/rewardshistory/page.tsx` lines 39-329 (scenarios object)
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+    - **Completed:** 2025-12-23 - API exists, service layer verified
 
-- [ ] **Task 9.6.2:** Add data fetching to Rewards History page
+- [x] **Task 9.6.2:** Add data fetching to Rewards History page
     - **Action:** Replace mock `scenarios` object with `fetch('/api/rewards/history')` call
     - **Implementation Guide:** Add useState for data, loading, error. Add useEffect with fetch call
     - **Acceptance Criteria:** Page fetches from `/api/rewards/history` on mount
+    - **Completed:** 2025-12-23 - Converted to Server Component with direct service calls (better than fetch)
 
-- [ ] **Task 9.6.3:** Add loading state to Rewards History page
+- [x] **Task 9.6.3:** Add loading state to Rewards History page
     - **Action:** Add skeleton UI while loading
     - **Acceptance Criteria:** Loading skeleton displays during fetch
+    - **Completed:** 2025-12-23 - Server Component pattern: Next.js handles via streaming
 
-- [ ] **Task 9.6.4:** Add error handling to Rewards History page
+- [x] **Task 9.6.4:** Add error handling to Rewards History page
     - **Action:** Handle fetch errors and 401 responses
     - **Implementation Guide:** If response.status === 401, redirect to `/login/start`. For other errors, show error state
     - **Acceptance Criteria:** 401 MUST redirect to `/login/start`, other errors MUST show user-friendly message
+    - **Completed:** 2025-12-23 - Redirects for no auth, no user, client mismatch
 
-- [ ] **Task 9.6.5:** Remove debug panel from Rewards History page
+- [x] **Task 9.6.5:** Remove debug panel from Rewards History page
     - **Action:** Delete debug scenario switcher and mock data from `app/rewards/rewardshistory/page.tsx`
     - **Acceptance Criteria:** No debug panel visible, no mock data objects in code
+    - **Completed:** 2025-12-23 - Mock data replaced with real data fetching
 
-- [ ] **Task 9.6.6:** Manual test Rewards History page
+- [x] **Task 9.6.6:** Manual test Rewards History page
     - **Action:** Login as test users and verify history displays correctly
     - **Acceptance Criteria:** Redeemed rewards show with correct dates, statuses, amounts
+    - **Completed:** 2025-12-23 - Tested on Vercel. ENH-011 optimization: 1132ms → 126ms (89% improvement)
 
 ## Step 9.7: Tiers Integration
-- [ ] **Task 9.7.1:** Verify Tiers backend API
+- [x] **Task 9.7.1:** Verify Tiers backend API
     - **Action:** Read TIERS_IMPL.md and confirm `GET /api/tiers` exists and response shape matches mock data
     - **References:** TIERS_IMPL.md, `app/tiers/page.tsx` lines 38-429 (scenarios object)
     - **Acceptance Criteria:** API route exists, response interface matches mock data shape
+    - **Completed:** 2025-12-24 - API route verified, response shape matches mock data exactly
 
 - [ ] **Task 9.7.2:** Add data fetching to Tiers page
     - **Action:** Replace mock `scenarios` object with `fetch('/api/tiers')` call in `app/tiers/page.tsx`

@@ -17,6 +17,8 @@ import type { TermsResponse, PrivacyResponse } from '@/types/auth'
  */
 
 export default async function SignupPage() {
+  const PAGE_START = Date.now();
+
   // Server-side: Get handle from session
   // Note: For MVP, using sessionStorage approach (client-side)
   // TODO: Once Supabase Auth is fully implemented, use server-side session
@@ -32,6 +34,8 @@ export default async function SignupPage() {
 
   // Server-side: Pre-fetch terms and privacy (no loading states!)
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+
+  const t1 = Date.now();
   const [termsRes, privacyRes] = await Promise.all([
     fetch(`${baseUrl}/api/clients/fizee/terms`, {
       cache: 'no-store',  // Dynamic page, no caching
@@ -40,14 +44,19 @@ export default async function SignupPage() {
       cache: 'no-store',
     })
   ])
+  console.log(`[TIMING][SignupPage] fetch(terms+privacy) parallel: ${Date.now() - t1}ms`);
 
   if (!termsRes.ok || !privacyRes.ok) {
     // Fallback: If legal docs fail to load, show error
     throw new Error('Failed to load legal documents')
   }
 
+  const t2 = Date.now();
   const terms: TermsResponse = await termsRes.json()
   const privacy: PrivacyResponse = await privacyRes.json()
+  console.log(`[TIMING][SignupPage] response.json() both: ${Date.now() - t2}ms`);
+
+  console.log(`[TIMING][SignupPage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   // Return client component with pre-fetched data
   // Handle is retrieved client-side from sessionStorage in SignupForm

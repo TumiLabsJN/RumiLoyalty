@@ -23,13 +23,9 @@ import { RewardsHistoryClient } from './rewardshistory-client'
  * - DATA_FLOWS.md /rewards/rewardshistory section
  */
 export default async function RewardsHistoryPage() {
-  const PAGE_START = Date.now();
-
   // 1. Get user ID from validated token (local decode, ~1ms)
   // Middleware already validated via setSession()
-  const t1 = Date.now();
   const userId = await getUserIdFromToken();
-  console.log(`[TIMING][RewardsHistoryPage] getUserIdFromToken(): ${Date.now() - t1}ms`);
 
   if (!userId) {
     redirect('/login/start');
@@ -44,9 +40,7 @@ export default async function RewardsHistoryPage() {
 
   // 3. Get dashboard data (includes user.handle and tier info)
   // This also validates user exists and belongs to this client
-  const t2 = Date.now();
   const dashboardData = await dashboardRepository.getUserDashboard(userId, clientId);
-  console.log(`[TIMING][RewardsHistoryPage] getUserDashboard(): ${Date.now() - t2}ms`);
 
   if (!dashboardData) {
     // User doesn't exist or doesn't belong to this client
@@ -54,7 +48,6 @@ export default async function RewardsHistoryPage() {
   }
 
   // 4. Get reward history - use handle from dashboardData
-  const t3 = Date.now();
   const historyData = await rewardService.getRewardHistory({
     userId,
     clientId,
@@ -63,9 +56,6 @@ export default async function RewardsHistoryPage() {
     tierName: dashboardData.currentTier.name,
     tierColor: dashboardData.currentTier.color,
   });
-  console.log(`[TIMING][RewardsHistoryPage] getRewardHistory(): ${Date.now() - t3}ms`);
-
-  console.log(`[TIMING][RewardsHistoryPage] TOTAL: ${Date.now() - PAGE_START}ms`);
 
   // 5. Return client component with data
   return <RewardsHistoryClient initialData={historyData} error={null} />;
