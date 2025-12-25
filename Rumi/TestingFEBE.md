@@ -9,9 +9,8 @@
 
   TestPass123! 
 ## Silver
-@silvercreator1 silver1@test.com    | Local bcrypt (same hash as silver2) |
-@silvercreator2 silver2@test.com    | Local bcrypt (same hash as silver1) |
-
+silver11 / TestPass123!
+testsilver / TestPass123!
 # HOME PAGE
 ## Reward Claiming
 Need to test this. Ask LLM if reward claiming process will be same from Missions. If it calls same process 
@@ -161,7 +160,7 @@ mission_progress_id set"	"ROW CREATED
 participated_at set"
 
 
-##### STAGE 3: CARD STATE: Winner
+##### STAGE 3: CARD STATE: Winner ✅
 **Description**: Winner
 
 mission_progress	redemptions	"raffle_participations
@@ -170,7 +169,7 @@ status='completed'	"status='claimable'
 claimed_at set"	is_winner=TRUE
 
 
-##### STAGE 4: CARD STATE: Loser
+##### STAGE 4: CARD STATE: Loser ✅
 **Description**: Loser 
 
 mission_progress	redemptions	"raffle_participations
@@ -180,13 +179,20 @@ rejection_reason"	"is_winner=FALSE
 winner_selected_at set
 selected_by set"
 
-**Passed to mission history**
+**Passed to mission history** ✅
 
+#### Special Tests
+
+##### Winner/Loser
+
+1. Loser looses, path of that mission to missionhistory for loser ✅
+2. Winner wins, UI ✅
 
 #### Reward Flow
+
 ##### Commission Boost
 
-###### STAGE 1: Default Schedule 
+###### STAGE 1: Default Schedule ✅
 **Description**: Schedulable
 
 redemptions	commission_boost_redemption
@@ -194,8 +200,6 @@ redemptions	commission_boost_redemption
 'status='claimable'
 mission_progress_id set
 redemption_type='scheduled'"	-
-
-
 
 ###### STAGE 2: Stage 2 Scheduled 
 **Description**: CB Scheduled
@@ -438,6 +442,7 @@ claimed_at set"
 mission_progress	redemptions
 status='completed'	"status= 'concluded' 
 concluded_at set"
+
 
 ### Sales Mission
 #### Mission Flows
@@ -1623,3 +1628,30 @@ Mission: Admin uses value_data.percent inputted into a hardcoded name
 
 ### Physical Gift / Experience
 See naming 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+# PRODUCTION TESTS
+
+## Commission Boost
+Create test user, claim commission boost and test if it activates on time. 
+Check if commission boost for raffle winner activated correctly.
+User: 422044eb-d335-415e-b957-5962687f1dc0
+  Boost ID: cd48f661-301d-4e1e-a56c-94f6510b86d8
+  Scheduled date: 2025-12-26
