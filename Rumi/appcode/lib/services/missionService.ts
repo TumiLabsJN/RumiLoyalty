@@ -418,7 +418,16 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
           }
           return 'redeeming';
         }
-        // Default for other reward types (gift_card, physical_gift, etc.)
+        // Check physical_gift sub-states (BUG-RAFFLE-003)
+        if (data.reward.type === 'physical_gift' && physicalGift) {
+          if (physicalGift.shippedAt) {
+            return 'sending';
+          }
+          if (physicalGift.shippingCity) {  // Falsy check handles null, undefined, and ""
+            return 'redeeming_physical';
+          }
+        }
+        // Default for other reward types (gift_card, spark_ads, experience)
         return 'raffle_won';
       }
     }

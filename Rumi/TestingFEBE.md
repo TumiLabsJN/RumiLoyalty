@@ -182,11 +182,15 @@ selected_by set"
 **Passed to mission history** ✅
 
 #### Special Tests
-
-##### Winner/Loser
+ 
+##### Winner/Loser ✅
 
 1. Loser looses, path of that mission to missionhistory for loser ✅
-2. Winner wins, UI ✅
+2. Winner wi
+
+##### Weekly / monthly missions
+1. UI works?
+2. Test process
 
 #### Reward Flow
 
@@ -201,7 +205,7 @@ redemptions	commission_boost_redemption
 mission_progress_id set
 redemption_type='scheduled'"	-
 
-###### STAGE 2: Stage 2 Scheduled 
+###### STAGE 2: Stage 2 Scheduled  ✅
 **Description**: CB Scheduled
 
 redemptions	commission_boost_redemption
@@ -225,7 +229,26 @@ Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reac
 scheduled_activation_date set
 sales_at_activation set (GMV at D0)"
 
+Raffle winner commission boost activation check.
 
+  User ID: 422044eb-d335-415e-b957-5962687f1dc0
+  Boost scheduled for: 2025-12-26
+
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+``` **RUN THIS 26/12 14:00 PM**
+Run this query and tell me if the boost activated:
+
+  SELECT boost_status, activated_at, expires_at
+  FROM commission_boost_redemptions
+  WHERE redemption_id IN (
+    SELECT id FROM redemptions
+    WHERE user_id = '422044eb-d335-415e-b957-5962687f1dc0'
+  );
+
+  If boost_status = 'active' and activated_at is set → it worked.
+  If boost_status = 'scheduled' → cron didn't run or failed.
+
+```
 
 ###### "Stage 4 Pending Payment Info" ⚠️
 **Description**: Pending payment info
@@ -260,8 +283,8 @@ rewards	redemptions	commission_boost_redemption
 concluded_at set"	delivered_at set
 
 ##### Gift Card
-###### Stage 1 Default Claim"
-**Description**: User completes mission (hits target)
+###### Stage 1 Default Claim" ✅
+**Description**: User completes mission (hits target) 
 
 rewards	mission_progress	redemptions
 -	"status='completed'
@@ -270,14 +293,14 @@ completed_at set"	"ROW CREATED
 mission_progress_id set
 redemption_type='instant'"
 
-###### "Stage 2 Redeeming"
+###### "Stage 2 Redeeming" ✅
 **Description**: User claims reward
 
 mission_progress	redemptions
 status='completed'	"status='claimed'
 claimed_at set"
 
-###### "Stage 3 Concluded - history"
+###### "Stage 3 Concluded - history" ✅
 **Description**: Complete
 
 mission_progress	redemptions
@@ -287,7 +310,7 @@ concluded_at set"
 
 ##### Discount
 
-###### "Stage 1 Default Schedule"
+###### "Stage 1 Default Scheduled"
 **Description** User hits target
 
 mission_progress	redemptions
@@ -315,6 +338,11 @@ rewards	mission_progress	redemptions
     else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
 fulfilled_at set
 activation_date set"
+
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+``` **RUN THIS 26/12 11:00 AM**
+Check if discount activates
+```
 
 ###### "Stage 4 Concluded - history"
 **Description** Mission concluded 
