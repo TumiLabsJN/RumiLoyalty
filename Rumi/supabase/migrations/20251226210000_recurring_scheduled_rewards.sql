@@ -74,10 +74,10 @@ BEGIN
 
   -- Existing boost logic: Insert commission_boost_redemptions
   INSERT INTO commission_boost_redemptions (
-    redemption_id, boost_status, scheduled_activation_date,
+    redemption_id, client_id, boost_status, scheduled_activation_date,
     duration_days, boost_rate, created_at, updated_at
   ) VALUES (
-    p_redemption_id, 'scheduled', p_scheduled_date,
+    p_redemption_id, p_client_id, 'scheduled', p_scheduled_date,
     p_duration_days, p_boost_rate, v_now, v_now
   );
 
