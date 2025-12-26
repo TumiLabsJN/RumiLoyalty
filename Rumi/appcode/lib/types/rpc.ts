@@ -34,6 +34,7 @@ export interface GetAvailableMissionsRow {
   reward_value_data: Record<string, unknown> | null;
   reward_redemption_type: string | null;
   reward_source: string | null;
+  reward_redemption_frequency: string | null;  // NEW: for recurring missions (GAP-RECURRING-001)
   // Tier columns
   tier_id: string;
   tier_name: string;
@@ -46,6 +47,7 @@ export interface GetAvailableMissionsRow {
   progress_completed_at: string | null;
   progress_checkpoint_start: string | null;
   progress_checkpoint_end: string | null;
+  progress_cooldown_until: string | null;  // NEW: for recurring missions (GAP-RECURRING-001)
   // Redemption columns
   redemption_id: string | null;
   redemption_status: string | null;

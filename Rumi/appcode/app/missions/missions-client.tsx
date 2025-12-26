@@ -14,6 +14,7 @@ import {
   CircleDollarSign,
   ClockArrowDown,
   Truck,
+  Clock,  // NEW: for recurring_cooldown state (GAP-RECURRING-001)
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/pagelayout"
@@ -416,6 +417,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
             const isClearing = mission.status === "clearing"
             const isDefaultClaim = mission.status === "default_claim"
             const isDefaultSchedule = mission.status === "default_schedule"
+            const isRecurringCooldown = mission.status === "recurring_cooldown"  // NEW: GAP-RECURRING-001
 
             // ✅ Use backend's pre-formatted rewardDescription
             const rewardText = mission.rewardDescription
@@ -467,6 +469,8 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
               isRaffleWon && "bg-green-50 border-green-200",
               // CARD STATE: Locked - Slate with reduced opacity for tier-locked missions
               isLocked && "bg-slate-50 border-slate-200 opacity-60",
+              // CARD STATE: Recurring Cooldown - Slate with reduced opacity for rate-limited missions (GAP-RECURRING-001)
+              isRecurringCooldown && "bg-slate-50 border-slate-200 opacity-70",
             )
 
             // CARD STATE: Redeeming, Scheduled, Active, Pending Payment, Clearing, or Sending - Entire card is flippable
@@ -681,6 +685,14 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                       🔒 {mission.lockedData?.requiredTierName || ""}
                     </div>
                   )}
+                  {/* RECURRING BADGE - Shows for all recurring missions (GAP-RECURRING-001) */}
+                  {mission.recurringData?.frequency && !isLocked && (
+                    <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium">
+                      {mission.recurringData.frequency === 'weekly' && '📅 Weekly'}
+                      {mission.recurringData.frequency === 'monthly' && '📅 Monthly'}
+                      {mission.recurringData.frequency === 'unlimited' && '♾️ Unlimited'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Reward Text - Shows for all missions including locked */}
@@ -725,6 +737,14 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                 {/* CARD STATE: Raffle Processing - Description with countdown */}
                 {isRaffleProcessing && (
                   <p className="text-sm text-slate-600 mb-3">{missionDescription}</p>
+                )}
+
+                {/* CARD STATE: Recurring Cooldown - Shows cooldown info (GAP-RECURRING-001) */}
+                {isRecurringCooldown && (
+                  <div className="flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-sm font-medium">
+                    <Clock className="h-4 w-4" />
+                    Available again in {mission.recurringData?.cooldownDaysRemaining || 0} {mission.recurringData?.cooldownDaysRemaining === 1 ? 'day' : 'days'}
+                  </div>
                 )}
 
                 {/* Status-specific actions/displays */}

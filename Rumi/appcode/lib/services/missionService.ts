@@ -365,6 +365,16 @@ function computeStatus(data: AvailableMissionData): MissionStatus {
     return 'locked';
   }
 
+  // Priority 3.5 - Recurring Mission Cooldown (GAP-RECURRING-001)
+  // Check BEFORE raffle/redemption states because new recurring instances have no redemption
+  if (progress?.cooldownUntil) {
+    const cooldownUntil = new Date(progress.cooldownUntil);
+    if (new Date() < cooldownUntil) {
+      return 'recurring_cooldown';
+    }
+    // Cooldown expired - continue to normal status computation
+  }
+
   // Priority 3 - Raffle States (per lines 3528-3559)
   if (mission.type === 'raffle') {
     // Dormant (not accepting entries)
@@ -763,6 +773,32 @@ function transformMission(
     };
   }
 
+  // Generate recurring data (GAP-RECURRING-001)
+  let recurringData: MissionItem['recurringData'] = null;
+  const frequency = reward.redemptionFrequency;
+  if (frequency && frequency !== 'one-time') {
+    let cooldownUntil: string | null = null;
+    let cooldownDaysRemaining: number | null = null;
+    let isInCooldown = false;
+
+    if (progress?.cooldownUntil) {
+      const cooldownDate = new Date(progress.cooldownUntil);
+      cooldownUntil = cooldownDate.toISOString();
+
+      if (new Date() < cooldownDate) {
+        isInCooldown = true;
+        cooldownDaysRemaining = Math.ceil((cooldownDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      }
+    }
+
+    recurringData = {
+      frequency: frequency as 'weekly' | 'monthly' | 'unlimited',
+      cooldownUntil,
+      cooldownDaysRemaining,
+      isInCooldown,
+    };
+  }
+
   // Generate flippable card
   const flippableCard = generateFlippableCard(status, data);
 
@@ -794,6 +830,7 @@ function transformMission(
     scheduling: schedulingData,
     raffleData,
     lockedData,
+    recurringData,
     flippableCard,
   };
 }

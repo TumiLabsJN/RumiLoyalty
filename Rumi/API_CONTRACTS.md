@@ -3001,7 +3001,7 @@ interface MissionsPageResponse {
             'scheduled' | 'active' | 'redeeming' | 'redeeming_physical' | 'sending' |
             'pending_info' | 'clearing' |
             'dormant' | 'raffle_available' | 'raffle_processing' | 'raffle_claim' | 'raffle_won' |
-            'locked'
+            'locked' | 'recurring_cooldown'  // recurring_cooldown added in GAP-RECURRING-001
 
     // Progress tracking (null for raffles and locked missions)
     progress: {
@@ -3060,6 +3060,14 @@ interface MissionsPageResponse {
       requiredTierColor: string         // Hex color "#818CF8"
       unlockMessage: string             // Backend-formatted "Unlock at Platinum"
       previewFromTier: string | null    // From missions.preview_from_tier
+    } | null
+
+    // Recurring mission data (null for one-time missions) - GAP-RECURRING-001
+    recurringData: {
+      frequency: 'weekly' | 'monthly' | 'unlimited'  // Recurring frequency
+      cooldownUntil: string | null      // ISO timestamp when cooldown ends
+      cooldownDaysRemaining: number | null  // Days until available
+      isInCooldown: boolean             // True if rate-limited
     } | null
 
     // Flippable card content (null if not flippable state)

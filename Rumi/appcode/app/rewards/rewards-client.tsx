@@ -367,7 +367,7 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
       }
 
       // Data from server (replaces mockData - ENH-006)
-      const { user, redemptionCount, rewards } = rewardsData;
+      const { user, rewards } = rewardsData;
 
       // Get current tier info from user object
       const currentTier = user.currentTier;
@@ -679,7 +679,6 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
                 <div className="flex items-center gap-2">
                   <History className="h-4 w-4 text-slate-500" />
                   <span>View Redemption History</span>
-                  <span className="text-slate-400">({redemptionCount})</span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-400" />
               </Button>

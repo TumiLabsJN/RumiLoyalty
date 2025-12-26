@@ -71,6 +71,9 @@ export interface Mission {
   // Locked state data (null if not locked)
   lockedData: LockedData | null
 
+  // Recurring mission data (null for one-time missions) - GAP-RECURRING-001
+  recurringData: RecurringData | null
+
   // Flippable card content (null if not flippable state)
   flippableCard: FlippableCardData | null
 }
@@ -84,7 +87,7 @@ export type MissionType = 'sales_dollars' | 'sales_units' | 'videos' | 'likes' |
 export type RewardType = 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
 
 // ============================================================================
-// MISSION STATUS (16 possible values)
+// MISSION STATUS (17 possible values)
 // ============================================================================
 
 export type MissionStatus =
@@ -104,6 +107,7 @@ export type MissionStatus =
   | 'raffle_claim'          // Won raffle, needs to claim
   | 'raffle_won'            // Won raffle prize
   | 'locked'                // Tier-locked mission
+  | 'recurring_cooldown'    // Recurring mission in rate-limit period (GAP-RECURRING-001)
 
 // ============================================================================
 // NESTED TYPES
@@ -160,6 +164,17 @@ export interface LockedData {
   requiredTierColor: string         // Hex color "#818CF8"
   unlockMessage: string             // Backend-formatted "Unlock at Platinum"
   previewFromTier: string | null    // From missions.preview_from_tier
+}
+
+/**
+ * Recurring mission data - returned for weekly/monthly/unlimited missions
+ * GAP-RECURRING-001
+ */
+export interface RecurringData {
+  frequency: 'weekly' | 'monthly' | 'unlimited'
+  cooldownUntil: string | null      // ISO timestamp when cooldown ends
+  cooldownDaysRemaining: number | null  // Days until available
+  isInCooldown: boolean             // True if rate-limited
 }
 
 export interface FlippableCardData {

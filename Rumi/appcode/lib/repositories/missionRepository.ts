@@ -110,6 +110,7 @@ export interface AvailableMissionData {
     valueData: Record<string, unknown> | null;
     redemptionType: string;
     rewardSource: string;
+    redemptionFrequency: string;  // NEW: for recurring missions (GAP-RECURRING-001)
   };
   tier: {
     id: string;
@@ -124,6 +125,7 @@ export interface AvailableMissionData {
     completedAt: string | null;
     checkpointStart: string | null;
     checkpointEnd: string | null;
+    cooldownUntil: string | null;  // NEW: for recurring missions (GAP-RECURRING-001)
   } | null;
   redemption: {
     id: string;
@@ -186,6 +188,9 @@ export interface ClaimResult {
   redemptionId: string;
   newStatus: string;
   error?: string;
+  // NEW: for recurring missions (GAP-RECURRING-001)
+  newProgressId?: string | null;   // ID of next instance (null for one-time)
+  cooldownDays?: number | null;    // Days until next available (null for unlimited)
 }
 
 /**
@@ -235,6 +240,8 @@ function isClaimRPCResult(result: unknown): result is {
   error?: string;
   redemption_id?: string;
   new_status?: string;
+  new_progress_id?: string | null;  // NEW: for recurring missions (GAP-RECURRING-001)
+  cooldown_days?: number | null;    // NEW: for recurring missions (GAP-RECURRING-001)
 } {
   return (
     typeof result === 'object' &&
@@ -577,6 +584,7 @@ export const missionRepository = {
           valueData: row.reward_value_data as Record<string, unknown> | null,
           redemptionType: row.reward_redemption_type ?? 'instant',
           rewardSource: row.reward_source ?? 'mission',
+          redemptionFrequency: row.reward_redemption_frequency ?? 'one-time',
         },
         tier: {
           id: row.tier_id,
@@ -592,6 +600,7 @@ export const missionRepository = {
               completedAt: row.progress_completed_at,
               checkpointStart: row.progress_checkpoint_start,
               checkpointEnd: row.progress_checkpoint_end,
+              cooldownUntil: row.progress_cooldown_until,
             }
           : null,
         redemption: row.redemption_id
@@ -882,6 +891,7 @@ export const missionRepository = {
         valueData: reward.value_data as Record<string, unknown> | null,
         redemptionType: reward.redemption_type ?? 'instant',
         rewardSource: reward.reward_source ?? 'mission',
+        redemptionFrequency: reward.redemption_frequency ?? 'one-time',
       },
       tier: {
         id: tier.id,
@@ -897,6 +907,7 @@ export const missionRepository = {
             completedAt: userProgress.completed_at,
             checkpointStart: userProgress.checkpoint_start,
             checkpointEnd: userProgress.checkpoint_end,
+            cooldownUntil: (userProgress as { cooldown_until?: string | null }).cooldown_until ?? null,
           }
         : null,
       redemption: redemption
@@ -1119,6 +1130,7 @@ export const missionRepository = {
         valueData: reward.value_data as Record<string, unknown> | null,
         redemptionType: reward.redemption_type ?? 'instant',
         rewardSource: reward.reward_source ?? 'mission',
+        redemptionFrequency: reward.redemption_frequency ?? 'one-time',
       },
       tier: {
         id: tier.id,
@@ -1133,6 +1145,7 @@ export const missionRepository = {
         completedAt: progress.completed_at,
         checkpointStart: progress.checkpoint_start,
         checkpointEnd: progress.checkpoint_end,
+        cooldownUntil: (progress as { cooldown_until?: string | null }).cooldown_until ?? null,
       },
       redemption: redemption
         ? {
@@ -1401,6 +1414,9 @@ export const missionRepository = {
       success: true,
       redemptionId: result.redemption_id ?? '',
       newStatus: result.new_status ?? 'claimed',
+      // NEW: for recurring missions (GAP-RECURRING-001)
+      newProgressId: result.new_progress_id ?? null,
+      cooldownDays: result.cooldown_days ?? null,
     };
   },
 };
