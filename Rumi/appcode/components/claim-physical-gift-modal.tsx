@@ -88,23 +88,44 @@ export function ClaimPhysicalGiftModal({
         ? `/api/rewards/${reward.id}/claim`
         : `/api/missions/${reward.progressId}/claim`
 
+      // Build payload based on endpoint contract
+      // VIP tier (POST /api/rewards/:id/claim): expects shippingInfo + addressLine1/addressLine2 + sizeValue
+      // Mission (POST /api/missions/:id/claim): expects shippingAddress + line1/line2 + size
+      // See: API_CONTRACTS.md lines 4910-4920 (VIP) and 3758-3777 (Mission)
+      const payload = isVipTierReward
+        ? {
+            sizeValue: requiresSize ? selectedSize : undefined,
+            shippingInfo: {
+              firstName: address.shipping_recipient_first_name,
+              lastName: address.shipping_recipient_last_name,
+              addressLine1: address.shipping_address_line1,
+              addressLine2: address.shipping_address_line2 || undefined,
+              city: address.shipping_city,
+              state: address.shipping_state,
+              postalCode: address.shipping_postal_code,
+              country: address.shipping_country,
+              phone: address.shipping_phone,
+            },
+          }
+        : {
+            size: requiresSize ? selectedSize : undefined,
+            shippingAddress: {
+              firstName: address.shipping_recipient_first_name,
+              lastName: address.shipping_recipient_last_name,
+              line1: address.shipping_address_line1,
+              line2: address.shipping_address_line2 || undefined,
+              city: address.shipping_city,
+              state: address.shipping_state,
+              postalCode: address.shipping_postal_code,
+              country: address.shipping_country,
+              phone: address.shipping_phone,
+            },
+          }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          size: requiresSize ? selectedSize : undefined,
-          shippingAddress: {
-            firstName: address.shipping_recipient_first_name,
-            lastName: address.shipping_recipient_last_name,
-            line1: address.shipping_address_line1,
-            line2: address.shipping_address_line2 || undefined,
-            city: address.shipping_city,
-            state: address.shipping_state,
-            postalCode: address.shipping_postal_code,
-            country: address.shipping_country,
-            phone: address.shipping_phone,
-          },
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {

@@ -1680,7 +1680,7 @@ rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
-##### Gift Card
+##### Gift Card ✅
 ###### Stage 1 Default Claim" ✅
 **Description**: User completes mission (hits target)
 
