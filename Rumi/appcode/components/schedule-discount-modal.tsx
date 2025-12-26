@@ -272,8 +272,12 @@ export function ScheduleDiscountModal({
                   const dateToCheck = new Date(date)
                   dateToCheck.setHours(0, 0, 0, 0)
 
-                  // Disable if before tomorrow or after maxDate
-                  return dateToCheck < tomorrow || dateToCheck > maxDate
+                  // Disable weekends (discounts require weekdays Mon-Fri)
+                  const dayOfWeek = dateToCheck.getDay()
+                  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+                  // Disable if before tomorrow, after maxDate, or weekend
+                  return dateToCheck < tomorrow || dateToCheck > maxDate || isWeekend
                 }}
                 className="rounded-md border border-slate-200"
               />
