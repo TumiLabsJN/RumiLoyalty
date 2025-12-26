@@ -478,8 +478,16 @@ concluded_at set"
 - Don't see recurring aspect of mission.. 
 
 #### Recurring Missions
-##### Weekly
-Complete 
+##### Normal State
+See UI of recurring missions
+
+##### Claiming / New UI 1
+
+##### Claiming / New UI 2
+1. Claiming gets concluded. What happens
+
+##### Claiming / New UI 3
+1. New UI gets concluded, next mission reaches cap (monthly/weekly )
 
 
 
@@ -1673,7 +1681,7 @@ rewards	redemptions	commission_boost_redemption
 concluded_at set"	delivered_at set
 
 ##### Gift Card
-###### Stage 1 Default Claim"
+###### Stage 1 Default Claim" ✅
 **Description**: User completes mission (hits target)
 
 rewards	mission_progress	redemptions
@@ -1683,14 +1691,14 @@ completed_at set"	"ROW CREATED
 mission_progress_id set
 redemption_type='instant'"
 
-###### "Stage 2 Redeeming"
+###### "Stage 2 Redeeming" ✅
 **Description**: User claims reward
 
 mission_progress	redemptions
 status='completed'	"status='claimed'
 claimed_at set"
 
-###### "Stage 3 Concluded - history"
+###### "Stage 3 Concluded - history" ✅
 **Description**: Complete
 
 mission_progress	redemptions

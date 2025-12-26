@@ -1340,12 +1340,60 @@ export const missionRepository = {
         };
       }
 
-      return { success: true, redemptionId, newStatus: 'claimed' };
+      return {
+        success: true,
+        redemptionId,
+        newStatus: 'claimed',
+        newProgressId: isClaimRPCResult(result) ? result.new_progress_id ?? null : null,
+        cooldownDays: isClaimRPCResult(result) ? result.cooldown_days ?? null : null,
+      };
+    }
+
+    // Discount: Use atomic RPC with recurring support (GAP-RECURRING-002)
+    if (reward.type === 'discount') {
+      const scheduledDate = claimData.scheduledActivationDate;
+      const scheduledTime = claimData.scheduledActivationTime ?? '12:00:00';
+
+      if (!scheduledDate) {
+        return {
+          success: false,
+          redemptionId,
+          newStatus: 'claimable',
+          error: 'Scheduled activation date is required',
+        };
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: result, error: rpcError } = await (supabase.rpc as any)('claim_discount', {
+        p_redemption_id: redemptionId,
+        p_client_id: clientId,
+        p_scheduled_date: scheduledDate,
+        p_scheduled_time: scheduledTime,
+      });
+
+      if (rpcError || !isClaimRPCResult(result) || !result.success) {
+        const errorMsg = isClaimRPCResult(result) ? result.error : 'Invalid RPC response';
+        console.error('[MissionRepository] Discount claim failed:', rpcError || errorMsg);
+        return {
+          success: false,
+          redemptionId,
+          newStatus: 'claimable',
+          error: errorMsg ?? 'Failed to schedule discount',
+        };
+      }
+
+      return {
+        success: true,
+        redemptionId,
+        newStatus: 'claimed',
+        newProgressId: result.new_progress_id ?? null,
+        cooldownDays: result.cooldown_days ?? null,
+      };
     }
 
     // ============================================
     // OTHER REWARD TYPES: Use existing standalone UPDATE
-    // (raffle, points, discount, etc. - no sub-state table)
+    // (raffle, points, physical_gift without shipping, etc.)
     // ============================================
 
     const updateData: Record<string, unknown> = {

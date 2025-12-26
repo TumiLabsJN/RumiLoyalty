@@ -439,6 +439,7 @@ CREATE INDEX idx_missions_lookup ON missions(client_id, enabled, tier_eligibilit
 | checkpoint_end | TIMESTAMP | | mission_progress | Snapshot of next_checkpoint_at | Mission deadline |
 | created_at | TIMESTAMP | DEFAULT NOW() | mission_progress | Audit | |
 | updated_at | TIMESTAMP | DEFAULT NOW() | mission_progress | Audit | |
+| cooldown_until | TIMESTAMP | | mission_progress | Recurring mission rate-limit | For weekly/monthly missions: when this instance becomes active. NULL = immediately active (one-time or unlimited). Set at creation based on parent claim. GAP-RECURRING-001 |
 
 **Status Values:**
 - `active`: Mission in progress
@@ -455,6 +456,8 @@ UNIQUE(user_id, mission_id, checkpoint_start) -- One progress per mission per ch
 CREATE INDEX idx_mission_progress_user ON mission_progress(user_id);
 CREATE INDEX idx_mission_progress_status ON mission_progress(status);
 CREATE INDEX idx_mission_progress_tenant ON mission_progress(client_id, user_id, status);
+CREATE INDEX idx_mission_progress_cooldown_until ON mission_progress(cooldown_until) WHERE cooldown_until IS NOT NULL;
+CREATE UNIQUE INDEX idx_mission_progress_active_cooldown ON mission_progress(mission_id, user_id, client_id) WHERE cooldown_until IS NOT NULL; -- Prevents duplicate cooldown instances (GAP-RECURRING-001)
 ```
 
 ---

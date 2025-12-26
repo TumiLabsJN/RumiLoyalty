@@ -1047,8 +1047,8 @@ export const rewardService = {
           throw invalidScheduleWeekdayError();
         }
 
-        // Check time slot (09:00-16:00 EST)
-        if (estHour < 9 || estHour >= 16) {
+        // Check time slot (09:00-16:59 EST, i.e., 9 AM - 4 PM inclusive)
+        if (estHour < 9 || estHour > 16) {
           throw invalidTimeSlotError();
         }
 
