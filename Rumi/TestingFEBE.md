@@ -472,7 +472,15 @@ concluded_at set"
 
 
 ### Special Tests
-#### 
+#### Locked Missions
+1. Just locked ✅
+2. Locked and recurring ✅
+- Don't see recurring aspect of mission.. 
+
+#### Recurring Missions
+##### Weekly
+Complete 
+
 
 
 ### Sales Mission
@@ -1590,69 +1598,275 @@ concluded_at set"
 ## Reward UI elements
 
 
-# DISCOUNT FLOW
- ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+#### Reward Flows
+##### Commission Boost
 
-# PAYBOOST FLOW
- ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+###### STAGE 1: Default Schedule ✅
+**Description**: Schedulable
 
-### Locked Missions
+redemptions	commission_boost_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"	-
+
+
+
+###### STAGE 2: Stage 2 Scheduled ✅
+**Description**: CB Scheduled
+
+redemptions	commission_boost_redemption
+"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time='18:00:00' (6 PM EST)"	"ROW CREATED
+boost_status='scheduled'
+scheduled_activation_date set"
+
+From Home ✅
+From Mission ✅
+- After claiming, page does not auto refresh
+
+###### "Stage 3 Active" 
+**Description**: CB Active
+
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days
+Value Data = JSONB (sub dataset per reward type)"	scheduled_activation_date reached	"boost_status='active'
+scheduled_activation_date set
+sales_at_activation set (GMV at D0)"
+
+
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 30/12 16:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+
+
+###### "Stage 4 Pending Payment Info" 
+**Description**: Pending payment info
+
+rewards	redemptions	commission_boost_redemption
+"value_data.duration_days elapsed
+Value Data = JSONB (sub dataset per reward type)"	-	"boost_status='expired'
+sales_at_expiration set (GMV at DX)
+sales_delta calculated
+final_payout_amount calculated"
+
+OR 'boost_status='pending_info'
+- 1st JSON has "boost_status='expired'...
+
+
+###### "Stage 5 Clearing" ⚠️
+**Description**: Waiting days before payout
+
+rewards	redemptions	commission_boost_redemption
+-	status='fulfilled'	"boost_status='pending_payout'
+payment_account set
+payment_method set
+payment_account_confirm set
+payment_info_collected_at set"
+
+
+###### "Stage 6 Concluded - history" ⚠️
+**Description**: Payment done
+
+rewards	redemptions	commission_boost_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+##### Gift Card
+###### Stage 1 Default Claim"
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+##### Discount
+
+###### "Stage 1 Default Schedule" 
+**Description** User hits target
+
+mission_progress	redemptions
+"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='scheduled'"
+
+###### "Stage 2 Scheduled"
+**Description:** User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set
+scheduled_activation_date set
+scheduled_activation_time="
+
+###### "Stage 3 Active"
+**Description** Discount activates 
+
+rewards	mission_progress	redemptions
+"  else if (reward.type === 'discount') {
+    if (redemption.activation_date === null) status = 'scheduled';
+    else if (NOW() <= redemption.expiration_date) status = 'active';"	status='completed'	"status= 'fulfilled' 
+fulfilled_at set
+activation_date set"
+
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **29/12 19:00 PM active till 30/12 EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+
+###### "Stage 4 Concluded - history"
+**Description** Mission concluded 
+
+rewards	mission_progress	redemptions
+"value_data.duration_minutes elapsed
+OR
+value_data.max_uses reached
+
+Value Data = JSONB (sub dataset per reward type)"	status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+##### Physical Gift - no requires_size
+
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, no size
+
+rewards	redemptions	physical_gift_redemption
+value_data.requires_size=false	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=false
+size_category=NULL
+size_value=NULL
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Physical Gift - yes requires_size
+###### "Stage 1 Default Claim"
+**Description** User completes mission (hits target)
+
+redemptions	physical_gift_redemption
+"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"	-
+
+###### "Stage 2 Redeeming Physical"
+**Description** User claims, needs size
+
+rewards	redemptions	physical_gift_redemption
+"value_data.requires_size=true
+value_data.size_category shown
+value_data.size_options shown	"	"status='claimed'
+claimed_at set"	"ROW CREATED:
+requires_size=true
+size_category set (from reward)
+size_value set (user selected)
+size_submitted_at set
+shipping_address_line1 set
+shipping_city set
+shipping_state set
+shipping_postal_code set
+shipping_info_submitted_at set"
+
+
+###### "Stage 3 Sending"
+**Description**: Admin Ships item
+
+rewards	redemptions	physical_gift_redemption
+-	"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"	shipped_at IS NOT NULL
+
+###### "Stage 4 Concluded - history"
+**Description**: Reward Complete
+
+rewards	redemptions	physical_gift_redemption
+-	"status='concluded'
+concluded_at set"	delivered_at set
+
+
+##### Experience
+**Description**: User completes mission (hits target)
+
+rewards	mission_progress	redemptions
+-	"status='completed'
+completed_at set"	"ROW CREATED
+'status='claimable'
+mission_progress_id set
+redemption_type='instant'"
+
+###### "Stage 2 Redeeming"
+**Description**: User claims reward
+
+mission_progress	redemptions
+status='completed'	"status='claimed'
+claimed_at set"
+
+###### "Stage 3 Concluded - history"
+**Description**: Complete
+
+mission_progress	redemptions
+status='completed'	"status= 'concluded' 
+concluded_at set"
+
+
+
+
+### Locked Rewards
 Silver sign ❌
 Gold sign visible ⚠️✅
 Platinum sign ❌
 
-## Hidden Missions
-See if unavailable
 
-## Sequential Missions
-If available once a week, check UI when its used
-
-## 
-
-
-
-
-
-# Name
-CHANGE NAME
-UPDATE users SET tiktok_handle = 'Weston' WHERE tiktok_handle = 'testbronze';
-
-REVERT
-UPDATE users SET tiktok_handle = 'testbronze' WHERE email = 'testbronze@test.com';
-
-
-# Rewards
-## Spark Ads
-  | ID                                   | Name           | Amount |
-  |--------------------------------------|----------------|--------|
-  | cccc1111-0002-0000-0000-000000000002 | $30 Ads Boost  | 30     |
-  | cccc2222-0002-0000-0000-000000000002 | $50 Ads Boost  | 50     |
-  | cccc3333-0002-0000-0000-000000000002 | $100 Ads Boost | 100    |
-  | cccc4444-0002-0000-0000-000000000002 | $200 Ads Boost | 200    |
-
-## testbronze 
-"id": "a05f5d26-2d93-4156-af86-70a88604c7d8",
-"tiktok_handle": "testbronze",
-"email": "testbronze@test.com",
-"client_id": "11111111-1111-1111-1111-111111111111",
-"current_tier": "tier_1"
-
-## Physical Gift
-
-**Delete Claim**
-UPDATE redemptions
-SET status = 'claimable', claimed_at = NULL, updated_at = NOW()
-WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff';
-
-**Delete Address input**
-  -- Delete physical_gift_redemptions row
-  DELETE FROM physical_gift_redemptions
-  WHERE redemption_id = (
-    SELECT id FROM redemptions
-    WHERE mission_progress_id = '58ab6a82-7622-4f71-8910-bffe373891ff'
-  );
-
-  
 # FUTURE - ADMIN
 ## 1 Physical Gift
 displayText = Physical gift text for MISSIONS (27 chars)

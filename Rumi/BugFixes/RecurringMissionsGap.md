@@ -157,6 +157,13 @@ COMMENT ON COLUMN mission_progress.cooldown_until IS
 CREATE INDEX idx_mission_progress_cooldown_until
 ON mission_progress(cooldown_until)
 WHERE cooldown_until IS NOT NULL;
+
+-- Partial unique index: Prevent duplicate "next instances" for recurring missions
+-- Only one active cooldown instance allowed per mission/user/client
+-- This closes the race condition where concurrent claims could create duplicates
+CREATE UNIQUE INDEX idx_mission_progress_active_cooldown
+ON mission_progress(mission_id, user_id, client_id)
+WHERE cooldown_until IS NOT NULL;
 ```
 
 ---
@@ -426,122 +433,145 @@ function generateRecurringData(
 
 ---
 
-### Claim-Time Instance Creation (With Transaction Safety)
+### Claim-Time Instance Creation (Modify Existing RPC)
 
-**File:** `lib/services/claimService.ts` or equivalent
+**Integration Point:** The existing fast path uses `claim_instant_reward` RPC. We **modify this RPC** to handle recurring missions atomically, avoiding any service-layer branching.
+
+**File:** `lib/repositories/missionRepository.ts` - Update ClaimResult type
 ```typescript
 // SPECIFICATION - TO BE IMPLEMENTED
+// Add optional fields for recurring missions (backwards compatible)
 
-// Return type for claim RPC
-interface ClaimRecurringMissionResult {
-  redemption_id: string;
-  new_progress_id: string | null;  // null for one-time missions
-  cooldown_days: number | null;    // null for unlimited
-}
-
-// Mapped result for consumers
 interface ClaimResult {
+  success: boolean;
   redemptionId: string;
-  newProgressId: string | null;
-  cooldownDays: number | null;
-  isRecurring: boolean;
-}
-
-async function claimMissionReward(
-  missionProgressId: string,
-  userId: string,
-  clientId: string
-): Promise<ClaimResult> {
-  const supabase = createAdminClient();
-
-  // Use Supabase transaction via RPC for atomicity
-  const { data, error } = await supabase.rpc('claim_recurring_mission_reward', {
-    p_mission_progress_id: missionProgressId,
-    p_user_id: userId,
-    p_client_id: clientId,
-  });
-
-  if (error) {
-    throw new Error(`Failed to claim: ${error.message}`);
-  }
-
-  // Map JSONB response to typed result
-  const rpcResult = data as ClaimRecurringMissionResult;
-  return {
-    redemptionId: rpcResult.redemption_id,
-    newProgressId: rpcResult.new_progress_id,
-    cooldownDays: rpcResult.cooldown_days,
-    isRecurring: rpcResult.new_progress_id !== null,
-  };
+  newStatus: string;
+  error?: string;
+  // NEW optional fields for recurring
+  newProgressId?: string | null;   // ID of next instance (null for one-time)
+  cooldownDays?: number | null;    // Days until next available (null for unlimited)
 }
 ```
 
-**File:** `supabase/migrations/YYYYMMDD_recurring_missions.sql` - Atomic Claim RPC
+**File:** `lib/repositories/missionRepository.ts` - Update claimInstantReward mapping
+```typescript
+// SPECIFICATION - TO BE IMPLEMENTED
+// In claimInstantReward(), update return mapping:
+
+return {
+  success: true,
+  redemptionId: result.redemption_id ?? '',
+  newStatus: result.new_status ?? 'claimed',
+  // NEW: map recurring fields if present
+  newProgressId: result.new_progress_id ?? null,
+  cooldownDays: result.cooldown_days ?? null,
+};
+```
+
+**File:** `supabase/migrations/YYYYMMDD_recurring_missions.sql` - Modify Existing RPC
 ```sql
 -- SPECIFICATION - TO BE IMPLEMENTED
--- Atomic claim with new instance creation for recurring missions
+-- Modify claim_instant_reward to handle recurring missions atomically
+-- This preserves the fast path while adding recurring support
 
-CREATE OR REPLACE FUNCTION claim_recurring_mission_reward(
+DROP FUNCTION IF EXISTS claim_instant_reward(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION claim_instant_reward(
   p_mission_progress_id UUID,
-  p_user_id UUID,
   p_client_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-  v_mission_id UUID;
-  v_reward_id UUID;
-  v_redemption_frequency VARCHAR;
-  v_cooldown_days INTEGER;
+  v_now TIMESTAMP := NOW();
+  v_user_id UUID;
+  v_user_tier TEXT;
+  v_auth_uid UUID := auth.uid();
   v_redemption_id UUID;
-  v_new_progress_id UUID;
+  v_redemption_status TEXT;
+  v_reward_type TEXT;
+  v_mission_status TEXT;
+  v_tier_eligibility TEXT;
+  v_mission_id UUID;
+  v_redemption_frequency TEXT;  -- NEW
+  v_cooldown_days INTEGER;      -- NEW
+  v_new_progress_id UUID;       -- NEW
 BEGIN
-  -- Get mission and reward info with multi-tenant guards
-  SELECT m.id, m.reward_id, r.redemption_frequency
-  INTO v_mission_id, v_reward_id, v_redemption_frequency
-  FROM mission_progress mp
-  INNER JOIN missions m ON mp.mission_id = m.id
-    AND m.client_id = p_client_id  -- MULTI-TENANT GUARD: mission belongs to client
-  INNER JOIN rewards r ON m.reward_id = r.id
-    AND r.client_id = p_client_id  -- MULTI-TENANT GUARD: reward belongs to client
-  WHERE mp.id = p_mission_progress_id
-    AND mp.user_id = p_user_id
-    AND mp.client_id = p_client_id
-  FOR UPDATE;  -- Lock the row
-
-  IF v_mission_id IS NULL THEN
-    RAISE EXCEPTION 'Mission progress not found or access denied';
+  -- SECURITY: Derive user_id from auth.uid()
+  IF v_auth_uid IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
   END IF;
 
-  -- Create redemption (existing claim logic)
-  INSERT INTO redemptions (
-    id, user_id, reward_id, mission_progress_id, client_id,
-    status, tier_at_claim, redemption_type, created_at
-  )
-  SELECT
-    gen_random_uuid(),
-    p_user_id,
-    v_reward_id,
-    p_mission_progress_id,
-    p_client_id,
-    'claimed',
-    u.current_tier,
-    r.redemption_type,
-    NOW()
-  FROM users u, rewards r
-  WHERE u.id = p_user_id AND r.id = v_reward_id
-  RETURNING id INTO v_redemption_id;
+  SELECT id, current_tier INTO v_user_id, v_user_tier
+  FROM users
+  WHERE id = v_auth_uid AND client_id = p_client_id;
 
-  -- Update redemption with claimed_at
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- Single query: Get redemption + validate + get frequency
+  SELECT
+    r.id,
+    r.status,
+    rw.type,
+    mp.status,
+    m.tier_eligibility,
+    m.id,
+    rw.redemption_frequency  -- NEW: get frequency for recurring check
+  INTO
+    v_redemption_id,
+    v_redemption_status,
+    v_reward_type,
+    v_mission_status,
+    v_tier_eligibility,
+    v_mission_id,
+    v_redemption_frequency
+  FROM redemptions r
+  JOIN mission_progress mp ON r.mission_progress_id = mp.id
+  JOIN missions m ON mp.mission_id = m.id
+    AND m.client_id = p_client_id  -- MULTI-TENANT GUARD
+  JOIN rewards rw ON r.reward_id = rw.id
+    AND rw.client_id = p_client_id  -- MULTI-TENANT GUARD
+  WHERE r.mission_progress_id = p_mission_progress_id
+    AND r.user_id = v_user_id
+    AND r.client_id = p_client_id
+    AND r.deleted_at IS NULL
+  FOR UPDATE OF r;  -- Lock redemption row
+
+  -- Validation checks (existing logic)
+  IF v_redemption_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Redemption not found');
+  END IF;
+
+  IF v_redemption_status != 'claimable' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Already claimed or not claimable',
+      'redemption_id', v_redemption_id);
+  END IF;
+
+  IF v_mission_status != 'completed' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Mission not completed');
+  END IF;
+
+  IF v_tier_eligibility != 'all' AND v_tier_eligibility != v_user_tier THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Not eligible for this tier');
+  END IF;
+
+  -- Instant rewards only (existing check)
+  IF v_reward_type NOT IN ('gift_card', 'spark_ads', 'experience') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Reward requires additional information');
+  END IF;
+
+  -- Perform the claim (existing logic)
   UPDATE redemptions
-  SET claimed_at = NOW()
+  SET status = 'claimed', claimed_at = v_now, updated_at = v_now
   WHERE id = v_redemption_id;
 
-  -- If recurring, create next instance with cooldown
+  -- NEW: If recurring, create next instance with cooldown
   IF v_redemption_frequency IN ('weekly', 'monthly', 'unlimited') THEN
-    -- Calculate cooldown
     v_cooldown_days := CASE v_redemption_frequency
       WHEN 'weekly' THEN 7
       WHEN 'monthly' THEN 30
@@ -549,57 +579,88 @@ BEGIN
       ELSE 0
     END;
 
-    -- Check for existing next instance (idempotency guard)
-    IF NOT EXISTS (
-      SELECT 1 FROM mission_progress mp2
-      WHERE mp2.mission_id = v_mission_id
-        AND mp2.user_id = p_user_id
-        AND mp2.client_id = p_client_id
-        AND mp2.id != p_mission_progress_id
-        AND mp2.cooldown_until IS NOT NULL
-        AND mp2.cooldown_until > NOW()
-    ) THEN
-      -- Create new instance with cooldown_until
-      INSERT INTO mission_progress (
-        id, client_id, mission_id, user_id,
-        current_value, status, cooldown_until,
-        checkpoint_start, checkpoint_end,
-        created_at, updated_at
-      )
-      SELECT
-        gen_random_uuid(),
-        p_client_id,
-        v_mission_id,
-        p_user_id,
-        0,
-        CASE WHEN m.activated THEN 'active' ELSE 'dormant' END,
-        CASE WHEN v_cooldown_days > 0 THEN NOW() + (v_cooldown_days || ' days')::INTERVAL ELSE NULL END,
-        u.tier_achieved_at,
-        u.next_checkpoint_at,
-        NOW(),
-        NOW()
-      FROM missions m, users u
-      WHERE m.id = v_mission_id AND u.id = p_user_id
-      RETURNING id INTO v_new_progress_id;
-    END IF;
+    -- Create new instance with cooldown_until
+    -- Uses ON CONFLICT to handle race conditions: if concurrent claims try to insert,
+    -- only one succeeds due to idx_mission_progress_active_cooldown unique index
+    INSERT INTO mission_progress (
+      id, client_id, mission_id, user_id,
+      current_value, status, cooldown_until,
+      checkpoint_start, checkpoint_end,
+      created_at, updated_at
+    )
+    SELECT
+      gen_random_uuid(),
+      p_client_id,
+      v_mission_id,
+      v_user_id,
+      0,
+      CASE WHEN m.activated THEN 'active' ELSE 'dormant' END,
+      CASE WHEN v_cooldown_days > 0 THEN v_now + (v_cooldown_days || ' days')::INTERVAL ELSE NULL END,
+      u.tier_achieved_at,
+      u.next_checkpoint_at,
+      v_now,
+      v_now
+    FROM missions m, users u
+    WHERE m.id = v_mission_id AND u.id = v_user_id
+    ON CONFLICT (mission_id, user_id, client_id) WHERE cooldown_until IS NOT NULL
+    DO NOTHING
+    RETURNING id INTO v_new_progress_id;
   END IF;
 
+  -- Return success with new fields (backwards compatible)
   RETURN jsonb_build_object(
+    'success', true,
     'redemption_id', v_redemption_id,
-    'new_progress_id', v_new_progress_id,
-    'cooldown_days', v_cooldown_days
+    'new_status', 'claimed',
+    'new_progress_id', v_new_progress_id,  -- NEW: null for one-time
+    'cooldown_days', v_cooldown_days       -- NEW: null for one-time/unlimited
   );
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION claim_recurring_mission_reward(UUID, UUID, UUID) TO service_role;
+REVOKE ALL ON FUNCTION claim_instant_reward FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION claim_instant_reward TO authenticated;
 ```
 
 **Key Safety Features:**
-1. **FOR UPDATE** - Locks the mission_progress row to prevent concurrent claims
-2. **NOT EXISTS check** - Idempotency guard prevents duplicate next instances
-3. **Single transaction** - All operations atomic; if anything fails, nothing commits
-4. **cooldown_until set at creation** - New instance knows its own cooldown state
+1. **FOR UPDATE OF r** - Locks the redemption row to prevent concurrent claims
+2. **Partial unique index** - `idx_mission_progress_active_cooldown` prevents duplicate next instances at database level
+3. **ON CONFLICT DO NOTHING** - Race conditions handled gracefully; second concurrent claim silently does nothing
+4. **Single transaction** - All operations atomic; if anything fails, nothing commits
+5. **cooldown_until set at creation** - New instance knows its own cooldown state
+6. **Backwards compatible** - Existing callers continue to work; new fields are optional
+
+**Visibility Guarantee (Why No Gap Exists):**
+
+The `get_available_missions` RPC filters out concluded redemptions (`AND red.status NOT IN ('concluded', 'rejected')`). This might seem like it would hide completed recurring missions, but visibility is guaranteed because:
+
+1. **Atomic creation:** The new instance is created in the SAME TRANSACTION as the claim (redemption status → 'claimed')
+2. **Timing:** 'concluded' status happens LATER (user confirms receipt, or auto-conclude job runs)
+3. **By the time the old redemption is concluded, the new instance already exists**
+
+Flow:
+```
+[Claim button clicked] → claim_instant_reward RPC runs:
+  ├── UPDATE redemption SET status = 'claimed'
+  └── INSERT new mission_progress (cooldown_until = NOW + 7 days)
+      ↓
+[Hours/days later] → old redemption marked 'concluded'
+      ↓
+[get_available_missions returns]:
+  - Old instance: mission_progress exists, red.* = NULL (concluded filtered)
+  - New instance: mission_progress exists with cooldown_until, red.* = NULL (no redemption yet)
+```
+
+Both instances appear in the RPC response. The service layer computes status for each.
+
+**Unlimited Missions (cooldown_until = NULL):**
+
+For `redemption_frequency = 'unlimited'`:
+- `v_cooldown_days = 0` → `cooldown_until = NULL`
+- The partial unique index `WHERE cooldown_until IS NOT NULL` does NOT prevent duplicates
+- **This is intentional:** Multiple 0% instances may accumulate for unlimited missions
+- User progresses on whichever instance they're actively tracking
+- This matches the "no limit" semantics—no deduplication needed
 
 ---
 
@@ -658,12 +719,11 @@ const recurringFlipContent = mission.recurringData?.frequency ? (
 
 | File | Action | Changes |
 |------|--------|---------|
-| `supabase/migrations/YYYYMMDD_recurring_missions.sql` | CREATE | Add column, modify RPC, add claim RPC |
+| `supabase/migrations/YYYYMMDD_recurring_missions.sql` | CREATE | Add column, modify get_available_missions RPC, modify claim_instant_reward RPC |
 | `lib/types/rpc.ts` | MODIFY | Add `reward_redemption_frequency`, `progress_cooldown_until` |
 | `lib/types/api.ts` | MODIFY | Add `recurring_cooldown` status, add `recurringData` interface |
-| `lib/repositories/missionRepository.ts` | MODIFY | Map new RPC fields to AvailableMissionData |
+| `lib/repositories/missionRepository.ts` | MODIFY | Map new RPC fields, update ClaimResult type with optional `newProgressId`/`cooldownDays` |
 | `lib/services/missionService.ts` | MODIFY | Add cooldown check (using cooldown_until) to computeStatus(), add recurringData generation |
-| `lib/services/claimService.ts` | MODIFY | Call new atomic claim RPC for missions |
 | `app/missions/missions-client.tsx` | MODIFY | Add recurring badge, cooldown UI, flippable content |
 | `API_CONTRACTS.md` | MODIFY | Document new status, recurringData, and cooldown_until field |
 
@@ -765,14 +825,26 @@ For one-time missions: `recurringData` is `null`.
 
 ### Deploy Order (Migration/Contract Sequencing)
 
-**Critical:** Deploy in this exact order to avoid type mismatches:
+**⚠️ CRITICAL:** Deploy in this exact order to avoid type mismatches and runtime errors:
 
-1. **Deploy Supabase migration** - Adds column, modifies RPC, adds claim RPC
-2. **Deploy TypeScript types** - Update rpc.ts, api.ts with new fields
-3. **Deploy service layer** - Update repository mapping, computeStatus(), claim service
-4. **Deploy UI** - Add recurring badge, cooldown UI
+| Step | What | Why First |
+|------|------|-----------|
+| 1 | **Supabase migration** | RPC must return new columns before TS expects them |
+| 2 | **TypeScript types** (rpc.ts, api.ts) | Types must match RPC before service uses them |
+| 3 | **Repository + Service** | Can now safely access new fields |
+| 4 | **UI components** | Can now safely render recurring data |
 
-**Why this order:** RPC changes are backwards-compatible (new columns return NULL for old callers). TypeScript must match RPC before service layer can use new fields.
+**What breaks if order is wrong:**
+- If types deploy before migration: Runtime error—TS expects columns RPC doesn't return
+- If service deploys before types: Compile error—code references undefined types
+- If UI deploys before service: Compile error—`recurringData` undefined on MissionItem
+
+**Safe rollout strategy:**
+1. Deploy migration to Supabase (no app deploy yet)
+2. Verify RPC returns new columns: `SELECT reward_redemption_frequency, progress_cooldown_until FROM get_available_missions(...)`
+3. Deploy full app (types → service → UI all at once, since they're in same bundle)
+
+**Backwards compatibility:** RPC changes are additive—new columns return NULL for rows without data. Existing callers (before app deploy) continue to work.
 
 ---
 
@@ -865,7 +937,7 @@ After audit review, Option B (create at claim time) is selected with the followi
 
 - [ ] **Step 1:** Create migration file
   - File: `supabase/migrations/YYYYMMDD_recurring_missions.sql`
-  - Action: Add cooldown_until column, modify get_available_missions RPC, add claim_recurring_mission_reward RPC
+  - Action: Add cooldown_until column, modify get_available_missions RPC, modify claim_instant_reward RPC
 
 - [ ] **Step 2:** Update RPC types
   - File: `lib/types/rpc.ts`
@@ -877,21 +949,17 @@ After audit review, Option B (create at claim time) is selected with the followi
 
 - [ ] **Step 4:** Update repository mapping
   - File: `lib/repositories/missionRepository.ts`
-  - Action: Map new fields to AvailableMissionData
+  - Action: Map new RPC fields to AvailableMissionData, update ClaimResult type with newProgressId/cooldownDays
 
 - [ ] **Step 5:** Update service layer
   - File: `lib/services/missionService.ts`
   - Action: Add computeStatus() logic using cooldown_until, add recurringData generation
 
-- [ ] **Step 6:** Update claim service
-  - File: `lib/services/claimService.ts` (or equivalent)
-  - Action: Call claim_recurring_mission_reward RPC for mission claims
-
-- [ ] **Step 7:** Update UI
+- [ ] **Step 6:** Update UI
   - File: `app/missions/missions-client.tsx`
   - Action: Add badge, cooldown UI, flippable content
 
-- [ ] **Step 8:** Update API contracts
+- [ ] **Step 7:** Update API contracts
   - File: `API_CONTRACTS.md`
   - Action: Document new status, recurringData, and schema change
 
@@ -933,11 +1001,13 @@ After audit review, Option B (create at claim time) is selected with the followi
 
 ---
 
-**Document Version:** 4.2
+**Document Version:** 5.2
 **Last Updated:** 2025-12-26
 **Author:** Claude Code
 **Status:** Approved - Ready for Implementation
-**Audit:** Approved with clarifications added (backfill behavior, deploy order, return mapping)
+**Audit:** Approved with clarifications:
+- v5.1: Added partial unique index + ON CONFLICT for race condition safety
+- v5.2: Added visibility guarantee explanation, unlimited behavior documentation, enhanced deploy sequencing
 
 ---
 
@@ -947,7 +1017,12 @@ This document uses the **Rate Limit Model** with **durable cooldown state**:
 
 1. **cooldown_until column** - New instances store their own cooldown expiry
 2. **No lookup needed** - computeStatus() checks progress.cooldownUntil directly
-3. **Atomic claim** - Transaction wraps claim + new instance creation
-4. **Idempotent** - Duplicate prevention via NOT EXISTS guard
+3. **Modify existing RPC** - claim_instant_reward is extended (NOT a new RPC)
+4. **Backwards compatible** - ClaimResult adds optional fields; existing callers unaffected
+5. **Truly idempotent** - Partial unique index + ON CONFLICT handles race conditions at database level
 
 **Key insight:** The new instance doesn't need to know when the *previous* instance was claimed. It only needs to know when *it* becomes active (cooldown_until).
+
+**Integration insight:** We modify the existing `claim_instant_reward` RPC to add recurring support. This preserves the fast path and requires no service-layer branching.
+
+**Race condition fix:** The partial unique index `idx_mission_progress_active_cooldown` on (mission_id, user_id, client_id) WHERE cooldown_until IS NOT NULL ensures only one "next instance" can exist. ON CONFLICT DO NOTHING makes concurrent claims idempotent.
