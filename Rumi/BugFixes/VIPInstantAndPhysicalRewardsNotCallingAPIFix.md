@@ -92,8 +92,18 @@ interface PhysicalGiftReward {
 
 **Replace with:**
 ```typescript
-      // Use rewards endpoint for VIP tier, missions endpoint for mission-based
+      // Determine endpoint based on reward source
       const isVipTierReward = reward.rewardSource === 'vip_tier'
+
+      // Guard: Mission rewards must have progressId
+      if (!isVipTierReward && !reward.progressId) {
+        toast.error("Unable to claim reward", {
+          description: "Missing claim information. Please refresh and try again.",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       const endpoint = isVipTierReward
         ? `/api/rewards/${reward.id}/claim`
         : `/api/missions/${reward.progressId}/claim`

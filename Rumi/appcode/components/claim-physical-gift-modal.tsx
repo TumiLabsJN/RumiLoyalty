@@ -17,6 +17,7 @@ import { toast } from "sonner"
 interface PhysicalGiftReward {
   id: string
   progressId?: string  // For claim calls (mission_progress.id)
+  rewardSource?: 'vip_tier' | 'mission'  // Discriminator for endpoint routing
   displayName: string
   rewardType: "physical_gift"
   valueData: {
@@ -71,7 +72,23 @@ export function ClaimPhysicalGiftModal({
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(`/api/missions/${reward.progressId || reward.id}/claim`, {
+      // Determine endpoint based on reward source
+      const isVipTierReward = reward.rewardSource === 'vip_tier'
+
+      // Guard: Mission rewards must have progressId
+      if (!isVipTierReward && !reward.progressId) {
+        toast.error("Unable to claim reward", {
+          description: "Missing claim information. Please refresh and try again.",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      const endpoint = isVipTierReward
+        ? `/api/rewards/${reward.id}/claim`
+        : `/api/missions/${reward.progressId}/claim`
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

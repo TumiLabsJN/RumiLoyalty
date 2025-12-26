@@ -96,15 +96,29 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
           return
         }
 
-        // For other reward types, claim immediately
+        // For other reward types (gift_card, spark_ads, experience), claim immediately
         try {
-          // TODO: POST /api/rewards/:id/claim
-          // Backend will update reward.status to 'redeeming'
-          // This will trigger the "Pending" badge to appear
-          await new Promise(resolve => setTimeout(resolve, CLAIM_DELAY_MS))
+          // POST /api/rewards/:id/claim
+          const response = await fetch(`/api/rewards/${benefit.id}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
 
-          // No toast for immediate claims - only scheduled rewards show toasts
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to claim reward')
+          }
+
+          toast.success("Reward claimed!", {
+            description: "We'll process your reward shortly",
+            duration: 5000,
+          })
+
+          // Refresh page to update reward status
+          setTimeout(() => window.location.reload(), 2000)
         } catch (error) {
+          console.error("Failed to claim reward:", error)
           toast.error("Failed to claim reward", {
             description: "Please try again or contact support",
             duration: 5000,

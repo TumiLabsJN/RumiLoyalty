@@ -75,9 +75,12 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
       case "views":
         return <Eye className={iconClass} />
       case "raffle":
-        // Raffle shows checkmark for concluded, X for rejected
+        // Raffle shows X for rejected/missed, checkmark for won
         if (status === "rejected_raffle") {
           return <XCircle className="h-8 w-8 text-red-500" />
+        }
+        if (status === "missed_raffle") {
+          return <XCircle className="h-8 w-8 text-amber-500" />
         }
         return <CheckCircle2 className="h-8 w-8 text-green-600" />
       default:
@@ -149,7 +152,7 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
           if (isRejectedRaffleCard && mission.raffleData?.drawDateFormatted) {
             secondaryText = `Raffle date: ${mission.raffleData.drawDateFormatted}`
           } else if (isMissedRaffleCard && mission.raffleData?.drawDateFormatted) {
-            secondaryText = `Draw date: ${mission.raffleData.drawDateFormatted}`
+            secondaryText = `Raffle date: ${mission.raffleData.drawDateFormatted}`
           } else if (mission.completedAtFormatted) {
             secondaryText = `Completed: ${mission.completedAtFormatted}`
           }
