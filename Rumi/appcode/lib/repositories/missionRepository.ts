@@ -1363,7 +1363,6 @@ export const missionRepository = {
         };
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: result, error: rpcError } = await (supabase.rpc as any)('claim_discount', {
         p_redemption_id: redemptionId,
         p_client_id: clientId,
