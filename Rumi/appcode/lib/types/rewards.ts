@@ -32,6 +32,7 @@ export interface RewardsPageResponse {
 export interface Reward {
   // Core reward data
   id: string
+  redemptionId: string | null  // UUID from redemptions.id (null if not claimed)
   type: RewardType
   name: string
   description: string

@@ -56,7 +56,7 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
   const [showPaymentInfoModal, setShowPaymentInfoModal] = useState(false)
   const [showPhysicalGiftModal, setShowPhysicalGiftModal] = useState(false)
   const [selectedMission, setSelectedMission] = useState<{ id: string; progressId?: string | null; percent: number; durationDays: number } | null>(null)
-  const [selectedPaymentMission, setSelectedPaymentMission] = useState<{ id: string; name: string } | null>(null)
+  const [selectedPaymentMission, setSelectedPaymentMission] = useState<{ id: string; redemptionId: string; name: string } | null>(null)
   const [selectedPhysicalGift, setSelectedPhysicalGift] = useState<any | null>(null)
 
   // Raffle participation state
@@ -558,11 +558,16 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                       {isPendingInfo && (
                         <Button
                           onClick={() => {
-                            setSelectedPaymentMission({
-                              id: mission.id,
-                              name: mission.displayName
-                            })
-                            setShowPaymentInfoModal(true)
+                            if (mission.redemptionId) {
+                              setSelectedPaymentMission({
+                                id: mission.id,
+                                redemptionId: mission.redemptionId,
+                                name: mission.displayName
+                              })
+                              setShowPaymentInfoModal(true)
+                            } else {
+                              console.warn('[MissionsClient] Mission in pending_info status missing redemptionId:', mission.id)
+                            }
                           }}
                           className="w-full bg-amber-200 text-amber-800 font-semibold py-3 rounded-lg"
                         >
@@ -877,11 +882,12 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                 setSelectedPaymentMission(null)
               }
             }}
-            rewardId={selectedPaymentMission.id}
+            redemptionId={selectedPaymentMission.redemptionId}
             rewardName={selectedPaymentMission.name}
             onSuccess={() => {
-              console.log("[v0] Payment info submitted successfully")
-              // TODO: Refresh missions data from API
+              console.log("[MissionsClient] Payment info submitted successfully")
+              // Refresh page to update mission status (pending_info → clearing)
+              setTimeout(() => window.location.reload(), 2000)
             }}
           />
         )}

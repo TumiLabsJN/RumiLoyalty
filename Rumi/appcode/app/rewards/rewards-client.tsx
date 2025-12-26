@@ -221,15 +221,15 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
       }
 
       const handlePhysicalGiftSuccess = () => {
-        console.log("[v0] Physical gift claimed successfully")
-        // TODO: Refresh benefits data from API
-        // For now, the modal handles success toast
+        console.log("[RewardsClient] Physical gift claimed successfully")
+        // Refresh page to update reward status
+        setTimeout(() => window.location.reload(), 2000)
       }
 
       const handlePaymentInfoSuccess = () => {
-        console.log("[v0] Payment info submitted successfully")
-        // TODO: Refresh benefits data from API
-        // Status should change from "pending_info" to "clearing"
+        console.log("[RewardsClient] Payment info submitted successfully")
+        // Refresh page to update reward status (pending_info → clearing)
+        setTimeout(() => window.location.reload(), 2000)
       }
 
       // Custom Gift Drop SVG icon
@@ -729,8 +729,11 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
             />
           )}
 
-          {/* Payment Info Modal */}
-          {selectedReward && (
+          {/* Payment Info Modal
+              Note: The API route folder is named [rewardId] but actually expects redemptionId.
+              See: /api/rewards/[rewardId]/payment-info/route.ts line 127 comment
+          */}
+          {selectedReward?.redemptionId ? (
             <PaymentInfoModal
               open={showPaymentInfoModal}
               onOpenChange={(open) => {
@@ -739,11 +742,17 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
                   setSelectedReward(null)
                 }
               }}
-              rewardId={selectedReward.id}
+              redemptionId={selectedReward.redemptionId}
               rewardName={selectedReward.name}
               onSuccess={handlePaymentInfoSuccess}
             />
-          )}
+          ) : selectedReward && !selectedReward.redemptionId ? (
+            // Guard: Log if reward in pending_info status has no redemptionId
+            (() => {
+              console.warn('[RewardsClient] Reward in pending_info status missing redemptionId:', selectedReward.id)
+              return null
+            })()
+          ) : null}
         </PageLayout>
       )
   }

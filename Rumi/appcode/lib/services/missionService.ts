@@ -779,6 +779,7 @@ function transformMission(
   return {
     id: mission.id, // Always mission.id (matches type contract)
     progressId: progress?.id ?? null, // For claim calls that need progress ID
+    redemptionId: redemption?.id ?? null, // For payment-info calls that need redemption ID
     missionType: mission.type, // Validated above
     displayName: MISSION_DISPLAY_NAMES[mission.type] ?? mission.displayName,
     targetUnit: mission.targetUnit as 'dollars' | 'units' | 'count',

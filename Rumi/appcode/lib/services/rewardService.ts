@@ -839,7 +839,7 @@ export const rewardService = {
 
     // Step 4: Transform each reward with computed status and formatting
     const rewards: Reward[] = rawRewards.map((data) => {
-      const { reward } = data;
+      const { reward, redemption } = data;
       const usedCount = usageCountMap.get(reward.id) || 0;
 
       // Compute status and availability
@@ -865,6 +865,7 @@ export const rewardService = {
 
       return {
         id: reward.id,
+        redemptionId: redemption?.id ?? null,
         type: toRewardType(reward.type),
         name,
         description: reward.description ?? '',

@@ -186,15 +186,13 @@ selected_by set"
 ##### Winner/Loser ✅
 
 1. Loser looses, path of that mission to missionhistory for loser ✅
-2. Winner wi
+2. Winner wins ✅
 
-##### Weekly / monthly missions
-1. UI works?
-2. Test process
+
 
 #### Reward Flow
 
-##### Commission Boost
+##### Commission Boost ✅
 
 ###### STAGE 1: Default Schedule ✅
 **Description**: Schedulable
@@ -282,7 +280,7 @@ rewards	redemptions	commission_boost_redemption
 -	"status='concluded'
 concluded_at set"	delivered_at set
 
-##### Gift Card
+##### Gift Card ✅
 ###### Stage 1 Default Claim" ✅
 **Description**: User completes mission (hits target) 
 
@@ -357,9 +355,9 @@ concluded_at set"
 
 
 
-##### Physical Gift - no requires_size
+##### Physical Gift - no requires_size ✅
 
-###### "Stage 1 Default Claim"
+###### "Stage 1 Default Claim" 
 **Description** User completes mission (hits target)
 
 redemptions	physical_gift_redemption
@@ -401,8 +399,9 @@ rewards	redemptions	physical_gift_redemption
 concluded_at set"	delivered_at set
 
 
-##### Physical Gift - yes requires_size
-###### "Stage 1 Default Claim"
+##### Physical Gift - yes requires_size ✅
+**Description**: Admin Activates Raffle
+###### "Stage 1 Default Claim" 
 **Description** User completes mission (hits target)
 
 redemptions	physical_gift_redemption
@@ -411,7 +410,7 @@ redemptions	physical_gift_redemption
 mission_progress_id set
 redemption_type='instant'"	-
 
-###### "Stage 2 Redeeming Physical"
+###### "Stage 2 Redeeming Physical"  ✅
 **Description** User claims, needs size
 
 rewards	redemptions	physical_gift_redemption
@@ -430,7 +429,7 @@ shipping_postal_code set
 shipping_info_submitted_at set"
 
 
-###### "Stage 3 Sending"
+###### "Stage 3 Sending" ✅
 **Description**: Admin Ships item
 
 rewards	redemptions	physical_gift_redemption
@@ -439,7 +438,7 @@ fulfilled_at set
 fulfilled_by set
 fulfillment_notes set"	shipped_at IS NOT NULL
 
-###### "Stage 4 Concluded - history"
+###### "Stage 4 Concluded - history" ✅
 **Description**: Reward Complete
 
 rewards	redemptions	physical_gift_redemption
@@ -447,7 +446,7 @@ rewards	redemptions	physical_gift_redemption
 concluded_at set"	delivered_at set
 
 
-##### Experience
+##### Experience ✅
 **Description**: User completes mission (hits target)
 
 rewards	mission_progress	redemptions
@@ -470,6 +469,10 @@ claimed_at set"
 mission_progress	redemptions
 status='completed'	"status= 'concluded' 
 concluded_at set"
+
+
+### Special Tests
+#### 
 
 
 ### Sales Mission
@@ -1579,10 +1582,20 @@ concluded_at set"
 
 
 
+
+
 ## Completed Mission history
 
 
 ## Reward UI elements
+
+
+# DISCOUNT FLOW
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+
+# PAYBOOST FLOW
+ ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️ **RUN THIS 26/12 14:00 PM EST** ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+
 ### Locked Missions
 Silver sign ❌
 Gold sign visible ⚠️✅

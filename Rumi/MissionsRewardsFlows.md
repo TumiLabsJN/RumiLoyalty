@@ -338,6 +338,12 @@ for (const mp of missionProgress) {
 | **3a** | User claims (requires_size=false)<br>Shipping modal only | - | `value_data.requires_size=false` | `status='completed'` | `status='claimed'`<br>`claimed_at` set | **ROW CREATED:**<br>`requires_size=false`<br>`size_category=NULL`<br>`size_value=NULL`<br>`shipping_address_line1` set<br>`shipping_city` set<br>`shipping_state` set<br>`shipping_postal_code` set<br>`shipping_info_submitted_at` set |
 | **3b** | User claims (requires_size=true)<br>Size modal → Shipping modal | - | `value_data.requires_size=true`<br>`value_data.size_category` shown<br>`value_data.size_options` shown | `status='completed'` | `status='claimed'`<br>`claimed_at` set | **ROW CREATED:**<br>`requires_size=true`<br>`size_category` set (from reward)<br>`size_value` set (user selected)<br>`size_submitted_at` set<br>`shipping_address_line1` set<br>`shipping_city` set<br>`shipping_state` set<br>`shipping_postal_code` set<br>`shipping_info_submitted_at` set |
 | **4** | Admin ships item | - | - | `status='completed'` | `status='claimed'` ← **STAYS 'claimed'** | `tracking_number` set<br>`carrier` set<br>`shipped_at` set |
+Optional: redemptions
+"status='claimed'
+fulfilled_at set
+fulfilled_by set
+fulfillment_notes set"
+
 | **5** | Package delivered | - | - | `status='completed'` | `status='concluded'`<br>`concluded_at` set | `delivered_at` set |
 
 **Important:** The `redemptions.status` field stays `'claimed'` from Step 3 through Step 4. The frontend determines the UI display status by checking `physical_gift_redemption.shipped_at`:

@@ -16,10 +16,17 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { CircleDollarSign, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
+/**
+ * PaymentInfoModal - Collects PayPal/Venmo info for commission boost payouts
+ *
+ * Note: The `redemptionId` prop is passed to POST /api/rewards/:id/payment-info
+ * The API route folder is named [rewardId] but actually expects a redemption ID.
+ * See route.ts line 127: "rewardId param is actually redemptionId per API design"
+ */
 interface PaymentInfoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  rewardId: string
+  redemptionId: string  // UUID from redemptions.id - NOT reward.id
   rewardName: string
   onSuccess: () => void
 }
@@ -50,7 +57,7 @@ interface SavedPaymentInfo {
 export function PaymentInfoModal({
   open,
   onOpenChange,
-  rewardId,
+  redemptionId,
   rewardName,
   onSuccess,
 }: PaymentInfoModalProps) {
@@ -76,27 +83,24 @@ export function PaymentInfoModal({
   const fetchSavedPaymentInfo = async () => {
     setIsLoadingSavedInfo(true)
     try {
-      // TODO: GET /api/user/payment-info
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const response = await fetch('/api/user/payment-info')
 
-      // Mock response (replace with actual API call)
-      const mockSavedInfo: SavedPaymentInfo = {
-        hasPaymentInfo: true, // Change to false to test without saved info
-        paymentMethod: 'paypal',
-        paymentAccount: 'john@example.com',  // Full unmasked account
+      if (!response.ok) {
+        console.error('[PaymentInfoModal] Failed to fetch saved payment info')
+        setSavedPaymentInfo(null)
+        return
       }
 
-      setSavedPaymentInfo(mockSavedInfo)
+      const data: SavedPaymentInfo = await response.json()
+      setSavedPaymentInfo(data)
 
       // Pre-fill form if saved info exists (PayPal only)
-      if (mockSavedInfo.hasPaymentInfo && mockSavedInfo.paymentMethod === 'paypal' && mockSavedInfo.paymentAccount) {
-        setPaymentAccount(mockSavedInfo.paymentAccount)
-        setPaymentAccountConfirm(mockSavedInfo.paymentAccount)
+      if (data.hasPaymentInfo && data.paymentMethod === 'paypal' && data.paymentAccount) {
+        setPaymentAccount(data.paymentAccount)
+        setPaymentAccountConfirm(data.paymentAccount)
       }
     } catch (error) {
-      console.error("Failed to fetch saved payment info:", error)
-      // Continue without saved info
+      console.error('[PaymentInfoModal] Failed to fetch saved payment info:', error)
       setSavedPaymentInfo(null)
     } finally {
       setIsLoadingSavedInfo(false)
@@ -139,9 +143,23 @@ export function PaymentInfoModal({
     setIsSubmitting(true)
 
     try {
-      // TODO: POST /api/rewards/:id/payment-info
-      // Request body: { paymentMethod, paymentAccount, paymentAccountConfirm, saveAsDefault }
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const response = await fetch(`/api/rewards/${redemptionId}/payment-info`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paymentMethod,
+          paymentAccount,
+          paymentAccountConfirm,
+          saveAsDefault,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to submit payment info')
+      }
 
       // Show success message
       toast.success("Payment info submitted", {
@@ -158,9 +176,9 @@ export function PaymentInfoModal({
       // Close modal
       onOpenChange(false)
     } catch (error) {
-      console.error("Failed to submit payment info:", error)
+      console.error('[PaymentInfoModal] Failed to submit payment info:', error)
       toast.error("Failed to submit payment info", {
-        description: "Please try again or contact support",
+        description: error instanceof Error ? error.message : "Please try again or contact support",
         duration: 5000,
       })
     } finally {
