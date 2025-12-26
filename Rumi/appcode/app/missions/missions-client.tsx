@@ -83,11 +83,6 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
 
   // NOTE: Mock data removed - now fetching from /api/missions
 
-  // Derive completedMissions count from API data
-  const completedMissions = missionsData?.missions?.filter(m =>
-    ['redeeming', 'sending', 'scheduled', 'active', 'raffle_won'].includes(m.status)
-  ).length || 0
-
   const handleClaimMission = async (mission: any) => {
     console.log("[v0] Claim mission clicked:", mission.id)
 
@@ -838,7 +833,6 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-slate-500" />
                 <span>View Completed Missions</span>
-                <span className="text-slate-400">({completedMissions})</span>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-400" />
             </Button>
