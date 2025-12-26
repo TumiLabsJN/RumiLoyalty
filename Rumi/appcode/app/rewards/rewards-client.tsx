@@ -118,11 +118,17 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
         console.log("[v0] Schedule discount for:", selectedDiscount.id, scheduledDate.toISOString())
 
         try {
-          // TODO: POST /api/rewards/:id/claim
-          // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
+          // POST /api/rewards/:id/claim
+          const response = await fetch(`/api/rewards/${selectedDiscount.id}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduledActivationAt: scheduledDate.toISOString() }),
+          })
 
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to schedule discount')
+          }
 
           // Show success message with user's local time
           const localDateStr = scheduledDate.toLocaleDateString("en-US", {
@@ -141,8 +147,9 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
             duration: 5000,
           })
 
-          // Reset selected discount
+          // Reset selected discount and refresh page
           setSelectedDiscount(null)
+          setTimeout(() => window.location.reload(), 2000)
         } catch (error) {
           console.error("Failed to schedule discount:", error)
           toast.error("Failed to schedule discount", {
@@ -158,11 +165,17 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
         console.log("[v0] Schedule payboost for:", selectedPayboost.id, scheduledDate.toISOString())
 
         try {
-          // TODO: POST /api/rewards/:id/claim
-          // Request body: { scheduledActivationAt: scheduledDate.toISOString() }
+          // POST /api/rewards/:id/claim
+          const response = await fetch(`/api/rewards/${selectedPayboost.id}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduledActivationAt: scheduledDate.toISOString() }),
+          })
 
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, SCHEDULE_DELAY_MS))
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.message || 'Failed to schedule pay boost')
+          }
 
           // Show success message with user's local time
           const localDateStr = scheduledDate.toLocaleDateString("en-US", {
@@ -181,8 +194,9 @@ export function RewardsClient({ initialData, error: initialError }: RewardsClien
             duration: 5000,
           })
 
-          // Reset selected payboost
+          // Reset selected payboost and refresh page
           setSelectedPayboost(null)
+          setTimeout(() => window.location.reload(), 2000)
         } catch (error) {
           console.error("Failed to schedule pay boost:", error)
           toast.error("Failed to schedule pay boost", {

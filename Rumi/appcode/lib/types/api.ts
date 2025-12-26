@@ -341,7 +341,7 @@ export interface ParticipateRaffleResponse {
 /**
  * Mission history status
  */
-export type MissionHistoryStatus = 'concluded' | 'rejected_raffle';
+export type MissionHistoryStatus = 'concluded' | 'rejected_raffle' | 'missed_raffle';
 
 /**
  * Mission history item

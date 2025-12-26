@@ -3870,8 +3870,8 @@ interface MissionHistoryResponse {
     missionType: 'sales_dollars' | 'sales_units' | 'videos' | 'likes' | 'views' | 'raffle'
     displayName: string             // "Sales Sprint", "VIP Raffle", etc.
 
-    // Status (only concluded or rejected)
-    status: 'concluded' | 'rejected_raffle'
+    // Status: concluded (delivered), rejected_raffle (lost), or missed_raffle (didn't participate)
+    status: 'concluded' | 'rejected_raffle' | 'missed_raffle'
 
     // Reward information (focus on what was earned/lost)
     rewardType: 'gift_card' | 'commission_boost' | 'spark_ads' | 'discount' | 'physical_gift' | 'experience'
@@ -3969,6 +3969,28 @@ Examples:
         "drawDate": "2025-01-20T23:59:59Z",
         "drawDateFormatted": "Jan 20, 2025",
         "prizeName": "an iPhone 16 Pro"
+      }
+    },
+    {
+      "id": "mission-raffle-holiday",
+      "missionType": "raffle",
+      "displayName": "Holiday Giveaway",
+      "status": "missed_raffle",
+      "rewardType": "physical_gift",
+      "rewardName": "Apple Watch Ultra",
+      "rewardSubtitle": "From: Holiday Giveaway mission",
+      "rewardSource": "mission",
+      "completedAt": null,
+      "completedAtFormatted": null,
+      "claimedAt": null,
+      "claimedAtFormatted": null,
+      "deliveredAt": null,
+      "deliveredAtFormatted": null,
+      "raffleData": {
+        "isWinner": null,
+        "drawDate": "2024-12-25T23:59:59Z",
+        "drawDateFormatted": "Dec 25, 2024",
+        "prizeName": "an Apple Watch Ultra"
       }
     },
     {

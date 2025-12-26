@@ -221,6 +221,8 @@ export interface MissionHistoryData {
     participatedAt: string;
     winnerSelectedAt: string | null;
   } | null;
+  // GAP-RAFFLE-001: Missed raffle flag
+  isMissed: boolean;
 }
 
 /**
@@ -696,6 +698,8 @@ export const missionRepository = {
             winnerSelectedAt: row.raffle_winner_selected_at,
           }
         : null,
+      // GAP-RAFFLE-001: Missed raffle flag from RPC
+      isMissed: row.is_missed ?? false,
     }));
   },
 

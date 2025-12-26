@@ -151,4 +151,6 @@ export interface GetMissionHistoryRow {
   raffle_is_winner: boolean | null;
   raffle_participated_at: string | null;
   raffle_winner_selected_at: string | null;
+  // GAP-RAFFLE-001: Missed raffle flag
+  is_missed: boolean | null;
 }

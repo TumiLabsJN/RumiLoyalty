@@ -117,6 +117,9 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
           // CARD STATE: Rejected Raffle - Lost raffle entry
           const isRejectedRaffleCard = isRaffle && isRejectedRaffle
 
+          // CARD STATE: Missed Raffle - Eligible but didn't participate (GAP-RAFFLE-001)
+          const isMissedRaffleCard = isRaffle && mission.status === "missed_raffle"
+
           // CARD STATE: Won Raffle - Concluded raffle prize
           const isWonRaffle = isRaffle && isConcluded
 
@@ -126,13 +129,17 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
             // CARD STATE: Won Raffle & Concluded - Green background
             mission.status === "concluded" && "bg-green-50 border-green-200",
             // CARD STATE: Rejected Raffle - Red background
-            mission.status === "rejected_raffle" && "bg-red-50 border-red-200"
+            mission.status === "rejected_raffle" && "bg-red-50 border-red-200",
+            // CARD STATE: Missed Raffle - Amber background (GAP-RAFFLE-001)
+            mission.status === "missed_raffle" && "bg-amber-50 border-amber-200"
           )
 
           // Primary text (main message)
           let primaryText = ""
           if (isRejectedRaffleCard) {
             primaryText = "Better luck next time"
+          } else if (isMissedRaffleCard) {
+            primaryText = "Missed Raffle Participation"
           } else if (isWonRaffle) {
             primaryText = "Prize delivered"
           }
@@ -141,6 +148,8 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
           let secondaryText = ""
           if (isRejectedRaffleCard && mission.raffleData?.drawDateFormatted) {
             secondaryText = `Raffle date: ${mission.raffleData.drawDateFormatted}`
+          } else if (isMissedRaffleCard && mission.raffleData?.drawDateFormatted) {
+            secondaryText = `Draw date: ${mission.raffleData.drawDateFormatted}`
           } else if (mission.completedAtFormatted) {
             secondaryText = `Completed: ${mission.completedAtFormatted}`
           }
@@ -159,7 +168,8 @@ export function MissionHistoryClient({ initialData, error }: MissionHistoryClien
               {primaryText && (
                 <p className={cn(
                   "text-base mb-1",
-                  isRejectedRaffle ? "text-red-700 font-semibold" : "text-slate-600"
+                  isRejectedRaffle ? "text-red-700 font-semibold" :
+                  isMissedRaffleCard ? "text-amber-700 font-semibold" : "text-slate-600"
                 )}>
                   {primaryText}
                 </p>

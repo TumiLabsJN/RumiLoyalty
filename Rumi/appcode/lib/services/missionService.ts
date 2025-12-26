@@ -1209,8 +1209,11 @@ export async function getMissionHistory(
     const valueData = data.reward.valueData as Record<string, unknown> | null;
 
     // Determine status
-    let status: 'concluded' | 'rejected_raffle';
-    if (data.redemption.status === 'rejected' && data.raffleParticipation?.isWinner === false) {
+    // GAP-RAFFLE-001: Handle missed_raffle status for non-participants
+    let status: 'concluded' | 'rejected_raffle' | 'missed_raffle';
+    if (data.isMissed) {
+      status = 'missed_raffle';
+    } else if (data.redemption.status === 'rejected' && data.raffleParticipation?.isWinner === false) {
       status = 'rejected_raffle';
     } else {
       status = 'concluded';
