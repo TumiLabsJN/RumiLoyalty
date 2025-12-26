@@ -685,8 +685,8 @@ export function MissionsClient({ initialData, error: initialError }: MissionsCli
                       🔒 {mission.lockedData?.requiredTierName || ""}
                     </div>
                   )}
-                  {/* RECURRING BADGE - Shows for all recurring missions (GAP-RECURRING-001) */}
-                  {mission.recurringData?.frequency && !isLocked && (
+                  {/* RECURRING BADGE - Shows for all recurring missions including locked (GAP-RECURRING-001) */}
+                  {mission.recurringData?.frequency && (
                     <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium">
                       {mission.recurringData.frequency === 'weekly' && '📅 Weekly'}
                       {mission.recurringData.frequency === 'monthly' && '📅 Monthly'}
